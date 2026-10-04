@@ -239,7 +239,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
-      - uses: coursier/setup-action@3174df5c784a0c8724f06b7924b849551c40c39e # v3
+      - uses: coursier/setup-action@648df969f41ef15fda2baba8b37f9fa3d16390a3 # v3
         with:
           jvm: zulu:17
 
