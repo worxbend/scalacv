@@ -88,7 +88,7 @@ jobs:
         # the driver, so the two do not conflict.
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "25"
 
       - name: Leak regression suite (RSS-gated, finding-specific paths)
         # The leaks module runs in its own forked JVM as a single suite, so process RSS is not
