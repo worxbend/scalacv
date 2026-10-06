@@ -359,7 +359,7 @@ def document(): Image =
   */
 def skewedDocument(degrees: Double = 12.0): Image =
   val doc = document()
-  try Image.wrap(doc.mat.rotated(degrees, borderValue = Scalar.White))
+  try Image.wrap(doc.mat.rotated(degrees, color = Scalar.White))
   finally doc.close()
 ```
 ]

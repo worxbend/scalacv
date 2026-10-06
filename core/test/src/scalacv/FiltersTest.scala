@@ -73,6 +73,35 @@ class FiltersTest extends munit.FunSuite:
     try assertEquals((e.width, e.height, e.channels), (100, 80, 3))
     finally e.close()
 
+  test("sepia, temperature, saturate and gamma reject a grey input with a named precondition"):
+    // A grey (or float) input used to die inside OpenCV as CvError.NativeCall; a wrong-type input is a
+    // programmer error, so each op names itself in an IllegalArgumentException before any native call.
+    val calls: Seq[(String, Image => Image)] = Seq(
+      "sepia" -> (_.sepia),
+      "temperature" -> (_.temperature(0.5)),
+      "saturate" -> (_.saturate(1.5)),
+      "gamma" -> (_.gamma(2.2))
+    )
+    for (op, call) <- calls do
+      val grey = Image.blank(20, 20, Scalar(128, 128, 128), channels = 1)
+      val e = intercept[IllegalArgumentException](call(grey))
+      assert(e.getMessage.contains(op), s"the failure must name $op, got: ${e.getMessage}")
+      grey.close() // close is idempotent; the rejected transform already released it
+
+  test("pencilSketchBoth returns both the colour and the grey sketch, each with its channel count"):
+    val img = sample()
+    val pair = img.mat.pencilSketchBoth() // borrows img's Mat; img stays alive
+    try
+      assertEquals(pair.colour.get.`type`(), CvType.CV_8UC3, "the colour sketch keeps 3 channels")
+      assertEquals(pair.grey.get.`type`(), CvType.CV_8UC1, "the grey sketch is single-channel")
+      assertEquals(pair.colour.get.size(), img.mat.size())
+      assertEquals(pair.grey.get.size(), img.mat.size())
+      assertNotEquals(pair.colour.get.dataAddr(), pair.grey.get.dataAddr(), "two independent outputs")
+    finally
+      pair.colour.release()
+      pair.grey.release()
+      img.close()
+
   test("inpaint fills a masked hole from its surroundings"):
     val holed = Image
       .blank(60, 60, Scalar(255, 255, 255))
@@ -114,3 +143,35 @@ class FiltersTest extends munit.FunSuite:
     val out = sample().filter(combo)
     try assertEquals(out.channels, 3)
     finally out.close()
+
+  test("Filter.all contains exactly the named catalog — this assertion is the registry"):
+    // `all` is a hand-maintained mirror of the companion's vals: a filter added without an entry here
+    // fails silently everywhere `all` is used. Naming each one turns that omission into a test failure.
+    assertEquals(
+      Filter.all.map(_.name),
+      Seq(
+        "grayscale",
+        "sepia",
+        "invert",
+        "warm",
+        "cool",
+        "vivid",
+        "muted",
+        "noir",
+        "vintage",
+        "cartoon",
+        "sketch",
+        "posterize",
+        "emboss",
+        "softBlur",
+        "sharpen",
+        "heatmap",
+        "dramatic"
+      )
+    )
+
+  test("a composed name keeps a pair in full, then collapses to first+…+last"):
+    // Unbounded `a+b+c+…` grows with every composition; the cap keeps the label a label.
+    assertEquals(Filter.grayscale.andThen(Filter.invert).name, "grayscale+invert")
+    val four = Filter.grayscale.andThen(Filter.invert).andThen(Filter.warm).andThen(Filter.cool)
+    assertEquals(four.name, "grayscale+…+cool")

@@ -14,8 +14,19 @@ final class Filter(val name: String, private val run: Image => Image):
   /** Applies the filter to `image` (consuming it). */
   def apply(image: Image): Image = run(image)
 
-  /** This filter, then `next`. */
-  def andThen(next: Filter): Filter = new Filter(s"$name+${next.name}", image => next(run(image)))
+  /** This filter, then `next`.
+    *
+    * The composed name keeps both halves for a pair (`"sepia+sharpen"`), but a longer chain collapses to
+    * `first+…+last` — an unbounded `a+b+c+…` grows with every composition and stops being a usable label. The
+    * name is a display string for logs and pickers, not a serialisation; a filter whose own name contains `+`
+    * is read as already-composed here, which is one reason to not do that.
+    */
+  def andThen(next: Filter): Filter =
+    val combined =
+      val firstPlus = name.indexOf('+')
+      if firstPlus < 0 then s"$name+${next.name}"
+      else s"${name.substring(0, firstPlus)}+…+${next.name}"
+    new Filter(combined, image => next(run(image)))
 
   override def toString: String = s"Filter($name)"
 

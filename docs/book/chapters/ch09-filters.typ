@@ -204,7 +204,7 @@ than once for the page, which is why it is the standard preparation step before 
 Image.reading("scan.jpg") { img =>
   img.gray
      .medianBlur(1)                                   // 3x3: specks go, strokes stay
-     .adaptiveThreshold(blockSize = 25, c = 8, inverse = true)
+     .adaptiveThreshold(blockSize = 25, c = 8, mode = Threshold.Mode.BinaryInv)
      .write("ink.png")
 }
 ```
@@ -213,8 +213,9 @@ Image.reading("scan.jpg") { img =>
 `blockSize` is the odd neighbourhood side the local threshold is computed over. It wants to be
 comfortably larger than a stroke and smaller than the lighting variation --- 25 pixels is a
 reasonable start for body text on a 300 dpi scan. `c` is subtracted from the local mean, so raising it
-keeps less: turn it up when background texture starts coming through. `inverse = true` puts the ink
-at 255 and the paper at 0, the convention every operation in the rest of this chapter expects. Like
+keeps less: turn it up when background texture starts coming through. `mode = Threshold.Mode.BinaryInv`
+puts the ink at 255 and the paper at 0, the convention every operation in the rest of this chapter
+expects. Like
 `equalizeHist`, the operation is `CV_8UC1` only --- the other reason `gray` comes first --- and
 `blockSize` must be odd and at least 3.
 
@@ -381,7 +382,7 @@ which is why it fills gaps without fattening the glyphs.
 Image.reading("scan.jpg") { img =>
   img.gray
      .medianBlur(1)                                   // sensor specks
-     .adaptiveThreshold(blockSize = 25, c = 8, inverse = true)
+     .adaptiveThreshold(blockSize = 25, c = 8, mode = Threshold.Mode.BinaryInv)
      .morphology(MorphOp.Open, radius = 1)            // survivors of the median
      .morphology(MorphOp.Close, radius = 1)           // rejoin broken strokes
      .write("ink.png")

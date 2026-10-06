@@ -24,20 +24,44 @@ final case class Intrinsics(
   require(fx > 0 && fy > 0, s"focal lengths must be positive, got fx=$fx fy=$fy")
   require(
     Intrinsics.ValidDistortionSizes.contains(distortion.size),
-    s"distortion must have ${Intrinsics.ValidDistortionSizes.mkString(", ")} coefficients " +
+    // The sizes are a Set (membership is the only operation), so the message sorts them itself.
+    s"distortion must have ${Intrinsics.ValidDistortionSizes.toSeq.sorted.mkString(", ")} coefficients " +
       s"(k1, k2, p1, p2[, k3[, k4, k5, k6[, s1, s2, s3, s4[, taux, tauy]]]]), got ${distortion.size}. " +
       "Leave it empty for an ideal lens."
   )
 
-  /** The 3×3 camera matrix as a caller-owned `CV_64F` Mat. */
+  /** The 3×3 camera matrix as a caller-owned `CV_64F` Mat.
+    *
+    * The write is guarded for the reason `Mats.column`'s is: between the bare `Mat.zeros` and the caller
+    * taking ownership there is nobody to free it, so a throwing `put` would strand a native buffer no one
+    * ever saw.
+    */
   private[scalacv] def cameraMatrix: Mat =
     val m = Mat.zeros(3, 3, org.opencv.core.CvType.CV_64F)
-    m.put(0, 0, fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0)
-    m
+    try
+      m.put(0, 0, fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0): Unit
+      m
+    catch
+      case e: Throwable =>
+        m.release()
+        throw e
 
-  /** The distortion coefficients as a caller-owned `MatOfDouble` (empty ⇒ no distortion). */
+  /** The distortion coefficients as a caller-owned `MatOfDouble` (empty ⇒ no distortion).
+    *
+    * Guarded on the same grounds as [[cameraMatrix]]: the varargs constructor allocates natively first and
+    * can still throw while copying the coefficients in.
+    */
   private[scalacv] def distCoeffs: MatOfDouble =
-    if distortion.isEmpty then MatOfDouble() else MatOfDouble(distortion*)
+    if distortion.isEmpty then MatOfDouble()
+    else
+      val m = MatOfDouble()
+      try
+        m.fromArray(distortion*)
+        m
+      catch
+        case e: Throwable =>
+          m.release()
+          throw e
 
 object Intrinsics:
 
@@ -53,7 +77,7 @@ object Intrinsics:
     * cannot be a camera, at the point the value is made rather than at the point it is used, which may be
     * several layers away.
     */
-  val ValidDistortionSizes: Seq[Int] = Seq(0, 4, 5, 8, 12, 14)
+  val ValidDistortionSizes: Set[Int] = Set(0, 4, 5, 8, 12, 14)
 
   /** A rough camera model from the image size and horizontal field of view. Assumes a centred principal
     * point, square pixels and no lens distortion — fine for a live AR overlay, not for metrology.

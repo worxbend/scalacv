@@ -48,6 +48,40 @@ class FaceRecognizerTest extends munit.FunSuite:
     assertEquals(g1.size, 1)
     assertEquals(g1.names, Seq("ada"))
 
+  test("the SFace model pins match the published artifact and a fetch-safe mirror"):
+    // The mirror host is the whole point: github.com/.../raw serves the 131-byte LFS pointer for .onnx
+    // files, so any URL that is not media.githubusercontent.com is a broken download waiting to happen.
+    assert(
+      FaceRecognizer.ModelUrls.nonEmpty && FaceRecognizer.ModelUrls.forall(
+        _.startsWith("https://media.githubusercontent.com/media/opencv/opencv_zoo/")
+      ),
+      s"every mirror must serve LFS bytes, got ${FaceRecognizer.ModelUrls}"
+    )
+    assert(FaceRecognizer.ModelUrls.head != FaceRecognizer.ModelUrls.last, "a pinned and a floating URL")
+    assertEquals(
+      FaceRecognizer.ModelSha256,
+      "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+    )
+    assertEquals(FaceRecognizer.ModelSizeBytes, 38696353L)
+    assertEquals(FaceRecognizer.EmbeddingSize, 128)
+
+  test("the recognizer's face row shares the detector's YuNet layout constants"):
+    // faceRow builds Mat(1, FaceDetect.ResultColumns) from box + landmarks + score; if the two files ever
+    // disagree about the row format this identity breaks first.
+    assertEquals(FaceDetect.ResultColumns, 4 + 2 * FaceDetect.LandmarkCount + 1)
+    val face = Face(
+      box = Rect(1, 2, 3, 4),
+      landmarks = (0 until FaceDetect.LandmarkCount).map(i => Point(i * 2.0, i * 2.0 + 1)),
+      score = 0.5f
+    )
+    Managed.use(FaceRecognizer.faceRow(face)): row =>
+      assertEquals((row.rows, row.cols), (1, FaceDetect.ResultColumns))
+      val flat = Array.ofDim[Float](FaceDetect.ResultColumns)
+      row.get(0, 0, flat)
+      assertEquals(flat.take(4).toSeq, Seq(1f, 2f, 3f, 4f))
+      assertEquals(flat(4), 0f); assertEquals(flat(5), 1f) // first landmark (x=0, y=1)
+      assertEquals(flat.last, 0.5f)
+
   test("load rejects a missing path with a Left, not an exception"):
     assert(FaceRecognizer.load("/no/such/sface.onnx").isLeft)
 
@@ -56,6 +90,25 @@ class FaceRecognizerTest extends munit.FunSuite:
     Files.write(junk, "not a model".getBytes)
     try assert(FaceRecognizer.load(junk.toString).isLeft)
     finally Files.deleteIfExists(junk)
+
+  test("load on an empty file, or a text file masquerading as .onnx, is a Left naming the path"):
+    // Pins the null/empty guard the shared ModelLoader added: before it, a factory that returned null for
+    // these files would have been wrapped into a Right(null-backed recognizer). Whatever the failure mode —
+    // thrown CvException or null return — the caller must get a Left that names the file it blamed.
+    val empty = Files.createTempFile("scalacv-empty", ".onnx")
+    val text = Files.createTempFile("scalacv-text", ".onnx")
+    try
+      Files.writeString(text, "this is plain text, not an ONNX model")
+      Seq(empty, text).foreach: f =>
+        FaceRecognizer.load(f.toString) match
+          case Left(e) =>
+            assert(e.getMessage.contains(f.toString), s"the error must name the path: ${e.getMessage}")
+          case Right(r) =>
+            r.close()
+            fail(s"load accepted $f")
+    finally
+      Files.deleteIfExists(empty)
+      Files.deleteIfExists(text)
 
   test("end to end: the same face embeds consistently (needs SCALACV_SFACE_MODEL + network)"):
     val model = sys.env.get("SCALACV_SFACE_MODEL")

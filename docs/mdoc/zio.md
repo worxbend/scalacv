@@ -49,7 +49,7 @@ import org.opencv.videoio.VideoCapture
 | `readImage(path, flags)` | `IO[CvError, Image]` | Decodes an image (blocking pool), caller-owned, typed failure. |
 | `imageScoped(path, flags)` | `ZIO[Scope, CvError, Image]` | Reads an image and closes it when the scope ends. |
 | `captureScoped(source, options)` | `ZIO[Scope, CvError, VideoCapture]` | Opens a video source and releases it when the scope ends; a source that will not open is a **typed failure**, not an empty stream. |
-| `frameStream(capture)` | `ZStream[Any, Throwable, Mat]` | Frames as **borrowed** Mats — one reused buffer. |
+| `frameStream(capture, attemptsPerFrame)` | `ZStream[Any, Throwable, BorrowedMat]` | Frames as **borrowed**, liveness-checked views — one reused buffer; a retained frame throws. |
 | `framesCopied(capture)` | `ZStream[Any, Throwable, Managed[Mat]]` | Frames as **owned** clones — the safe, costlier form. |
 
 ## Loading the natives
@@ -165,10 +165,12 @@ val readGrey: _root_.zio.IO[CvError, Image] =
 
 ## Stream frames
 
-`frameStream` inherits the borrowing contract of the synchronous [`Video.frames`](/video): each
-emitted `Mat` is **one buffer** decoded into in place, valid only until the next pull. Reduce each
-frame to something owned **inside** the stream — do not `runCollect` the Mats themselves, or you
-collect N aliases of the newest frame:
+`frameStream` inherits the borrowing contract of the synchronous [`Video.frames`](/video), enforced
+the same way: each emitted `BorrowedMat` is **one buffer** decoded into in place, spent the moment the
+stream advances or ends. Reduce each frame to something owned **inside** the stream — retaining an
+view throws `IllegalStateException` on access rather than silently showing you the newest frame.
+The raw `frame.mat` escape hatch is checked only at extraction: retaining it is still unsafe, and
+concurrent access while the source advances is not supported:
 
 ```scala mdoc:silent
 def brightnessOverTime(source: String): _root_.zio.ZIO[Any, Throwable, _root_.zio.Chunk[Double]] =
@@ -194,72 +196,51 @@ the stream the capture's exception mode is forced off and restored afterwards, s
 *completes* the stream instead of failing it.
 
 :::danger[These combinators break on `frameStream`]
-Anything that retains elements sees N references to one reused buffer holding the *newest* content —
-not N distinct frames. On `frameStream`, avoid:
+Anything that retains elements collects N *spent* views — the first access to any of them throws
+`IllegalStateException`, exactly like a released `Managed`. On `frameStream`, avoid:
 
-| Combinator | Why it misleads |
+| Combinator | Why it fails |
 | --- | --- |
-| `runCollect` | Collects N aliases of the last frame. |
-| `broadcast` | Fan-out consumers race on one buffer. |
-| `buffer` | Holds stale aliases. |
-| `zipWithNext` | Both sides alias the same Mat. |
+| `runCollect` of the frames themselves | Collects N spent views; first access throws. |
+| `broadcast` | Fan-out consumers race on one buffer; all but the current view are spent. |
+| `buffer` | Holds spent views. |
+| `zipWithNext` | The "previous" element is spent by the time the pair emits. |
 
 Map to an owned value first (`.map(f => f.get(0,0)(0))`, encode it, copy the pixels), *then* combine.
 :::
 
 ## A dropped frame ends your stream {#dropped-frame}
 
-The *borrowing* contract carries over from `Video.frames` unchanged. The **end-of-stream** rule does
-not, and the difference is easy to miss because nothing fails when it bites.
-
-The synchronous reader takes an `attemptsPerFrame` bound: how many consecutive `read()` calls have to
-come back empty before it decides the source is finished. `Video.frames` defaults it to `1` — right for
-a file, where the first empty read is end-of-file — and the [`Camera`](/video) helpers (`foreach`,
-`take`, `taking`, `snapshot`) default it to `3`, so a webcam that hiccups for a frame or two does not
-end the loop. `frameStream` has no such parameter.
-
-| | `Video.frames(cap, attemptsPerFrame = 3)` | `frameStream(cap)` |
-| --- | --- | --- |
-| consecutive empty reads that declare the end | 3 — your choice, the default is 1 | 1, and not configurable |
-| a transient dropped frame | read again, the traversal continues | the stream ends |
-| how the end is signalled | `hasNext` returns `false` | `ZIO.fail(None)`, which `ZStream` reads as "no more elements" |
-| what your program sees | the block returns normally | the stream **completes successfully** — no error, no defect, no log line |
-
-That last row is the trap. A camera that drops one frame and a file that reached its last frame produce
-the identical outcome: a `ZStream` that finishes cleanly. Your `runCount` returns 7 instead of 7000 and
-nothing anywhere says why.
-
-### Ride out a dropped frame
-
-There is no `attemptsPerFrame` to pass, and re-entering the source with `frameStream(cap) ++
-frameStream(cap)` does not give you one: a `VideoCapture` is stateful, so the second stream resumes
-where the first stopped rather than restarting anything. At a genuine end-of-file it ends immediately
-(harmless but pointless), and against a dead camera it blocks in `read` again with no bound — the exact
-hazard `attemptsPerFrame` exists to cap. Repeating that forever would spin on a blocking read.
-
-The shape that does work is to keep the bounded retry where it already exists — in the synchronous
-iterator — and run the whole traversal as one blocking effect, reducing each frame to an owned value
-inside it:
+The *borrowing* contract carries over from `Video.frames` unchanged — and so does the retry bound.
+Both take an `attemptsPerFrame`: how many consecutive `read()` calls have to come back empty before
+the source is declared finished. `frameStream` defaults it to `1` — right for a file, where the first
+empty read is end-of-file — so against a flaky camera, pass it explicitly:
 
 ```scala mdoc:compile-only
-// `attemptsPerFrame = 3` rides out two dropped frames in a row; the third empty read ends the
-// traversal. `captureScoped` releases the capture when the scope closes.
-def brightnessRidingOutDrops(source: String): _root_.zio.ZIO[Any, Throwable, Vector[Double]] =
+// `attemptsPerFrame = 3` rides out two dropped frames in a row; the third empty read ends the stream.
+def brightnessRidingOutDrops(source: String): _root_.zio.ZIO[Any, Throwable, _root_.zio.Chunk[Double]] =
   ZIO.scoped {
     for
       _   <- loadNatives
       cap <- captureScoped(source)
-      out <- ZIO.attemptBlockingInterrupt(
-               Video.frames(cap, attemptsPerFrame = 3)(_.map(_.get(0, 0)(0)).toVector)
-             )
+      out <- frameStream(cap, attemptsPerFrame = 3).map(f => f.get(0, 0)(0)).runCollect
     yield out
   }
 ```
 
-You give up per-frame `ZStream` composition for the duration of the traversal — the loop is opaque to
-ZIO until it returns — and you get the retry bound back. If you need both, run that loop in its own
-fiber and push each reduced frame into a `Queue` that the rest of your pipeline consumes as a
-`ZStream`; the bound stays in the synchronous loop, and everything downstream is ordinary ZIO.
+The **end-of-stream** rule is the part that does not change, and it is easy to miss because nothing
+fails when it bites:
+
+| | `Video.frames(cap, attemptsPerFrame = 3)` | `frameStream(cap, attemptsPerFrame = 3)` |
+| --- | --- | --- |
+| consecutive empty reads that declare the end | 3 — your choice, the default is 1 | 3 — your choice, the default is 1 |
+| a transient dropped frame | read again, the traversal continues | read again, the stream continues |
+| how the end is signalled | `hasNext` returns `false` | `ZIO.fail(None)`, which `ZStream` reads as "no more elements" |
+| what your program sees | the block returns normally | the stream **completes successfully** — no error, no defect, no log line |
+
+That last row is the trap. A camera that drops one frame too many and a file that reached its last
+frame produce the identical outcome: a `ZStream` that finishes cleanly. Your `runCount` returns 7
+instead of 7000 and nothing anywhere says why.
 
 ### Telling end-of-file from a dead camera
 

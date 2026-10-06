@@ -322,7 +322,7 @@ class ImageTest extends munit.FunSuite:
     val flat = Image.blank(8, 8, Scalar(10, 20, 30))
     try
       flat.mat
-        .rotated(30.0, border = BorderType.Wrap, borderValue = Scalar.Red)
+        .rotated(30.0, border = BorderType.Wrap, color = Scalar.Red)
         .use: m =>
           // Every tile of a flat source is the same colour, so the exposed corner is that colour if Wrap reached
           // warpAffine — and red if it fell back to the constant fill.
@@ -353,7 +353,7 @@ class ImageTest extends munit.FunSuite:
 
   test("an arbitrary rotation centres the source on the canvas and fills the exposed corners"):
     val src = wide()
-    val turned = src.mat.rotated(45.0, borderValue = Scalar.Red)
+    val turned = src.mat.rotated(45.0, color = Scalar.Red)
     try
       turned.use: m =>
         assertEquals(m.get(0, 0).toSeq, RedPixel) // the canvas corner lies outside the rotated source
@@ -387,12 +387,19 @@ class ImageTest extends munit.FunSuite:
   /** An 8×8 single-channel canvas at 100 everywhere: its local mean is 100, so `c` alone decides the sign. */
   private def flat(): Image = Image.blank(8, 8, Scalar(100), channels = 1)
 
-  test("adaptiveThreshold's reordered parameters reach OpenCV intact: c is subtracted and inverse flips"):
+  test("adaptiveThreshold's reordered parameters reach OpenCV intact: c is subtracted and mode flips"):
     for method <- AdaptiveMethod.values do
       assertEquals(lit(flat().adaptiveThreshold(blockSize = 3, c = 2, method = method)), 64, s"$method")
       assertEquals(lit(flat().adaptiveThreshold(blockSize = 3, c = -2, method = method)), 0, s"$method")
       assertEquals(
-        lit(flat().adaptiveThreshold(blockSize = 3, c = 2, method = method, inverse = true)),
+        lit(
+          flat().adaptiveThreshold(
+            blockSize = 3,
+            c = 2,
+            method = method,
+            mode = Threshold.Mode.BinaryInv
+          )
+        ),
         0,
         s"$method"
       )

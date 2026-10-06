@@ -266,10 +266,11 @@ scene().gray.normalize(0, 255).close()
 
 ## Thresholding
 
-Mid-level `threshold` returns **both** the mask and a `ThresholdResult` carrying the `double` OpenCV
-computed. For a fixed threshold that number is just the value you passed back; for the automatic
-methods it is the threshold OpenCV *chose* — often the reason you called it. Select a method with
-[`Threshold`](/geometry): a plain `Threshold.Mode`, or `Threshold.otsu(...)` / `Threshold.triangle(...)`:
+Mid-level `threshold` returns a `Thresholded` carrying **both** the mask (`image`) and the value OpenCV
+computed (`computed`, a `ThresholdResult`). For a fixed threshold that number is just the value you
+passed back; for the automatic methods it is the threshold OpenCV *chose* — often the reason you called
+it. Select a method with [`Threshold`](/geometry): a plain `Threshold.Mode`, or `Threshold.otsu(...)` /
+`Threshold.triangle(...)`:
 
 ```scala mdoc:silent
 val gray = Mat(120, 160, CvType.CV_8UC1, CvScalar(90))
@@ -277,14 +278,14 @@ Imgproc.rectangle(gray, CvPoint(20, 20), CvPoint(90, 100), CvScalar(220), -1)
 ```
 
 ```scala mdoc
-val (otsuMask, otsuResult) = gray.threshold(0, 255, Threshold.otsu())
+val Thresholded(otsuMask, otsuResult) = gray.threshold(0, 255, Threshold.otsu())
 otsuResult.value // the level Otsu picked
 ```
 
 A fixed threshold is the same shape with the default `Binary` mode:
 
 ```scala mdoc:silent
-val (mask, _) = gray.threshold(127, 255, Threshold(Threshold.Mode.BinaryInv))
+val Thresholded(mask, _) = gray.threshold(127, 255, Threshold(Threshold.Mode.BinaryInv))
 mask.release()
 ```
 

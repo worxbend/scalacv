@@ -60,7 +60,7 @@ class HoughTest extends munit.FunSuite:
       out
     finally canvas.release()
 
-  private def deg(theta: Float): Double = math.toDegrees(theta.toDouble)
+  private def deg(theta: Double): Double = math.toDegrees(theta)
 
   test("houghLinesP recovers both drawn segments with approximately the right endpoints"):
     Using.resource(Managed(edges())): m =>

@@ -40,6 +40,48 @@ class GeometryTest extends munit.FunSuite:
     assertEquals(r.topLeft, Point(10, 20))
     assertEquals(r.bottomRight, Point(50, 50))
 
+  test("Point algebra: +, -, and scale are component-wise and mutually consistent"):
+    val a = Point(3.0, -2.0)
+    val b = Point(1.5, 4.0)
+    assertEquals(a + b, Point(4.5, 2.0))
+    assertEquals(a - b, Point(1.5, -6.0))
+    assertEquals(b.scale(2.0), Point(3.0, 8.0))
+    assertEquals(a - b + b, a)
+    assertEqualsDouble((a - b).distanceTo(Point(0, 0)), a.distanceTo(b), 1e-12)
+
+  test("Rect.contains is half-open: left/top edges in, right/bottom edges out"):
+    val r = Rect(10, 20, 40, 30)
+    assert(r.contains(Point(10, 20)), "the top-left corner is enclosed")
+    assert(r.contains(Point(49.999, 49.999)))
+    assert(!r.contains(Point(50, 25)), "the right edge is one past the last enclosed pixel")
+    assert(!r.contains(Point(25, 50)), "the bottom edge is one past the last enclosed pixel")
+    assert(!r.contains(Point(9.999, 25)))
+    assert(!r.contains(Point(25, 100)))
+    assert(!Rect(0, 0, 0, 0).contains(Point(0, 0)), "an empty rect contains nothing")
+
+  test("Rect.intersect computes the overlap"):
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(5, 5, 10, 10)), Some(Rect(5, 5, 5, 5)))
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(2, 3, 4, 5)), Some(Rect(2, 3, 4, 5)))
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(0, 0, 10, 10)), Some(Rect(0, 0, 10, 10)))
+    // Negative origins intersect too: a ROI hanging off the top-left of an image.
+    assertEquals(Rect(-5, -5, 10, 10).intersect(Rect(0, 0, 8, 8)), Some(Rect(0, 0, 5, 5)))
+
+  test("Rect.intersect is None when disjoint, including when the rects only touch"):
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(20, 0, 5, 5)), None)
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(0, 20, 5, 5)), None)
+    // Abutting edges share no pixel under the half-open convention; a zero-extent "overlap" would be a
+    // rectangle Mat.submat throws on, so it is None rather than Some(Rect(..., 0, 10)).
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(10, 0, 5, 5)), None)
+    assertEquals(Rect(0, 0, 10, 10).intersect(Rect(0, 10, 5, 5)), None)
+
+  test("Rect.intersect does not overflow on edges past Int.MaxValue"):
+    // In Int arithmetic `100 + Int.MaxValue` wraps to a negative right edge and the rects look disjoint;
+    // in the widened arithmetic both overlap exactly in columns 100..199.
+    assertEquals(
+      Rect(100, 0, Int.MaxValue, 10).intersect(Rect(0, 0, 200, 10)),
+      Some(Rect(100, 0, 100, 10))
+    )
+
   test("Rect.area does not overflow on a large full-frame rectangle"):
     // width * height as Int wraps negative past a ~46340 side; as Long it is exact.
     val big = Rect(0, 0, 50_000, 50_000)

@@ -28,28 +28,30 @@ class CamFaceDetect extends Application:
     stage.show()
 
     val capture = VideoCapture(0)
+    if !capture.isOpened then
+      capture.release()
+      sys.error("no camera available on device 0")
     val cascade = Cascades.load(CascadeName.FrontalFaceAlt) match
       case Right(c) => c
-      case Left(e) => sys.error(s"cannot load the face cascade: ${e.getMessage}")
-
-    stage.setOnCloseRequest { _ =>
-      cascade.release()
-      capture.release()
-    }
-
-    if !capture.isOpened then sys.error("no camera available on device 0")
+      case Left(e) =>
+        capture.release()
+        sys.error(s"cannot load the face cascade: ${e.getMessage}")
 
     val timer = new javafx.animation.AnimationTimer:
       override def handle(now: Long): Unit =
         Video.frames(capture) { frames =>
           if frames.hasNext then
-            val frame = frames.next()
-            cascade.use { c =>
-              val faces = frame.detect(c)
+            Managed.use(frames.next().clone()) { frame =>
+              val faces = frame.detect(cascade.get)
               for f <- faces do frame.drawRect(f, Scalar.Green, Thickness.Stroke(2))
+              view.setImage(toFxImage(frame))
             }
-            view.setImage(toFxImage(frame))
         }
+    stage.setOnCloseRequest { _ =>
+      timer.stop()
+      cascade.release()
+      capture.release()
+    }
     timer.start()
 
   /** Encodes an OpenCV Mat to a JavaFX Image through PNG bytes — no SwingFXUtils, no AWT. */

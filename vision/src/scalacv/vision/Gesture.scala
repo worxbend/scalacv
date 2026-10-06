@@ -23,7 +23,7 @@ enum HandGesture:
 object GestureRecognizer:
 
   /** Names the gesture in `pose`, which must be a 21-landmark hand pose. `minScore` gates which keypoints are
-    * trusted; a finger whose tip is below it counts as not extended.
+    * trusted; a finger whose tip *or middle joint* is below it counts as not extended.
     */
   def recognize(pose: Pose, minScore: Float = 0.3f): HandGesture =
     require(
@@ -34,9 +34,11 @@ object GestureRecognizer:
     val wrist = kp(0).point
 
     // A finger is extended when its tip sits farther from the wrist than its middle joint — orientation
-    // independent, so it holds whichever way the hand is turned.
+    // independent, so it holds whichever way the hand is turned. BOTH landmarks must clear `minScore`:
+    // comparing against a joint the model could not actually see (score below the gate, point meaningless)
+    // would let a confident tip alone read a curled finger as extended.
     def extended(tip: Int, joint: Int): Boolean =
-      kp(tip).score >= minScore &&
+      kp(tip).score >= minScore && kp(joint).score >= minScore &&
         kp(tip).point.distanceTo(wrist) > kp(joint).point.distanceTo(wrist)
 
     val thumb = extended(4, 2)

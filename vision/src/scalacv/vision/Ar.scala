@@ -72,10 +72,10 @@ object Ar:
     // IPPE_SQUARE on four coplanar corners has no degenerate-input trap worth hiding.
     Pnp
       .solve(
-        markerObjectPoints(markerLength).map(_.toCv),
-        marker.corners.map(_.toCv),
+        markerObjectPoints(markerLength),
+        marker.corners,
         intrinsics,
-        Calib3d.SOLVEPNP_IPPE_SQUARE
+        PnpSolver.IppeSquare
       ) { (_, rvec, tvec) =>
         // readColumn copies the rotation and translation out into Seq[Double] before rvec/tvec are released.
         Pose3D(Mats.readColumn(rvec, 3), Mats.readColumn(tvec, 3))
@@ -143,15 +143,15 @@ extension (img: Image)
 
   /** Draws a 3D coordinate frame at every marker's pose — the classic "is my pose right?" overlay. X is red,
     * Y green, Z blue (pointing out of the tag toward the camera). `markerLength` is the tag's real side; the
-    * axes are drawn at `axisLength` (defaulting to half the side).
+    * axes are drawn at `axisLength`, or at half the side when it is `None`.
     */
   def drawMarkerAxes(
       intrinsics: Intrinsics,
       markerLength: Double,
       dictionary: ArucoDictionary = ArucoDictionary.Dict4x4_50,
-      axisLength: Double = Double.NaN
+      axisLength: Option[Double] = None
   ): Image =
-    val len = if axisLength.isNaN then markerLength / 2.0 else axisLength
+    val len = axisLength.getOrElse(markerLength / 2.0)
     val poses = img.arMarkers(intrinsics, markerLength, dictionary)
     img.paint: m =>
       poses.foreach: mp =>
@@ -164,17 +164,17 @@ extension (img: Image)
         m.drawLine(pts(0), pts(2), Scalar.Green, Thickness.Stroke(2)) // Y
         m.drawLine(pts(0), pts(3), Scalar.Blue, Thickness.Stroke(2)) // Z
 
-  /** Draws a wireframe cube standing on every marker, sized to the marker's side by default — the "hello
-    * world" of marker AR. Consumes this image and returns the annotated one.
+  /** Draws a wireframe cube standing on every marker, sized to the marker's side when `size` is `None` — the
+    * "hello world" of marker AR. Consumes this image and returns the annotated one.
     */
   def drawMarkerCube(
       intrinsics: Intrinsics,
       markerLength: Double,
       dictionary: ArucoDictionary = ArucoDictionary.Dict4x4_50,
       color: Scalar = Scalar.Green,
-      size: Double = Double.NaN
+      size: Option[Double] = None
   ): Image =
-    val cube = if size.isNaN then markerLength else size
+    val cube = size.getOrElse(markerLength)
     val poses = img.arMarkers(intrinsics, markerLength, dictionary)
     img.paint: m =>
       poses.foreach: mp =>

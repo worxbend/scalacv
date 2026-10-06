@@ -304,21 +304,21 @@ close (here, `.use` does it). The XML travels in the bytedeco jars — see [`nat
 
 Everything above hands you *owned* Mats. There is exactly one aliasing surface in the public API, and
 it is the one people get wrong: `Video.frames` streams frames through a **single reused buffer**. The
-`Mat` you get each iteration is the *same object*, refilled in place — so keeping a reference to it
-past its turn, or collecting the iterator, leaves you holding one buffer that shows only the last
-frame (and is freed when the loop ends).
+`BorrowedMat` you get each iteration is a checked view over that buffer. Keeping the view past its
+turn or collecting the iterator leaves spent views that throw on access. The raw `frame.mat` escape
+hatch must still not be retained or released; its lifetime is not checked after extraction.
 
 There is no `row`/`col`/`submat` view API to trip over here — `Image.crop` returns an independent
 copy, not a view. This borrowed frame is the only alias you have to reason about.
 
 :::danger[Use-after-free]
-`frames` yields a **borrowed** Mat — one buffer, refilled each step. Collecting the iterator keeps N
-references to that single buffer (all showing the last frame), freed when the block returns.
+`frames` yields **BorrowedMat** views over one buffer, refilled each step. Collecting the iterator
+keeps spent views: accessing them after the traversal throws `IllegalStateException`.
 
 ```scala mdoc:compile-only
 import scalacv.*
 
-// WRONG — .toList captures the same reused buffer N times: a use-after-free in waiting.
+// WRONG — .toList collects spent views; accessing any of them after the block throws.
 Video.open(0).map { capture =>
   capture.use { c =>
     Video.frames(c) { it => it.toList }
@@ -349,7 +349,7 @@ Video.open(0).map { capture =>
 :::
 
 The `Ops` extensions are safe to run *inside* the loop even on the borrowed frame: each allocates its
-own destination and never aliases the receiver, so `frame.cvtColor(...)` yields a Mat you own. The
+own destination and never aliases the receiver, so `frame.mat.cvtColor(...)` yields a Mat you own. The
 [`Camera`](/video) helpers (`foreach`, `taking`, `take`, `snapshot`) go a step further and hand you owned
 `Image` copies directly, so there is no borrowing to reason about at all — see [`video`](/video).
 

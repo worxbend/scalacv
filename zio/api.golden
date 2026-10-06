@@ -17,8 +17,10 @@ object scalacv.zio.package.package
   def acquireRelease<A>(scala.Function0<A>, scalacv.Releasable<A>): zio.ZIO<zio.Scope, java.lang.Throwable, A>
   def captureScoped$default$2(): scalacv.CaptureOptions
   def captureScoped(java.lang.String, scalacv.CaptureOptions): zio.ZIO<zio.Scope, scalacv.CvError, org.opencv.videoio.VideoCapture>
-  def frameStream(org.opencv.videoio.VideoCapture): zio.stream.ZStream<java.lang.Object, java.lang.Throwable, org.opencv.core.Mat>
-  def framesCopied(org.opencv.videoio.VideoCapture, scalacv.Releasable<org.opencv.core.Mat>): zio.stream.ZStream<java.lang.Object, java.lang.Throwable, scalacv.Managed<org.opencv.core.Mat>>
+  def frameStream$default$2(): int
+  def frameStream(org.opencv.videoio.VideoCapture, int): zio.stream.ZStream<java.lang.Object, java.lang.Throwable, scalacv.BorrowedMat>
+  def framesCopied$default$2(): int
+  def framesCopied(org.opencv.videoio.VideoCapture, int, scalacv.Releasable<org.opencv.core.Mat>): zio.stream.ZStream<java.lang.Object, java.lang.Throwable, scalacv.Managed<org.opencv.core.Mat>>
   def fromCv<A>(scala.Function0<scala.util.Either<scalacv.CvError, A>>): zio.ZIO<java.lang.Object, scalacv.CvError, A>
   def imageScoped$default$2(): scalacv.ImreadFlags
   def imageScoped(java.lang.String, scalacv.ImreadFlags): zio.ZIO<zio.Scope, scalacv.CvError, scalacv.Image>

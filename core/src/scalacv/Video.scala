@@ -150,26 +150,29 @@ final case class CaptureInfo(
   * is created inside a scope, it is released when that scope ends, and it holds one frame's worth of native
   * memory no matter how long the video is.
   *
-  * ==The borrowing contract==
+  * ==The borrowing contract, enforced==
   *
-  * This is the one place in scalacv where a `Mat` you are handed is **not** yours, and it is the exact
-  * opposite of the contract in `Ops.scala`:
+  * This is the one place in scalacv where a frame you are handed is **not** yours, and it is the exact
+  * opposite of the contract in `Ops.scala`. Each element is a [[BorrowedMat]] — a liveness-checked view over
+  * the iterator's single decode buffer, **spent the moment the iterator advances or the `frames` block
+  * returns**. Every access, including the [[BorrowedMat.mat]] escape hatch, throws `IllegalStateException`
+  * once the view is spent, so retention fails loudly instead of reading native memory that has been decoded
+  * over or freed — the use-after-free a raw `Mat` reference used to permit was a SIGSEGV, not an exception,
+  * and it is the same failure mode [[Managed]] guards against.
   *
-  *   - The `Mat` from `frames` is **borrowed**. It is valid from the `next()` that returned it until you next
-  *     ask the iterator for anything, and it is released when the `frames` block returns. The iterator is
-  *     retired at that point, so keeping one is inert rather than dangerous.
-  *   - Do not retain it. Do not put it in a collection. `it.toList` compiles and gives you N references to
-  *     one Mat holding the last frame — not N frames.
-  *   - Do read it, and do run the `Ops` extensions over it: those allocate their own destination and never
-  *     alias the receiver, so `frame.cvtColor(...)` inside the loop is correct and yields a Mat you own.
-  *   - Need to keep a frame? [[framesCopied]], which clones per frame and hands you a caller-owned
-  *     [[Managed]].
+  *   - Do read the view, record it through `frame.mat`, and run the `Ops` extensions over `frame.mat`: those
+  *     allocate their own destination and never alias the receiver, so `frame.mat.cvtColor(...)` inside the
+  *     loop is correct and yields a Mat you own.
+  *   - Need to keep a frame? `frame.clone()` inside the loop — the clone is caller-owned — or
+  *     [[framesCopied]], which does that per frame and hands you a [[Managed]].
+  *   - `it.toList` still compiles, but every element in the list is spent by the time you look at it: N spent
+  *     views, not N frames.
   *
   * {{{
   * Video.open("clip.mp4").map { capture =>
   *   capture.use { c =>
   *     Video.frames(c) { frames =>
-  *       frames.map(_.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
+  *       frames.map(f => f.mat.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
   *     }
   *   }
   * }
@@ -241,14 +244,15 @@ object Video:
       backendName = capture.getBackendName
     )
 
-  /** Runs `f` over the capture's frames, borrowing a single `Mat` for the whole traversal.
+  /** Runs `f` over the capture's frames, borrowing a single decode buffer for the whole traversal.
     *
-    * The iterator decodes into one `Mat` and overwrites it in place, so the frame handed to each `next()` is
-    * **valid only until the next interaction with the iterator**, and is released when this method returns —
-    * on the exception path too. Read it, or run an `Ops` operation over it (those allocate their own output
-    * and never alias the receiver). Do not retain it, and do not use an `Iterator` combinator that retains
-    * elements: `toList`, `toVector`, `sliding` and `buffered` all yield references to the same Mat.
-    * [[framesCopied]] is the version that gives you frames you can keep.
+    * Each element is a [[BorrowedMat]]: a liveness-checked view over that one buffer, valid from the `next()`
+    * that produced it until the iterator is next asked for anything — `hasNext` included, since asking
+    * decodes over the same memory — and spent for good when this method returns, on the exception path too.
+    * Touching a spent view throws `IllegalStateException`; it cannot read freed memory, because the check
+    * fires before anything crosses JNI. Read the view, record it or run `Ops` operations through `frame.mat`
+    * (those allocate their own output and never alias the receiver), and `frame.clone()` the ones you need to
+    * keep — or use [[framesCopied]], which does that for you.
     *
     * `capture` is borrowed too: it is neither released nor rewound, so calling `frames` again resumes from
     * wherever the previous traversal stopped. That is what makes partial consumption — `_.take(10)` — behave
@@ -263,26 +267,16 @@ object Video:
     * @throws CvError.NativeCall
     *   if OpenCV fails while decoding. End-of-stream is not an error and does not throw.
     */
-  def frames[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(f: Iterator[Mat] => A): A =
-    require(attemptsPerFrame >= 1, s"attemptsPerFrame must be at least 1, got $attemptsPerFrame")
-    require(
-      capture.isOpened,
-      "cannot read frames from a capture that is not open — that would be an empty stream that looks " +
-        "like a video with no frames in it. Open it with Video.open, which reports failure as a Left."
-    )
-    // See the object scaladoc: with exception mode on, plain end-of-file throws, so the loop could not
-    // tell a finished video from a broken one. Restored afterwards because the capture is borrowed.
-    val callerExceptionMode = capture.getExceptionMode
-    capture.setExceptionMode(false)
+  def frames[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(f: Iterator[BorrowedMat] => A): A =
+    val source = FrameSource(capture, attemptsPerFrame)
     try
-      Managed.use(Mat()): frame =>
-        val iterator = FrameIterator(capture, frame, attemptsPerFrame)
-        // Retiring the iterator before its Mat is released is what makes a retained iterator inert
-        // rather than dangerous: `read` on a released Mat would quietly reallocate it, handing back a
-        // real frame in a Mat that nothing owns any more and nobody will free.
-        try f(iterator)
-        finally iterator.retire()
-    finally capture.setExceptionMode(callerExceptionMode)
+      val iterator = FrameIterator(source)
+      // Retiring the iterator before its source closes is what makes a retained iterator inert rather
+      // than dangerous: `read` on a released buffer would quietly reallocate it, handing back a real
+      // frame in a Mat that nothing owns any more and nobody will free.
+      try f(iterator)
+      finally iterator.retire()
+    finally source.close()
 
   /** As `frames`, but each frame is cloned into a caller-owned [[Managed]].
     *
@@ -365,53 +359,162 @@ object Video:
   /** Runs a speculative open. Exception mode is on at this point, so a backend that rejects the timeout
     * parameters throws rather than returning `false`; both mean the same thing here — try again without them
     * — and the error from the *fallback* attempt is the one worth reporting.
+    *
+    * Two thrown shapes mean "rejected". A `cv::Exception` arrives as `CvException`, but exception mode's
+    * other failures (`std::bad_alloc`, `std::out_of_range`, unknown) arrive as a **bare**
+    * `java.lang.Exception` — `throwJavaException`'s fallback, matched by exact class the way `Cv.attempt`
+    * does, so genuine programmer errors (`IllegalArgumentException` and other subclasses) still propagate.
     */
   private def swallowing(open: => Boolean): Boolean =
     try open
-    catch case _: CvException => false
+    catch
+      case _: CvException => false
+      case e: Exception if e.getClass == classOf[Exception] => false
 
-  /** The one-Mat frame iterator. See the [[Video]] scaladoc for why it is not a `LazyList`.
+  /** One borrow scope over a capture: the exception-mode save/restore plus the single-buffer read loop with
+    * `attemptsPerFrame`. This is **the** read step of the whole library — [[frames]] builds its iterator on
+    * it and scalacv.zio's `frameStream` pulls it directly — extracted because the two read loops had already
+    * diverged once (the zio side lacked the `attemptsPerFrame` retry), and a second divergence in the code
+    * that decides "end of stream vs broken stream" is how a file's EOF becomes a failed stream in one backend
+    * and not the other.
+    *
+    * Lifecycle: [[FrameSource.apply]] saves the caller's exception mode and forces it off; [[close]] spends
+    * the outstanding view, releases the buffer, and puts the caller's mode back. The capture itself is
+    * borrowed throughout and is never released or rewound.
+    *
+    * Not thread-safe by design: a frame source is a single-consumer pull stream, exactly like the `Iterator`
+    * [[frames]] wraps it in. The liveness flag it flips on the views is the one piece that is visibility-safe
+    * across threads (see [[BorrowedMat]]), because a zio consumer can outlive the pull by a fiber hop.
+    */
+  private[scalacv] final class FrameSource private (
+      capture: VideoCapture,
+      attemptsPerFrame: Int,
+      callerExceptionMode: Boolean,
+      buffer: Mat
+  ) extends AutoCloseable:
+
+    /** The view handed out by the most recent successful read. Invalidated by the next read attempt —
+      * successful or not, since even a failed `read` may have clobbered the buffer — and by [[close]].
+      */
+    private var current: BorrowedMat | Null = null
+    private var closed = false
+
+    /** Spends the outstanding view, if any. Also called by `FrameIterator.retire`, so a view smuggled out of
+      * a `frames` block dies with the block and not only with the (immediately following) close.
+      */
+    private[scalacv] def invalidateCurrent(): Unit =
+      if current != null then
+        current.nn.invalidate()
+        current = null
+
+    /** Decodes the next frame into the shared buffer and hands out a live view of it, or `None` at
+      * end-of-stream.
+      *
+      * `attemptsPerFrame` is a bound on *consecutive* failed reads, not a retry-forever: `read` blocks in
+      * native code with no timeout of its own, so an unbounded loop would turn a dead camera into a hung
+      * thread that also spins. The first failed read after a success simply starts the count over.
+      *
+      * @throws CvError.NativeCall
+      *   if OpenCV fails mid-decode. End-of-stream is `None`, never an error — with exception mode forced off
+      *   (see [[FrameSource.apply]]) a clean EOF is a `false` here, not a `CvException`.
+      */
+    def nextFrame(): Option[BorrowedMat] =
+      invalidateCurrent()
+      var attempt = 0
+      var decoded = false
+      while !decoded && attempt < attemptsPerFrame do
+        attempt += 1
+        // Some backends signal a dropped frame by returning true with nothing decoded, which would
+        // otherwise surface as an empty Mat that looks like a legitimate frame.
+        decoded = Cv.orThrow("VideoCapture.read")(capture.read(buffer)) && !buffer.empty()
+      if decoded then
+        val view = new BorrowedMat(buffer)
+        current = view
+        Some(view)
+      else None
+
+    /** Ends the borrow: spends the outstanding view, releases the buffer, and hands the capture back with the
+      * exception mode it had on entry. Idempotent, because both `Using`-style scopes and zio finalizers
+      * promise "exactly once" only as hard as the release is cheap to repeat.
+      */
+    def close(): Unit =
+      if !closed then
+        closed = true
+        invalidateCurrent()
+        buffer.release()
+        capture.setExceptionMode(callerExceptionMode)
+
+  private[scalacv] object FrameSource:
+
+    /** Starts a borrow over `capture`: saves the caller's exception mode, then forces it off for the
+      * duration. See the [[Video]] scaladoc for why — with exception mode on, plain end-of-file throws the
+      * identical `CvException` a broken stream does, and the loop could not tell a finished video from a dead
+      * camera.
+      *
+      * The `isOpened` require is the synchronous twin of the typed `CvError.LoadFailed` check zio's
+      * `frameStream` performs in its error channel. Both exist, deliberately: a not-open capture reads as an
+      * instantly-empty stream, and "a video with no frames in it" is the one failure shape neither layer may
+      * produce. Here — a synchronous API, where handing a dead capture to a frame loop is a programmer error
+      * — the check is an `IllegalArgumentException`; in zio it is a typed failure, because a stream
+      * constructor that throws is a defect, not a failure.
+      */
+    def apply(capture: VideoCapture, attemptsPerFrame: Int): FrameSource =
+      require(attemptsPerFrame >= 1, s"attemptsPerFrame must be at least 1, got $attemptsPerFrame")
+      require(
+        capture.isOpened,
+        "cannot read frames from a capture that is not open — that would be an empty stream that looks " +
+          "like a video with no frames in it. Open it with Video.open, which reports failure as a Left."
+      )
+      val callerExceptionMode = capture.getExceptionMode
+      capture.setExceptionMode(false)
+      new FrameSource(capture, attemptsPerFrame, callerExceptionMode, Mat())
+
+  /** The one-buffer frame iterator. See the [[Video]] scaladoc for why it is not a `LazyList`.
     *
     * `pending` is what makes `hasNext` idempotent: without it, `hasNext; hasNext; next()` would decode two
     * frames and discard the first — a silent frame-dropper, and `for (f <- frames)` desugars to exactly that
-    * shape.
+    * shape. Decoding ahead by one frame is also what spends the *previous* view at the first `hasNext` after
+    * it was handed out: [[FrameSource.nextFrame]] invalidates the outstanding view before it overwrites the
+    * buffer, so a retained reference fails as `IllegalStateException` instead of silently showing the next
+    * frame's pixels.
     */
-  private final class FrameIterator(capture: VideoCapture, frame: Mat, attemptsPerFrame: Int)
-      extends Iterator[Mat]:
+  private final class FrameIterator(source: FrameSource) extends Iterator[BorrowedMat]:
 
-    private var pending = false
+    private var pending: BorrowedMat | Null = null
     private var finished = false
     private var retired = false
 
     def hasNext: Boolean =
-      if pending then true
+      if pending != null then true
       else if finished then false
       else
-        var attempt = 0
-        while !pending && attempt < attemptsPerFrame do
-          attempt += 1
-          // Some backends signal a dropped frame by returning true with nothing decoded, which would
-          // otherwise surface as an empty Mat that looks like a legitimate frame.
-          pending = Cv.orThrow("VideoCapture.read")(capture.read(frame)) && !frame.empty()
-        finished = !pending
-        pending
+        source.nextFrame() match
+          case Some(view) =>
+            pending = view
+            true
+          case None =>
+            finished = true
+            false
 
-    def next(): Mat =
+    def next(): BorrowedMat =
       if !hasNext then
         throw java.util.NoSuchElementException(
           if finished && !retired then
             "the capture has no more frames; the stream ended or the backend stopped delivering"
           else
-            "this frame iterator belongs to a Video.frames block that has already returned; its Mat was " +
-              "released with the block. Use Video.framesCopied if you need frames that outlive the scope."
+            "this frame iterator belongs to a Video.frames block that has already returned; its buffer " +
+              "was released with the block. Use Video.framesCopied if you need frames that outlive the scope."
         )
-      pending = false
-      frame
+      val view = pending.nn
+      pending = null
+      view
 
     /** Ends the traversal for good. Called when the owning `frames` scope exits, so that an iterator someone
-      * kept hold of reports "no more frames" instead of decoding into a released Mat.
+      * kept hold of reports "no more frames" instead of decoding into a released buffer — and so the view it
+      * last handed out is spent with the block, not one `close()` later.
       */
     def retire(): Unit =
       retired = true
-      pending = false
+      pending = null
       finished = true
+      source.invalidateCurrent()

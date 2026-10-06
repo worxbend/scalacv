@@ -415,7 +415,7 @@ final class scalacv.vision.Motion
 final class scalacv.vision.MotionDetector.BgSubtract
   extends java.lang.Object
   implements scalacv.vision.MotionDetector
-  def <init>(scalacv.Managed<org.opencv.video.BackgroundSubtractorMOG2>, int, double, double): void
+  def <init>(scalacv.Managed<org.opencv.video.BackgroundSubtractorMOG2>, scala.Function0<org.opencv.video.BackgroundSubtractorMOG2>, int, double, double): void
   def close(): void
   def detect(scalacv.Image): scalacv.vision.Motion
   def reset(): void
@@ -706,12 +706,12 @@ object scalacv.vision.Ar.package
   def arMarkers$default$4(scalacv.Image): scalacv.vision.ArucoDictionary
   def arMarkers(scalacv.Image, scalacv.Intrinsics, double, scalacv.vision.ArucoDictionary): scala.collection.immutable.Seq<scalacv.vision.MarkerPose>
   def drawMarkerAxes$default$4(scalacv.Image): scalacv.vision.ArucoDictionary
-  def drawMarkerAxes$default$5(scalacv.Image): double
-  def drawMarkerAxes(scalacv.Image, scalacv.Intrinsics, double, scalacv.vision.ArucoDictionary, double): scalacv.Image
+  def drawMarkerAxes$default$5(scalacv.Image): scala.Option<java.lang.Object>
+  def drawMarkerAxes(scalacv.Image, scalacv.Intrinsics, double, scalacv.vision.ArucoDictionary, scala.Option<java.lang.Object>): scalacv.Image
   def drawMarkerCube$default$4(scalacv.Image): scalacv.vision.ArucoDictionary
   def drawMarkerCube$default$5(scalacv.Image): scalacv.Scalar
-  def drawMarkerCube$default$6(scalacv.Image): double
-  def drawMarkerCube(scalacv.Image, scalacv.Intrinsics, double, scalacv.vision.ArucoDictionary, scalacv.Scalar, double): scalacv.Image
+  def drawMarkerCube$default$6(scalacv.Image): scala.Option<java.lang.Object>
+  def drawMarkerCube(scalacv.Image, scalacv.Intrinsics, double, scalacv.vision.ArucoDictionary, scalacv.Scalar, scala.Option<java.lang.Object>): scalacv.Image
 object scalacv.vision.Aruco
   extends java.lang.Object
   implements java.io.Serializable
@@ -917,9 +917,14 @@ object scalacv.vision.FaceMatch
 object scalacv.vision.FaceRecognizer
   extends java.lang.Object
   implements java.io.Serializable
+  def EmbeddingSize(): int
+  def ModelFileName(): java.lang.String
+  def ModelSha256(): java.lang.String
+  def ModelSizeBytes(): long
+  def ModelUrls(): scala.collection.immutable.Seq<java.lang.String>
+  def faceRow(scalacv.vision.Face): org.opencv.core.Mat
   def load(java.lang.String): scala.util.Either<scalacv.CvError, scalacv.vision.FaceRecognizer>
   def modelSpec(): scalacv.ModelSpec
-  def scalacv$vision$FaceRecognizer$$$faceRow(scalacv.vision.Face): org.opencv.core.Mat
 object scalacv.vision.FeatureMatch
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1042,6 +1047,7 @@ object scalacv.vision.MotionDetector
   def frameDifference$default$3(): int
   def frameDifference$default$4(): double
   def frameDifference(int, int, int, double): scalacv.vision.MotionDetector
+  def scalacv$vision$MotionDetector$$$given_Releasable_BackgroundSubtractorMOG2(): scalacv.Releasable<org.opencv.video.BackgroundSubtractorMOG2>
   def scalacv$vision$MotionDetector$$$measure(org.opencv.core.Mat, int, double): scalacv.vision.Motion
   def scalacv$vision$MotionDetector$$$prepare(org.opencv.core.Mat, int): scalacv.Managed<org.opencv.core.Mat>
 object scalacv.vision.Navigator
@@ -1067,6 +1073,11 @@ object scalacv.vision.ObjectTracker
   def iou(scalacv.Rect, scalacv.Rect): double
   def scalacv$vision$ObjectTracker$$$center(scalacv.Rect): scalacv.Point
   def scalacv$vision$ObjectTracker$$$centeredRect(scalacv.Point, scala.Tuple2<java.lang.Object, java.lang.Object>): scalacv.Rect
+object scalacv.vision.ObjectTracker.package
+  extends java.lang.Object
+  implements java.io.Serializable
+  def drawTracks$default$3(scalacv.Image): scalacv.Scalar
+  def drawTracks(scalacv.Image, scala.collection.immutable.Seq<scalacv.vision.ObjectTrack>, scalacv.Scalar): scalacv.Image
 object scalacv.vision.Obstacle
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1142,11 +1153,6 @@ object scalacv.vision.Pose.package
   def drawSkeleton$default$4(scalacv.Image): scalacv.Scalar
   def drawSkeleton$default$5(scalacv.Image): scalacv.Scalar
   def drawSkeleton(scalacv.Image, scalacv.vision.Pose, float, scalacv.Scalar, scalacv.Scalar): scalacv.Image
-  def estimatePose$default$5(scalacv.Image): scalacv.vision.PoseTopology
-  def estimatePose$default$6(scalacv.Image): double
-  def estimatePose$default$7(scalacv.Image): scalacv.Scalar
-  def estimatePose$default$8(scalacv.Image): boolean
-  def estimatePose(scalacv.Image, org.opencv.dnn.Net, scalacv.Size, scalacv.vision.KeypointLayout, scalacv.vision.PoseTopology, double, scalacv.Scalar, boolean): scalacv.vision.Pose
 object scalacv.vision.Pose3D
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1159,6 +1165,14 @@ object scalacv.vision.PoseEstimator
   implements java.io.Serializable
   def decode$default$4(): scalacv.vision.PoseTopology
   def decode(org.opencv.core.Mat, scalacv.Size, scalacv.vision.KeypointLayout, scalacv.vision.PoseTopology): scalacv.vision.Pose
+object scalacv.vision.PoseEstimator.package
+  extends java.lang.Object
+  implements java.io.Serializable
+  def estimatePose$default$5(scalacv.Image): scalacv.vision.PoseTopology
+  def estimatePose$default$6(scalacv.Image): double
+  def estimatePose$default$7(scalacv.Image): scalacv.Scalar
+  def estimatePose$default$8(scalacv.Image): boolean
+  def estimatePose(scalacv.Image, org.opencv.dnn.Net, scalacv.Size, scalacv.vision.KeypointLayout, scalacv.vision.PoseTopology, double, scalacv.Scalar, boolean): scalacv.vision.Pose
 object scalacv.vision.PoseTopology
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1239,15 +1253,15 @@ object scalacv.vision.TrackerKind
   static val Csrt: scalacv.vision.TrackerKind
   static val Kcf: scalacv.vision.TrackerKind
   static val Mil: scalacv.vision.TrackerKind
-object scalacv.vision.Tracking.package
-  extends java.lang.Object
-  implements java.io.Serializable
-  def drawTracks$default$3(scalacv.Image): scalacv.Scalar
-  def drawTracks(scalacv.Image, scala.collection.immutable.Seq<scalacv.vision.ObjectTrack>, scalacv.Scalar): scalacv.Image
 object scalacv.vision.VisualOdometry
   extends java.lang.Object
   implements java.io.Serializable
   def estimate(scala.collection.immutable.Seq<scalacv.Point>, scala.collection.immutable.Seq<scalacv.Point>, scalacv.Intrinsics): scala.Option<scalacv.vision.CameraMotion>
+object scalacv.vision.internal.ModelLoader
+  extends java.lang.Object
+  implements java.io.Serializable
+  def loadNative$default$4<A>(): scala.Function1<A, scala.Option<java.lang.String>>
+  def loadNative<A>(java.lang.String, java.lang.String, scala.Function0<java.lang.String>, scala.Function1<A, scala.Option<java.lang.String>>, scala.Function0<A>, scalacv.Releasable<A>): scala.util.Either<scalacv.CvError, A>
 trait scalacv.vision.MotionDetector
   implements java.lang.AutoCloseable
   abstract def detect(scalacv.Image): scalacv.vision.Motion

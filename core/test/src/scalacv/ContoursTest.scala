@@ -94,6 +94,9 @@ class ContoursTest extends munit.FunSuite:
     Using.resource(Managed(Mat())): m =>
       val e = intercept[IllegalArgumentException](m.get.findContours())
       assert(e.getMessage.contains("non-empty"), e.getMessage)
+      // The shared Preconditions check names the operation — pin that, since the message is the
+      // only thing a caller has to grep for. (require prefixes it with "requirement failed: ".)
+      assert(e.getMessage.contains("findContours"), e.getMessage)
 
   test("a multi-channel input surfaces as a named CvError rather than a raw CvException"):
     Using.resource(Managed(Mat.zeros(16, 16, CvType.CV_8UC3))): m =>
@@ -109,6 +112,18 @@ class ContoursTest extends munit.FunSuite:
     assertEquals(c.centroid, None)
     assert(c.convexHull.isEmpty)
     assert(c.approx(1.0).isEmpty)
+
+  test("a Contour built from a mutable buffer is insulated from later edits to the buffer"):
+    // Construction copies the points into an immutable Vector: without the copy the lazy metrics would
+    // observe whatever the caller's buffer holds at measurement time, not at construction time.
+    val buf = scala.collection.mutable.ArrayBuffer(Point(0, 0), Point(4, 0), Point(4, 3))
+    val c = Contour(buf.toSeq)
+    val before = c.points
+    buf(0) = Point(-50, -50)
+    buf += Point(100, 100)
+    assertEquals(c.points, before)
+    assertEquals(c.points, Seq(Point(0, 0), Point(4, 0), Point(4, 3)))
+    assertEqualsDouble(c.area, 6.0, 0.001) // the original 3-4-5-right-triangle half, not the mutated buffer
 
   test("centroid of a rectangle is its geometric centre"):
     Using.resource(Managed(blackCanvas())): canvas =>

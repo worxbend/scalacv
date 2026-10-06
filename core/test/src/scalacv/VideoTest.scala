@@ -47,6 +47,9 @@ class VideoTest extends munit.FunSuite:
   /** A background pixel, sampled well clear of the marker row. */
   private def backgroundPixel(m: Mat): Double = m.get(40, 8)(0)
 
+  /** [[backgroundPixel]] for a live borrowed frame. */
+  private def backgroundPixel(m: BorrowedMat): Double = m.get(40, 8)(0)
+
   private def assertIsFrame(m: Mat, i: Int)(using munit.Location): Unit =
     assertEquals(m.rows, Height, s"frame $i has the wrong height")
     assertEquals(m.cols, Width, s"frame $i has the wrong width")
@@ -58,6 +61,12 @@ class VideoTest extends munit.FunSuite:
       math.abs(backgroundPixel(m) - expectedGrey(i)) < 8,
       s"frame $i: background is ${backgroundPixel(m)}, expected about ${expectedGrey(i)}"
     )
+
+  /** The borrowed-frame face of the raw-Mat assertion above: the `mat` escape hatch is the live buffer while
+    * the iterator has not moved, so checking a frame through it checks the frame.
+    */
+  private def assertIsFrame(frame: BorrowedMat, i: Int)(using munit.Location): Unit =
+    assertIsFrame(frame.mat, i)
 
   /** Writes [[FrameCount]] fixture frames to a fresh temp file and returns its path. */
   private def writeFixtureVideo(): Path =
@@ -88,31 +97,65 @@ class VideoTest extends munit.FunSuite:
         count
     assertEquals(seen, FrameCount, "the iterator did not yield exactly the frames that were written")
 
-  test("the iterator borrows one Mat and overwrites it in place — it never memoises"):
+  test("the iterator decodes into one buffer and overwrites it in place — it never memoises"):
     val file = writeFixtureVideo()
-    val (distinctInstances, backgrounds) = withFixtureCapture(file): capture =>
+    val (distinctBuffers, backgrounds) = withFixtureCapture(file): capture =>
       Video.frames(capture): frames =>
-        val instances = scala.collection.mutable.Set.empty[Mat]
+        val buffers = scala.collection.mutable.Set.empty[Long]
         val values = Vector.newBuilder[Double]
         while frames.hasNext do
           val frame = frames.next()
-          // Identity, not equality: one Mat for the whole traversal is the contract, and it is the
-          // reason a LazyList cannot express this iterator.
-          instances += frame
+          // The native data address, not object identity: each frame is a fresh BorrowedMat view over
+          // the iterator's single decode buffer, so one address for the whole traversal is the contract
+          // — and it is the reason a LazyList cannot express this iterator.
+          buffers += frame.dataAddr()
           values += backgroundPixel(frame)
-        (instances.size, values.result())
-    assertEquals(distinctInstances, 1, "the frame iterator allocated more than one Mat")
+        (buffers.size, values.result())
+    assertEquals(distinctBuffers, 1, "the frame iterator allocated more than one decode buffer")
     assertEquals(backgrounds.size, FrameCount)
-    // A single reused Mat is only correct if it really is rewritten each time.
+    // A single reused buffer is only correct if it really is rewritten each time.
     assertEquals(backgrounds.distinct.size, FrameCount, s"frames repeated content: $backgrounds")
 
-  test("retaining borrowed frames gives N references to one Mat, not N frames"):
-    // Not a hazard being tolerated by accident: this is the exact shape `toList` produces, asserted so
-    // that the borrowing contract in the scaladoc is a tested property rather than a claim.
+  test(
+    "a borrowed frame is spent when the iterator advances — retention throws instead of reading freed memory"
+  ):
+    // The ownership hole BorrowedMat exists to close: handed out as a raw Mat, a retained frame reference
+    // read whatever the next decode had overwritten it with, and freed native memory once the scope had
+    // ended — a SIGSEGV, not an exception. Now the access fails in Scala, before anything crosses JNI.
     val file = writeFixtureVideo()
-    val retained = withFixtureCapture(file)(capture => Video.frames(capture)(_.toVector))
-    assertEquals(retained.size, FrameCount)
-    assert(retained.forall(_ eq retained.head), "the borrowed frames should all be the same Mat")
+    withFixtureCapture(file): capture =>
+      Video.frames(capture): frames =>
+        val first = frames.next()
+        assertIsFrame(first, 0) // live: the contract holds while the iterator has not moved
+        frames.next() // decodes over the same buffer — `first` is spent by the advance
+        val e = intercept[IllegalStateException](first.get(0, 0))
+        assert(e.getMessage.contains("borrowed"), e.getMessage)
+        intercept[IllegalStateException](first.empty())
+        intercept[IllegalStateException](first.clone())
+        intercept[IllegalStateException](first.mat) // the escape hatch is checked like everything else
+
+  test("a borrowed frame kept past the frames block is spent, exactly like a released Managed"):
+    val file = writeFixtureVideo()
+    withFixtureCapture(file): capture =>
+      val escaped = Video.frames(capture)(_.next())
+      val e = intercept[IllegalStateException](escaped.mat)
+      assert(e.getMessage.contains("borrowed"), e.getMessage)
+      // The capture is borrowed, not consumed: the next traversal resumes where this one stopped.
+      assertEquals(Video.frames(capture)(_.size), FrameCount - 1)
+
+  test("a borrowed frame records through the mat escape hatch, with no per-frame copy"):
+    val dir = Files.createTempDirectory("scalacv-rec")
+    dir.toFile.deleteOnExit()
+    val out = dir.resolve("borrowed.avi")
+    val source = writeFixtureVideo()
+    val result = withFixtureCapture(source): capture =>
+      Recorder.using(out.toString, Size(Width.toDouble, Height.toDouble), Fps, Codec.Mjpg): recorder =>
+        Video.frames(capture): frames =>
+          frames.foreach: frame =>
+            val written = recorder.write(frame.mat)
+            assert(written.isRight, s"a borrowed frame should record: $written")
+    assert(result.isRight, s"recorder should have opened: $result")
+    assert(Files.size(out) > 0, "the recording is empty")
 
   test("hasNext is idempotent — asking twice does not swallow a frame"):
     val file = writeFixtureVideo()

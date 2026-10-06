@@ -1,6 +1,6 @@
 package scalacv
 
-import org.opencv.core.Core
+import org.opencv.core.{Core, Mat}
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 
@@ -231,6 +231,17 @@ object Threshold:
   * threshold OpenCV chose — frequently the reason you called it at all.
   */
 final case class ThresholdResult(value: Double)
+
+/** The pair `Mat.threshold` returns: the thresholded [[image]] plus the value OpenCV [[computed]].
+  *
+  * Why a pair exists at all: for [[Threshold.Auto.Otsu]] and [[Threshold.Auto.Triangle]] the whole point of
+  * the call is the threshold OpenCV chose, so dropping the `double` the native function returns would throw
+  * away the answer. And why a named case class rather than the `(Managed[Mat], ThresholdResult)` tuple this
+  * used to be: a tuple made `threshold` the one op that did not return a bare `Managed[Mat]`, which broke
+  * `Managed.pipe` and left every call site spelling `._1`. A named pair destructures the same (`val
+  * Thresholded(out, result) = ...`) but reads as `.image` / `.computed` everywhere else.
+  */
+final case class Thresholded(image: Managed[Mat], computed: ThresholdResult)
 
 /** How `imread`/`imdecode` should decode a pixel's colour. */
 enum ImreadColor:

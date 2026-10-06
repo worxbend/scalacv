@@ -58,8 +58,9 @@ pixels) a line needs to be reported, and is the only argument without a sensible
 edges.houghLines(threshold = 120)
 ```
 
-`PolarLine(rho, theta)` carries `Float` fields because the underlying `Mat` for this transform is `CV_32FC2`
-— a two-channel float. Reading it any other way would misinterpret the bits.
+`PolarLine(rho, theta)` carries `Double` fields, widened from the `CV_32FC2` (two-channel float) `Mat` this
+transform produces at the decode boundary — so a Hough result combines with `Point`, `Contour` and the rest
+of the library's geometry without a manual conversion.
 
 Because `theta` describes the *normal*, it is the usual source of confusion. Converting to degrees makes the
 orientations obvious — our horizontal line's normal is vertical (`90°`) and vice-versa:

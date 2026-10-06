@@ -1,7 +1,7 @@
 package scalacv.vision
 
 import org.opencv.calib3d.Calib3d
-import org.opencv.core.{Mat, Point3}
+import org.opencv.core.Mat
 
 import scalacv.*
 
@@ -61,9 +61,9 @@ object Localizer:
       Pnp
         .solve(
           worldPoints.map((x, y, z) => Point3(x, y, z)),
-          imagePoints.map(_.toCv),
+          imagePoints,
           intrinsics,
-          Calib3d.SOLVEPNP_ITERATIVE
+          PnpSolver.Iterative
         ) { (own, rvec, tvec) =>
           val rotation = own(Mat())
           Calib3d.Rodrigues(rvec, rotation)

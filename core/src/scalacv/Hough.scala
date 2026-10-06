@@ -1,6 +1,6 @@
 package scalacv
 
-import org.opencv.core.{CvType, Mat}
+import org.opencv.core.Mat
 import org.opencv.imgproc.Imgproc
 
 /* Typed results for the Hough line transforms.
@@ -24,13 +24,17 @@ import org.opencv.imgproc.Imgproc
 
 /** A line in Hesse normal form, as `HoughLines` reports it: infinite, with no endpoints.
   *
+  * The underlying Mat is `CV_32FC2`, but the fields are widened to `Double` at the decode boundary: every
+  * other measurement the library surfaces ([[Point]], [[Contour]]) is a `Double`, and the float channels
+  * carry no precision past 24 bits for the widening to lose.
+  *
   * @param rho
   *   distance in pixels from the image origin (top-left) to the line, along the normal.
   * @param theta
   *   angle of that normal in radians. 0 is a vertical line, `Pi/2` a horizontal one — the angle describes the
   *   *normal*, not the line, which is the usual source of confusion.
   */
-final case class PolarLine(rho: Float, theta: Float)
+final case class PolarLine(rho: Double, theta: Double)
 
 /** A line segment with real endpoints, as `HoughLinesP` reports it.
   *
@@ -48,9 +52,10 @@ final case class Segment(x1: Int, y1: Int, x2: Int, y2: Int):
   *
   * `HoughLinesWithAccumulator` exists precisely so the votes are visible; they are the only way to rank
   * results, since the plain transform already returns them sorted but discards the magnitudes. Votes are
-  * whole numbers stored in a float channel, hence the narrowing.
+  * whole numbers stored in a float channel, hence the narrowing to `Int`; `rho` and `theta` are widened to
+  * `Double` like [[PolarLine]].
   */
-final case class PolarLineWithVotes(rho: Float, theta: Float, votes: Int):
+final case class PolarLineWithVotes(rho: Double, theta: Double, votes: Int):
   def line: PolarLine = PolarLine(rho, theta)
 
 /** The Hough transforms, as extension methods on a binary edge image.
@@ -90,10 +95,10 @@ extension (mat: Mat)
       minTheta: Double = 0.0,
       maxTheta: Double = math.Pi
   ): Seq[PolarLine] =
-    Hough.requireEdgeImage(mat, "houghLines")
+    Preconditions.requireGray8("houghLines", mat)
     Hough.decoding("houghLines"): out =>
       Imgproc.HoughLines(mat, out, rho, theta, threshold, srn, stn, minTheta, maxTheta)
-      Hough.rows(out)(v => PolarLine(v(0).toFloat, v(1).toFloat))
+      Hough.rows(out)(v => PolarLine(v(0), v(1)))
 
   /** The probabilistic Hough transform: finite segments with endpoints in image coordinates.
     *
@@ -117,7 +122,7 @@ extension (mat: Mat)
       minLineLength: Double = 0.0,
       maxLineGap: Double = 0.0
   ): Seq[Segment] =
-    Hough.requireEdgeImage(mat, "houghLinesP")
+    Preconditions.requireGray8("houghLinesP", mat)
     Hough.decoding("houghLinesP"): out =>
       Imgproc.HoughLinesP(mat, out, rho, theta, threshold, minLineLength, maxLineGap)
       // CV_32SC4: these doubles are widened int32s, so toInt is exact rather than a rounding choice.
@@ -137,24 +142,23 @@ extension (mat: Mat)
       minTheta: Double = 0.0,
       maxTheta: Double = math.Pi
   ): Seq[PolarLineWithVotes] =
-    Hough.requireEdgeImage(mat, "houghLinesWithAccumulator")
+    Preconditions.requireGray8("houghLinesWithAccumulator", mat)
     Hough.decoding("houghLinesWithAccumulator"): out =>
       Imgproc.HoughLinesWithAccumulator(mat, out, rho, theta, threshold, srn, stn, minTheta, maxTheta)
-      Hough.rows(out)(v => PolarLineWithVotes(v(0).toFloat, v(1).toFloat, v(2).toInt))
+      Hough.rows(out)(v => PolarLineWithVotes(v(0), v(1), v(2).toInt))
 
 /** Shared plumbing for the three transforms. Not part of the public API. */
 private object Hough:
 
   /** Runs `f` against a fresh output Mat and guarantees the Mat is freed.
     *
-    * The Mat is allocated here rather than by the caller so there is exactly one release site. `Managed` is
-    * deliberately not used: nothing native escapes this method, so handing the caller a resource to close
-    * would be ceremony with no corresponding hazard.
+    * The Mat is allocated here rather than by the caller so there is exactly one release site, and it is
+    * scoped through `Managed` like the library's other native temporaries. What the "nothing escapes"
+    * argument constrains is the *return*, not the mechanism: `f` decodes to plain Scala data, so callers
+    * receive a result they never have to release — the Mat itself dies inside the scope.
     */
   def decoding[A](operation: String)(f: Mat => Seq[A]): Seq[A] =
-    val out = Mat()
-    try Cv.orThrow(operation)(f(out))
-    finally out.release()
+    Managed(Mat()).use(out => Cv.orThrow(operation)(f(out)))
 
   /** Decodes an `Nx1` multi-channel result row by row.
     *
@@ -165,13 +169,3 @@ private object Hough:
     */
   def rows[A](out: Mat)(decode: Array[Double] => A): Seq[A] =
     Vector.tabulate(out.rows())(i => decode(out.get(i, 0)))
-
-  /** All three transforms assert `CV_8UC1` in native code. Checking it here turns a JNI-side abort message
-    * into an ordinary precondition failure that names the offending type, per the error policy in [[Cv]].
-    */
-  def requireEdgeImage(mat: Mat, operation: String): Unit =
-    require(
-      !mat.empty() && mat.`type`() == CvType.CV_8UC1,
-      s"$operation needs a non-empty 8-bit single-channel image (typically the output of Canny), " +
-        s"but got ${mat.rows()}x${mat.cols()} of type ${CvType.typeToString(mat.`type`())}"
-    )

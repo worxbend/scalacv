@@ -29,7 +29,7 @@ def scan(): Image =
   val page = Image
     .blank(240, 160, Scalar.White)
     .drawRects(Seq(Rect(30, 30, 180, 10), Rect(30, 60, 180, 10), Rect(30, 90, 180, 10)), Scalar.Black, Thickness.Filled)
-  val skewed = Image.wrap(page.mat.rotated(9.0, borderValue = Scalar.White))
+  val skewed = Image.wrap(page.mat.rotated(9.0, color = Scalar.White))
   page.close()
   skewed
 ```

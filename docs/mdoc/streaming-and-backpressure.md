@@ -237,7 +237,7 @@ def recordEdges(source: String, out: String): Either[CvError, Unit] =
             frames.foreach { frame =>
               // `Mats.chain` releases every intermediate as the next stage consumes it, so the whole
               // pipeline costs one live Mat at a time and hands back one owned result.
-              val processed = Mats.chain(frame)(
+              val processed = Mats.chain(frame.mat)(
                 _.cvtColor(ColorConversion.BgrToGray),
                 _.canny(80.0, 160.0),
                 _.cvtColor(ColorConversion.GrayToBgr)

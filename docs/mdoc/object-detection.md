@@ -580,7 +580,7 @@ FaceDetect.create("model.onnx", Size(320, 320)).map { detector =>
       capture.use { c =>
         Video.frames(c) { frames => // each `frame` is a reused borrowed Mat — read, don't retain
           frames.foreach { frame =>
-            val found = FaceDetect.detect(yunet, frame)
+            val found = FaceDetect.detect(yunet, frame.mat)
             println(s"${found.size} face(s) this frame")
           }
         }

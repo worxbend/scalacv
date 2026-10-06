@@ -4,6 +4,43 @@ All notable changes to scalacv are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 `early-semver`: while the library is on `0.x`, a minor bump may break compatibility.
 
+## [Unreleased]
+
+### Breaking
+- `Video.frames` and ZIO `frameStream` now yield `BorrowedMat`, a liveness-checked view over the
+  reused decode buffer. Use `frame.mat` for Mat-based operations inside the loop; use `framesCopied`
+  when frames must outlive it. Accessing a spent view throws before JNI; retaining the raw `Mat`
+  escape hatch is still unsafe.
+- Low-level `threshold` returns `Thresholded(image, computed)` instead of a tuple. Adaptive threshold
+  selects `Threshold.Mode.Binary` or `BinaryInv` instead of a Boolean. Geometric border colour is
+  named `color`; `Color.toScalar` is now `toBgrScalar` to make the channel order explicit.
+- File splits change JVM owners of top-level extension methods. Scala imports stay the same, but
+  previously compiled consumers must be recompiled.
+- `PolarLine` uses Double fields. Marker-axis/cube default sizes use `Option[Double]` instead of a
+  NaN sentinel. `CvError.EndOfStream` distinguishes an exhausted capture from a loading failure;
+  exhaustive error matches must handle it.
+
+### Added
+- `pencilSketchBoth` retains both native sketch outputs instead of discarding the grayscale result.
+- Typed `PnpSolver` and shared ScalaCV point conversion at the PnP native boundary.
+- ZIO `frameStream` accepts `attemptsPerFrame`, sharing the synchronous reader's bounded retry policy.
+
+### Fixed
+- Rotated circle bounds retain both axes, and text bounds match axis-aligned rendering.
+- `ObjectTracker` rejects invalid confirmation thresholds and updates after close. Head-pose defaults
+  use `Intrinsics.approx` consistently. Intrinsics allocations release on fill failure.
+- SFace downloads use verified Git LFS media URLs; feature decoding checks embedding shape. Shared
+  model loading validates files and rejects null/empty native handles.
+- Image, contour, drawing, effect, vision and graph boundaries reject invalid inputs before JNI;
+  geometry arithmetic and transform conventions have regression coverage.
+
+### Internal
+- Split effects, deskew, Mat helpers, codecs, recording, pose estimation, head pose and tracking into
+  focused files without changing their Scala packages. Shared preconditions and native scopes replace
+  duplicated guards and cleanup islands.
+- Added borrowed-frame lifecycle, validation and native RSS regressions, including ZIO scope cleanup;
+  refreshed public API goldens and migrated documentation examples.
+
 ## [0.3.0] — 2026-09-21
 
 ### Breaking

@@ -98,6 +98,31 @@ class PoseTest extends munit.FunSuite:
         assert(math.abs(hp.roll) < 20, s"a symmetric frontal face should have little roll, got $hp")
         assert(math.abs(hp.yaw) < 20, s"a symmetric frontal face should have little yaw, got $hp")
 
+  test("HeadPose.estimate(face, imageSize) uses the one uncalibrated guess — Intrinsics.approx's focal"):
+    val w = 640
+    val h = 480
+    val cx = w / 2.0
+    val cy = h / 2.0
+    // Asymmetric (turned head) so the focal length materially moves the reported angles.
+    val face = Face(
+      box = Rect((cx - 40).toInt, (cy - 40).toInt, 80, 90),
+      landmarks = Seq(
+        Point(cx - 25, cy - 22),
+        Point(cx + 30, cy - 20),
+        Point(cx - 5, cy),
+        Point(cx - 18, cy + 25),
+        Point(cx + 20, cy + 25)
+      ),
+      score = 0.99f
+    )
+    val size = Size(w.toDouble, h.toDouble)
+    (HeadPose.estimate(face, size), HeadPose.estimate(face, Intrinsics.approx(size))) match
+      case (Some(viaSize), Some(viaApprox)) =>
+        assertEqualsDouble(viaSize.yaw, viaApprox.yaw, 1e-9)
+        assertEqualsDouble(viaSize.pitch, viaApprox.pitch, 1e-9)
+        assertEqualsDouble(viaSize.roll, viaApprox.roll, 1e-9)
+      case other => fail(s"both estimates should converge on a valid face, got $other")
+
   test("a pose cannot be built with fewer keypoints than its topology names"):
     // The failure this prevents is not "a confusing value" but an IndexOutOfBoundsException thrown later,
     // from `bones` or from GestureRecognizer, both of which index keypoints by a topology-derived index.

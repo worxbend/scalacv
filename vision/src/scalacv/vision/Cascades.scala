@@ -111,20 +111,21 @@ object Cascades:
     * The returned classifier is **caller-owned**.
     */
   def loadFrom(path: String): Either[CvError, Managed[CascadeClassifier]] =
-    Cv.attempt(s"loading a cascade classifier from '$path'")(CascadeClassifier(path))
-      .flatMap: classifier =>
-        if classifier.empty() then
-          // The handle is real even though the model is not, so it still has to be freed.
-          Managed(classifier).release()
-          Left(
-            CvError.LoadFailed(
-              path,
-              "OpenCV loaded no cascade from this path. It does not report that as an error — it returns " +
-                "an empty classifier that detects nothing — so scalacv reports it here instead. Check that " +
-                "the file exists, is readable, and is a Haar or LBP cascade XML."
-            )
+    internal.ModelLoader
+      .loadNative[CascadeClassifier](
+        path,
+        describe = s"loading a cascade classifier from '$path'",
+        missingDetails =
+          "there is no readable file at this path. CascadeClassifier does not report that as an error — " +
+            "it would construct an empty classifier that detects nothing — so scalacv checks the path first.",
+        validate = classifier =>
+          Option.when(classifier.empty())(
+            "OpenCV loaded no cascade from this path. It does not report that as an error — it returns " +
+              "an empty classifier that detects nothing — so scalacv reports it here instead. Check that " +
+              "the file exists, is readable, and is a Haar or LBP cascade XML."
           )
-        else Right(Managed(classifier))
+      )(CascadeClassifier(path))
+      .map(Managed(_))
 
   private def unavailable(platform: String): String =
     if platform.startsWith("windows") then

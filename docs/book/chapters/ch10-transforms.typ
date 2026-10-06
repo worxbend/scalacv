@@ -238,16 +238,17 @@ val spun = frame.mat.rotated(
   scale = 1.0,
   interpolation = Interpolation.Cubic,
   border = BorderType.Constant,
-  borderValue = Scalar.White
+  color = Scalar.White
 )
 ```
 ]
 
 `Image.rotate` surfaces two of `rotated`'s five parameters; the other three --- `interpolation`,
-`border` and `borderValue` --- are why the mid-level call still earns its place. Note the parameter
-name: the fill colour is `borderValue` on `rotated` and `color` on `pad` and `border`, because
-`rotated` is passing it to `warpAffine` and the other two to `copyMakeBorder`, and the wrapper keeps
-each name close to the native call it lands in.
+`border` and `color` --- are why the mid-level call still earns its place. Note the default rather
+than the name: the fill defaults to `BorderType.Constant` here and on `pad`/`border` (a geometric
+transform exposes never-seen pixels, where reflecting image content would smear it into the border),
+while the *filters* (`gaussianBlur`, `sobel`, ...) default to `Reflect101`, which keeps the kernel's
+support inside real image content and avoids edge ringing.
 
 The `scale` argument is not a convenience wrapper around a separate resize --- it goes into the same
 matrix, so a rotate-and-shrink resamples once instead of twice. One resampling is always better than

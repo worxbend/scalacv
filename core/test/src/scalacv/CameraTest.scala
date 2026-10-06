@@ -295,15 +295,18 @@ class CameraTest extends munit.FunSuite:
         finally rest.foreach(_.close())
       .fold(e => fail(e.getMessage), identity)
 
-  test("snapshot on an exhausted source is a LoadFailed Left"):
+  test("snapshot on an exhausted source is an EndOfStream Left naming the source"):
     val file = recordFixture()
     Camera
       .usingFile(file.toString): cam =>
         cam.foreach(attemptsPerFrame = 1)(_ => ())
         cam.snapshot(attemptsPerFrame = 1) match
-          case Left(e: CvError.LoadFailed) =>
-            assert(e.getMessage.contains("no frame available"), e.getMessage)
-          case Left(other) => fail(s"expected a LoadFailed, got $other")
+          case Left(e: CvError.EndOfStream) =>
+            assert(
+              e.getMessage.contains(file.toString),
+              s"the error should name the exhausted file, not the bare word 'camera': ${e.getMessage}"
+            )
+          case Left(other) => fail(s"expected an EndOfStream, got $other")
           case Right(img) => img.close(); fail("an exhausted source must not snapshot")
       .fold(e => fail(e.getMessage), identity)
 
@@ -402,7 +405,7 @@ class CameraTest extends munit.FunSuite:
         assert(!inside, "the loop needs exception mode off to tell end-of-file from a broken stream")
         assert(capture.getExceptionMode, "the caller's exception mode must be restored")
 
-        var escaped: Option[Iterator[Mat]] = None
+        var escaped: Option[Iterator[BorrowedMat]] = None
         intercept[RuntimeException]:
           Video.frames(capture): it =>
             escaped = Some(it)

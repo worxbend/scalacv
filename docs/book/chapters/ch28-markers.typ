@@ -373,9 +373,9 @@ pose is right, and a Z axis that swings into the tag means it is not.
 #tbl(
   columns: (1.1fr, 0.9fr, 1fr, 1.3fr),
   [Overlay], [Parameter], [Default], [Effect],
-  [`drawMarkerAxes`], [`axisLength`], [`Double.NaN` → half the marker side], [length of each drawn axis],
+  [`drawMarkerAxes`], [`axisLength`], [`None` → half the marker side], [length of each drawn axis],
   [`drawMarkerCube`], [`color`], [`Scalar.Green`], [wireframe colour],
-  [`drawMarkerCube`], [`size`], [`Double.NaN` → the marker side], [cube edge length],
+  [`drawMarkerCube`], [`size`], [`None` → the marker side], [cube edge length],
   [both], [`dictionary`], [`ArucoDictionary.Dict4x4_50`], [which codebook to detect],
 )
 ]

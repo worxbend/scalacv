@@ -3,6 +3,9 @@ package scalacv
 import scalacv.graphs.*
 import scalacv.vision.*
 
+import org.opencv.core.{CvType, Mat}
+import org.opencv.core as cv
+
 /** Screen analysis: template matching and change detection on synthetic screenshots. */
 class ScreenTest extends munit.FunSuite:
 
@@ -55,6 +58,23 @@ class ScreenTest extends munit.FunSuite:
   test("diff on same-size-only inputs rejects a mismatch"):
     val a = Image.blank(40, 40)
     val b = Image.blank(50, 50)
+    try intercept[IllegalArgumentException](Screen.diff(a, b))
+    finally
+      a.close()
+      b.close()
+
+  test("diff rejects same-size captures whose depth differs"):
+    // absdiff would fail natively on CV_8U vs CV_32F; the check belongs up front, as an IAE.
+    val a = Image.blank(40, 40)
+    val b = Image.wrap(Managed(Mat(40, 40, CvType.CV_32FC3, cv.Scalar.all(0))))
+    try intercept[IllegalArgumentException](Screen.diff(a, b))
+    finally
+      a.close()
+      b.close()
+
+  test("diff rejects same-size captures whose channel counts differ"):
+    val a = Image.blank(40, 40)
+    val b = Image.blank(40, 40, Scalar.Black, channels = 1)
     try intercept[IllegalArgumentException](Screen.diff(a, b))
     finally
       a.close()

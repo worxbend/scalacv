@@ -2,7 +2,7 @@ package scalacv.vision
 
 import scala.jdk.CollectionConverters.*
 
-import org.opencv.core.Mat
+import org.opencv.core.{CvType, Mat}
 import org.opencv.objdetect.{ArucoDetector, Dictionary, Objdetect, QRCodeDetector}
 
 import scalacv.*
@@ -172,17 +172,28 @@ private object DetectorQuads:
   def read(m: Mat): Seq[Seq[Point]] =
     if m.empty() then Seq.empty
     else
-      val flat =
-        for
-          r <- 0 until m.rows
-          c <- 0 until m.cols
-        yield
-          // Mat.get(row, col) widens whatever the element type is to double[], one entry per
-          // channel. Reading the buffer as floats instead would be a type assertion we have no
-          // reason to make here.
-          val v = m.get(r, c)
-          Point(v(0), v(1))
-      flat.grouped(4).filter(_.sizeIs == 4).toSeq
+      // One bulk read of the whole buffer instead of a `Mat.get(row, col)` JNI round-trip per element
+      // (rows × cols of them). The array type must match the Mat's depth — `get` refuses a mismatched
+      // buffer — so the depth is checked first, exactly as the other bulk readers do; anything that is
+      // not float or double is widened through the per-element path it would have taken anyway.
+      val n = (m.total() * m.channels()).toInt
+      val scalars: IndexedSeq[Double] =
+        if m.depth() == CvType.CV_32F then
+          val buf = Array.ofDim[Float](n)
+          m.get(0, 0, buf)
+          buf.toIndexedSeq.map(_.toDouble)
+        else if m.depth() == CvType.CV_64F then
+          val buf = Array.ofDim[Double](n)
+          m.get(0, 0, buf)
+          buf.toIndexedSeq
+        else (for r <- 0 until m.rows; c <- 0 until m.cols yield m.get(r, c).toSeq).flatten
+      scalars
+        .grouped(2)
+        .map(v => Point(v(0), v(1)))
+        .toSeq
+        .grouped(4)
+        .filter(_.sizeIs == 4)
+        .toSeq
 
   /** The first quad in `m`, or empty. */
   def first(m: Mat): Seq[Point] = read(m).headOption.getOrElse(Seq.empty)

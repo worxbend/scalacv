@@ -40,9 +40,9 @@ the third one is the one that takes services down.
 | 2 | thrown `IllegalArgumentException` / `IllegalStateException` | a `catch` you should not write | fix the call site |
 | 3 | thrown `java.lang.Error` | **nothing in scalacv** | catch it yourself, at the outermost frame |
 
-### Tier 1 — the six `CvError` cases
+### Tier 1 — the seven `CvError` cases
 
-`CvError` is a sealed hierarchy with exactly six shapes, so an exhaustive `match` over it is also an
+`CvError` is a sealed hierarchy with exactly seven shapes, so an exhaustive `match` over it is also an
 exhaustive list of the labels your metrics can carry. Give each one a stable string and use the same
 string for the log line, the metric label and the budget line:
 
@@ -52,6 +52,7 @@ def budgetLabel(e: CvError): String = e match
   case CvError.DecodeFailed(_, _)   => "decode_failed"      // bytes that are not an image
   case CvError.EncodeFailed(_, _)   => "encode_failed"      // an unwritable path, an unknown extension
   case CvError.LoadFailed(_, _)     => "load_failed"        // a model, cascade, codec or capture source
+  case CvError.EndOfStream(_, _)    => "end_of_stream"      // a video source run dry — a file's last frame
   case CvError.CalibrationFailed(_) => "calibration_failed" // too few chessboard views, or no convergence
   case CvError.NativesMissing(_, _) => "natives_missing"    // a build problem, not a runtime one
   case CvError.NativeCall(op, _)    => s"native_call:$op"   // OpenCV rejected a call; `op` names which

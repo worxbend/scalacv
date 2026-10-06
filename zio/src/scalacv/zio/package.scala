@@ -84,9 +84,15 @@ def imageScoped(path: String, flags: ImreadFlags = ImreadFlags.Color): ZIO[Scope
 extension (self: Mat)
   /** Ties an existing Mat to the current scope. Use when a Mat is produced by an operation that already
     * allocated it and you want the scope to own it from here on.
+    *
+    * The acquire half is `ZIO.succeed`, not the `attemptBlocking` of [[acquireRelease]]: the Mat is already
+    * allocated in the caller's hands, so there is no acquisition work left to suspend or to place on the
+    * blocking pool — wrapping a pure value in `attemptBlocking` would only pay a blocking-pool hop for
+    * nothing. Only the release needs registering, and the `Scope` runs that on close — on success, failure,
+    * and interruption — exactly as [[acquireRelease]] would.
     */
-  def scoped(using Releasable[Mat]): ZIO[Scope, Throwable, Mat] =
-    acquireRelease(self)
+  def scoped(using r: Releasable[Mat]): ZIO[Scope, Throwable, Mat] =
+    ZIO.acquireRelease(ZIO.succeed(self))(m => ZIO.succeed(r.release(m)))
 
 /** Opens a video source into the current `Scope`: opened on acquire, released when the scope ends — on
   * success, on failure, and on interruption. The ZIO face of [[Video.open]], and the way to get a capture to
@@ -125,6 +131,12 @@ def captureScoped(
 
 /** Fails a stream that would otherwise report a capture which never opened as a video with no frames in it.
   *
+  * This is the typed twin of the `isOpened` require inside `Video.FrameSource`: there — a synchronous API — a
+  * dead capture is a programmer error and throws `IllegalArgumentException`; here a bare throw would be a
+  * defect, so the check runs as an effect and fails with a typed [[CvError.LoadFailed]] instead. Both exist
+  * because a not-open capture reads as an instantly-empty stream, and "a video with no frames in it" is the
+  * one failure shape neither layer may produce.
+  *
   * Checked as an effect inside the stream rather than as a `require` in [[frameStream]]'s body because
   * [[frameStream]] is a value-returning constructor: a bare `require` would throw where the stream is *built*
   * — outside the error channel, and in whatever fiber happened to assemble the pipeline rather than the one
@@ -144,27 +156,31 @@ private def requireOpen(capture: VideoCapture): ZStream[Any, CvError, Nothing] =
     )
   )
 
-/** Frames from a capture as a `ZStream`, **each frame valid only until the next pull.**
+/** Frames from a capture as a `ZStream`, **each frame valid only until the next pull — and checked.**
   *
   * This inherits the borrowing contract of the synchronous `Video.frames` rather than ZIO's usual value
-  * semantics, and the difference matters: the emitted `Mat` is a single buffer decoded into in place, so
-  * operations that retain elements — `runCollect`, `broadcast`, `buffer`, `zipWithNext` — see N references to
-  * one Mat with the newest content, not N distinct frames. Map each frame to something owned (encode it, copy
-  * the pixels, reduce it) inside the stream. There is no memoization, so the stream stays flat in memory over
-  * an arbitrarily long video; that is the whole point.
+  * semantics, and the difference matters: every element is a [[BorrowedMat]], a liveness-checked view over
+  * the single decode buffer the stream reuses. The view is spent the moment the stream pulls again or ends,
+  * and every access then throws `IllegalStateException` — so combinators that retain elements (`runCollect`,
+  * `broadcast`, `buffer`, `zipWithNext`) now fail loudly on access instead of silently seeing N aliases of
+  * one buffer with the newest content. Map each frame to something owned (encode it, copy the pixels,
+  * `_.clone()` it, reduce it) inside the stream. There is no memoization, so the stream stays flat in memory
+  * over an arbitrarily long video; that is the whole point.
+  *
+  * The read step is the core library's `Video.FrameSource` — the same exception-mode save/restore and the
+  * same `attemptsPerFrame` retry loop the synchronous `Video.frames` uses, so a dropped frame is ridden out
+  * identically in both APIs. For the duration of the stream the capture's exception mode is forced off and
+  * its previous value restored when the stream ends: with exception mode on, plain end-of-file surfaces as
+  * the same `CvException` a broken stream does, so a finished file would fail the stream rather than complete
+  * it.
   *
   * The capture itself is not closed by the stream — acquire it through [[captureScoped]] so the scope owns
   * it. A capture that is not open fails the stream with a [[CvError.LoadFailed]] on the first pull: OpenCV
   * signals "could not open that" by leaving `isOpened` false, and every `read` on such a capture returns
   * false, so without the check a typo'd path would be indistinguishable from a video with no frames in it.
-  * Past that, the stream stops at the first frame that fails to decode, which for a file is end-of-stream and
-  * for a camera is a dropped connection; those two *are* indistinguishable through OpenCV's API, as
-  * `Video.frames` documents.
-  *
-  * For the duration of the stream the capture's exception mode is forced off and its previous value restored
-  * when the stream ends, exactly as the synchronous `Video.frames` does: with exception mode on, plain
-  * end-of-file surfaces as the same `CvException` a broken stream does, so a finished file would fail the
-  * stream rather than complete it.
+  * Past that, the stream stops after `attemptsPerFrame` consecutive frames that fail to decode, which for a
+  * file is end-of-stream and for a camera is a dropped connection; those two *are* indistinguishable through
+  * OpenCV's API, as `Video.frames` documents.
   *
   * ==Interruption cannot cut a read short==
   *
@@ -177,21 +193,24 @@ private def requireOpen(capture: VideoCapture): ZStream[Any, CvError, Nothing] =
   * `CaptureOptions.withTimeout` on a backend that honours `CAP_PROP_READ_TIMEOUT_MSEC` (FFMPEG, GStreamer —
   * V4L2, AVFoundation and the built-in MJPEG reader ignore it), which [[captureScoped]] takes as its
   * `options`.
+  *
+  * @param attemptsPerFrame
+  *   how many consecutive failed `read()` calls end the stream; see `Video.frames`. `1` — the default — is
+  *   right for a file; a small value (2–5) rides out a live camera's dropped frames.
   */
-def frameStream(capture: VideoCapture): ZStream[Any, Throwable, Mat] =
+def frameStream(capture: VideoCapture, attemptsPerFrame: Int = 1): ZStream[Any, Throwable, BorrowedMat] =
   requireOpen(capture) ++ ZStream
-    .acquireReleaseWith(ZIO.succeed(capture.getExceptionMode))(m => ZIO.succeed(capture.setExceptionMode(m)))
-    .tap(_ => ZIO.succeed(capture.setExceptionMode(false)))
-    .flatMap { _ =>
-      ZStream.acquireReleaseWith(ZIO.succeed(Mat()))(m => ZIO.succeed(m.release())).flatMap { buffer =>
-        ZStream.repeatZIOOption {
-          ZIO.attemptBlockingInterrupt(capture.read(buffer)).mapError(Some(_)).flatMap { got =>
-            if got && !buffer.empty() then ZIO.succeed(buffer)
-            else ZIO.fail(None) // None terminates the stream without an error
-          }
-        }
-      }
-    }
+    .acquireReleaseWith(ZIO.attemptBlocking(Video.FrameSource(capture, attemptsPerFrame)))(s =>
+      ZIO.succeed(s.close())
+    )
+    .flatMap: source =>
+      ZStream.repeatZIOOption:
+        ZIO
+          .attemptBlockingInterrupt(source.nextFrame())
+          .mapError(Some(_))
+          .flatMap:
+            case Some(view) => ZIO.succeed(view)
+            case None => ZIO.fail(None) // None terminates the stream without an error
 
 /** Frames as owned `Managed[Mat]` values, cloned lazily as each is pulled.
   *
@@ -215,5 +234,7 @@ def frameStream(capture: VideoCapture): ZStream[Any, Throwable, Mat] =
   * The open-capture check of [[frameStream]] applies here too: this fails rather than yielding nothing when
   * `capture` never opened.
   */
-def framesCopied(capture: VideoCapture)(using Releasable[Mat]): ZStream[Any, Throwable, Managed[Mat]] =
-  frameStream(capture).map(frame => Managed(frame.clone()))
+def framesCopied(capture: VideoCapture, attemptsPerFrame: Int = 1)(using
+    Releasable[Mat]
+): ZStream[Any, Throwable, Managed[Mat]] =
+  frameStream(capture, attemptsPerFrame).map(frame => Managed(frame.clone()))

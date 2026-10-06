@@ -106,7 +106,8 @@ object Calibration:
           try corners.toArray.map(Point.from).toSeq
           finally corners.release()
 
-  /** Calibrates a pinhole camera from several `views` of the same chessboard `pattern`.
+  /** Calibrates a pinhole camera from several `views` of the same chessboard `pattern`. The views are
+    * **borrowed** (read only), not consumed — closing them stays the caller's job.
     *
     * Each view is searched for the board ([[findCorners]]); views where it is not fully visible are silently
     * skipped, so you can pass a whole capture folder and let the blurred or badly-angled frames drop out.

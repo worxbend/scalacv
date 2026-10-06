@@ -213,9 +213,9 @@ arguments and stop thinking about it.
 )
 ]
 
-There is no `Threshold.Mode` here: adaptive thresholding is binary or nothing, and `inverse` picks
-which side. For scanned text you want `inverse = true`, so the ink comes out white and the contours
-you find afterwards are the letters rather than the space between them.
+There is no free `Threshold.Mode` here: adaptive thresholding is binary or nothing, and `mode` picks
+which side. For scanned text you want `mode = Threshold.Mode.BinaryInv`, so the ink comes out white
+and the contours you find afterwards are the letters rather than the space between them.
 
 #sect("Thresholding the right axis: colour in HSV")
 

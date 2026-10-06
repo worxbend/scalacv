@@ -91,14 +91,52 @@ class GraphicsTest extends munit.FunSuite:
     val red = Color.hsl(0, 1.0, 0.5)
     assert(red.red > 200 && red.green < 60 && red.blue < 60, s"hsl(0,1,0.5) should be red, got $red")
 
-  test("Color.toScalar bridges RGBA to the BGR the drawing verbs take"):
+  test("Color.toBgrScalar bridges RGBA to the BGR the drawing verbs take"):
     // A red Color must land in the BGR Scalar's third slot, not its first.
-    assertEquals(Color(200, 40, 40).toScalar, Scalar(40, 40, 200))
+    assertEquals(Color(200, 40, 40).toBgrScalar, Scalar(40, 40, 200))
     // Scalar.Red (BGR) round-trips back to an opaque red Color.
     assertEquals(Scalar.Red.toColor, Color(255, 0, 0))
     // Round-trip through the bridge preserves an opaque colour.
     val c = Color(17, 128, 240)
-    assertEquals(c.toScalar.toColor, c)
+    assertEquals(c.toBgrScalar.toColor, c)
+
+  /** The rendered pixels of a chart picture, so two series can be compared as drawn, not as trees. */
+  private def rendered(p: Picture, w: Int, h: Int): Array[Byte] =
+    val img = p.render(w, h, Color.Black)
+    try
+      val data = new Array[Byte]((img.mat.total() * img.mat.channels()).toInt)
+      img.mat.get(0, 0, data)
+      data
+    finally img.close()
+
+  test("a series with negatives charts by magnitude — no throw, inside the box, identical to its abs"):
+    val signed = Seq(-6.0, 3.0, -9.0, 1.5, -4.0)
+    val magnitude = signed.map(math.abs)
+    val (w, h) = (120, 60)
+    // Each builder accepts the signed series without throwing, and its bounds stay inside the box.
+    Seq(
+      "bars" -> Chart.bars(signed, w, h),
+      "line" -> Chart.line(signed, w, h),
+      "area" -> Chart.area(signed, w, h),
+      "pie" -> Chart.pie(signed, w, h)
+    ).foreach: (name, chart) =>
+      val b = chart.bounds.getOrElse(fail(s"$name: a non-empty signed series should have bounds"))
+      assert(
+        b.minX >= -1e-9 && b.minY >= -1e-9 && b.maxX <= w + 1e-9 && b.maxY <= h + 1e-9,
+        s"$name: bounds $b escaped the ${w}x$h box"
+      )
+    // The documented magnitude semantics, pinned as drawn: a signed series renders pixel-for-pixel
+    // identical to its absolute values — the sign is dropped, not plotted downward.
+    Seq(
+      "bars" -> (Chart.bars(_, w, h)),
+      "line" -> (Chart.line(_, w, h)),
+      "area" -> (Chart.area(_, w, h)),
+      "pie" -> (Chart.pie(_, w, h))
+    ).foreach: (name, build) =>
+      assert(
+        rendered(build(signed), w, h).sameElements(rendered(build(magnitude), w, h)),
+        s"$name: a series with negatives must render exactly as its magnitudes do"
+      )
 
   test("Scalar.toColor clamps and rounds out-of-gamut channels"):
     assertEquals(Scalar(-10.0, 127.6, 300.0).toColor, Color(red = 255, green = 128, blue = 0))

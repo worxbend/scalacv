@@ -71,7 +71,7 @@ Every fallible call in scalacv returns `Either[CvError, A]`, and the native call
 
 That `operation` string ends up inside `CvError.NativeCall(operation, cause)` and therefore inside the message a reader sees in a log. **Use the same string as your metric name.** When a timer called `Imgproc.GaussianBlur` spikes and an error line says `OpenCV failed during Imgproc.GaussianBlur`, an on-call engineer joins them without a translation table.
 
-The error *labels* come from `CvError`, which has exactly six cases ([the error model](/error-model#the-six-cases) explains each one). Six is a small, fixed set, which is what you want for a metric label: a metrics backend creates one time series per distinct label value, so labelling with a raw exception message — which contains file paths and pixel dimensions — would create an unbounded number of series. Map each case to a stable snake-case label and stop there:
+The error *labels* come from `CvError`, which has exactly seven cases ([the error model](/error-model#the-six-cases) explains each one). Seven is a small, fixed set, which is what you want for a metric label: a metrics backend creates one time series per distinct label value, so labelling with a raw exception message — which contains file paths and pixel dimensions — would create an unbounded number of series. Map each case to a stable snake-case label and stop there:
 
 ```scala mdoc:silent
 /** The metric label for a failure: one per `CvError` case, and nothing else. Never label with
@@ -80,6 +80,7 @@ def errorLabel(e: CvError): String = e match
   case _: CvError.NativesMissing    => "natives_missing"
   case _: CvError.DecodeFailed      => "decode_failed"
   case _: CvError.LoadFailed        => "load_failed"
+  case _: CvError.EndOfStream       => "end_of_stream"
   case _: CvError.EncodeFailed      => "encode_failed"
   case _: CvError.CalibrationFailed => "calibration_failed"
   case _: CvError.NativeCall        => "native_call"

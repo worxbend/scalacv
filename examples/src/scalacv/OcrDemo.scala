@@ -16,7 +16,7 @@ import scalacv.vision.*
       Scalar.Black,
       Thickness.Filled
     )
-  val scan = Image.wrap(page.mat.rotated(9.0, borderValue = Scalar.White))
+  val scan = Image.wrap(page.mat.rotated(9.0, color = Scalar.White))
   page.close()
 
   // A stand-in engine; swap in a real one that shells out to / binds Tesseract.

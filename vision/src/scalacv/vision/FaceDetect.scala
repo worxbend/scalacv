@@ -1,6 +1,6 @@
 package scalacv.vision
 
-import java.nio.file.{Files, Path}
+import java.nio.file.Path
 
 import org.opencv.core.{CvType, Mat, Size as CvSize}
 import org.opencv.objdetect.FaceDetectorYN
@@ -215,26 +215,21 @@ object FaceDetect:
       nmsThreshold >= 0f && nmsThreshold <= 1f,
       s"nmsThreshold is an IoU in [0, 1], was $nmsThreshold"
     )
-    val file = Path.of(modelPath)
-    if !Files.isRegularFile(file) then
-      Left(
-        CvError.LoadFailed(
-          modelPath,
+    internal.ModelLoader
+      .loadNative[FaceDetectorYN](
+        modelPath,
+        describe = s"creating a FaceDetectorYN from '$modelPath'",
+        missingDetails =
           "there is no readable file at this path. The YuNet model is not shipped with scalacv — " +
             s"fetch it with FaceDetect.downloadModel(dir), which writes $ModelFileName and verifies its " +
             "SHA-256."
-        )
-      )
-    else
-      // The empty String is the `config` argument: ONNX carries its weights and topology in one file, so
-      // there is no second file to point at. The two ints we leave defaulted are topK (5000) and the
-      // backend/target pair (0, 0 = the default DNN backend on the CPU).
-      Cv.attempt(s"creating a FaceDetectorYN from '$modelPath'")(
+      )(
+        // The empty String is the `config` argument: ONNX carries its weights and topology in one file, so
+        // there is no second file to point at. The two ints we leave defaulted are topK (5000) and the
+        // backend/target pair (0, 0 = the default DNN backend on the CPU).
         FaceDetectorYN.create(modelPath, "", inputSize.toCv, scoreThreshold, nmsThreshold)
-      ).flatMap:
-        case null =>
-          Left(CvError.LoadFailed(modelPath, "FaceDetectorYN.create returned null for this model"))
-        case d => Right(Managed(d))
+      )
+      .map(Managed(_))
 
   /** Detects every face in `image`.
     *

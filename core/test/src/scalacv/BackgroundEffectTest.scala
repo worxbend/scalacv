@@ -78,6 +78,28 @@ class BackgroundEffectTest extends munit.FunSuite:
       bg.close()
       img.close()
 
+  test("a 3-channel mask is rejected as not CV_8UC1, spending the receiver either way"):
+    // The alphaBlend scaladoc mandates CV_8UC1; a colour mask used to sail past the size check and die
+    // later inside native code. Both verbs share the compositor, so check one of each shape.
+    val colourMask = Image.blank(W, H, Scalar.White) // 3 channels, right size
+    val img = scene()
+    try
+      intercept[IllegalArgumentException](img.blurBackground(colourMask))
+      intercept[IllegalStateException](img.width): Unit
+    finally
+      colourMask.close()
+      img.close()
+    val colourMask2 = Image.blank(W, H, Scalar.White)
+    val img2 = scene()
+    val bg = Image.blank(W, H, Scalar(0, 255, 0))
+    try
+      intercept[IllegalArgumentException](img2.replaceBackground(colourMask2, bg))
+      intercept[IllegalStateException](img2.width): Unit
+    finally
+      colourMask2.close()
+      bg.close()
+      img2.close()
+
   test("Segmenter.decodeMask thresholds a probability plane into a scaled person mask"):
     val h = 8
     val w = 10

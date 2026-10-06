@@ -34,18 +34,20 @@ Reach for `Camera` unless a profiler says otherwise. This table is the decision:
 | Collect a handful | [`Camera.taking`](#take--taking--collect-a-batch-of-frames) | owned `Image`s | closed for you at block end |
 | Transform a whole file to a new video | [`Camera.recordTo`](#recordto--read-transform-write-in-one-line) | — | handled |
 | Build frames and write them | [`Recorder`](#recorder) | you supply them | you own the recorder |
-| Squeeze out the per-frame copy | [`Video.frames`](#the-low-level-videoframes) | **borrowed** `Mat` | one reused buffer |
+| Squeeze out the per-frame copy | [`Video.frames`](#the-low-level-videoframes) | **borrowed** `BorrowedMat` | one reused buffer, liveness-enforced |
 | Keep frames past the loop, low-level | [`Video.framesCopied`](#keeping-a-frame) | owned `Managed[Mat]` | yours to release |
 
 The split in one sentence: **`Camera` copies every frame so you can keep it; `Video.frames` never
-copies, so you must reduce each frame before the next one overwrites it.** See
+copies, so a frame is spent the moment the stream advances — retaining one throws
+`IllegalStateException` instead of reading overwritten memory.** See
 [the ownership split](#the-ownership-split) for when the copy is worth avoiding.
 
 ## Camera — frames as owned Images
 
-`Camera` is the high-level counterpart to `Video`. Where `Video.frames` hands you one reused `Mat`,
-`Camera` hands you a fresh **owned** `Image` per frame. The price is one frame copy per iteration;
-when that price is the bottleneck, [drop to the low level](#the-ownership-split).
+`Camera` is the high-level counterpart to `Video`. Where `Video.frames` hands you one reused buffer
+behind a liveness-checked `BorrowedMat`, `Camera` hands you a fresh **owned** `Image` per frame. The
+price is one frame copy per iteration; when that price is the bottleneck,
+[drop to the low level](#the-ownership-split).
 
 The methods, all on an open `Camera`:
 
@@ -265,7 +267,7 @@ import scalacv.*
 
 Camera.usingFile("clip.mp4") { cam =>
   Video.frames(cam.capture) { frames => // zero-copy loop over the same capture
-    frames.map(_.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
+    frames.map(_.mat.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
   }
 }
 ```
@@ -359,7 +361,7 @@ Recorder.using("out.avi", Size(640, 480), fps = 30, codec = Codec.Mjpg) { rec =>
 `write(image)` **borrows** the image (it is not consumed, so close it yourself). There is also a
 `write(mat)` overload that borrows a raw `org.opencv.core.Mat` directly — that is what lets the
 zero-copy frames from [`Video.frames`](#the-low-level-videoframes) be recorded without the per-frame
-clone an `Image` would force:
+clone an `Image` would force, through the frame's liveness-checked `mat` escape hatch:
 
 ```scala mdoc:compile-only
 import scalacv.*
@@ -371,7 +373,7 @@ Video.open("clip.mp4").flatMap { capture =>
     val meta = Video.info(c)
     Recorder.using("copy.avi", meta.size, meta.fps, Codec.Mjpg) { rec =>
       Video.frames(c) { frames =>
-        frames.foreach(mat => rec.write(mat))
+        frames.foreach(frame => rec.write(frame.mat))
       }
     }
   }
@@ -569,8 +571,8 @@ Video.open("clip.mp4").map { capture =>
 
 ### Walking the frames
 
-`Video.frames` runs your function over an `Iterator[Mat]`, scoped to the call: the iterator is
-created when the block begins and retired when it returns, and it owns **exactly one** `Mat` that
+`Video.frames` runs your function over an `Iterator[BorrowedMat]`, scoped to the call: the iterator
+is created when the block begins and retired when it returns, and it owns **exactly one** `Mat` that
 every frame decodes into, in place.
 
 ```scala mdoc:compile-only
@@ -581,25 +583,30 @@ val totalContours: Either[CvError, Int] =
   Video.open("clip.mp4").map { capture =>
     capture.use { c =>
       Video.frames(c) { frames =>
-        frames.map(_.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
+        frames.map(_.mat.cvtColor(ColorConversion.BgrToGray).use(_.findContours().size)).sum
       }
     }
   }
 ```
 
-The frame is a raw `org.opencv.core.Mat`, so the whole [Ops](/image-api) surface applies:
-`frame.cvtColor(...)`, `frame.canny(...)`, `frame.resize(...)`. Each of those **allocates its own
-destination** and hands you an owned `Managed[Mat]` — it never aliases the frame buffer — so running
-them inside the loop is correct and leak-free.
+A `BorrowedMat` answers the frame's shape itself (`rows`, `cols`, `channels`, `empty()`, `get`) and
+hands out the raw `Mat` through its liveness-checked `mat` escape hatch (checked at extraction only;
+never retain or release the raw handle), so the whole
+[Ops](/image-api) surface applies: `frame.mat.cvtColor(...)`, `frame.mat.canny(...)`,
+`frame.mat.resize(...)`. Each of those **allocates its own destination** and hands you an owned
+`Managed[Mat]` — it never aliases the frame buffer — so running them inside the loop is correct and
+leak-free.
 
-### The borrowing contract
+### The borrowing contract, enforced
 
-This is the one place in scalacv where the `Mat` you are handed is **not yours**. It is borrowed,
-and valid only from the `next()` that produced it until you next touch the iterator; the underlying
-buffer is then overwritten by the following frame, and released for good when the `frames` block
-returns.
+This is the one place in scalacv where the `Mat` you are handed is **not yours**. A `BorrowedMat`
+is valid from the `next()` that produced it until the iterator advances or the `frames` block
+returns — and that validity is *enforced*, the same way `Managed` enforces release-once: touch a
+spent frame and it throws `IllegalStateException` on the Scala side, before anything crosses JNI.
+Reading a frame the stream has moved past is not a wrong answer; it is freed native memory, and the
+exception is what stands between you and a SIGSEGV.
 
-So you must **reduce each frame to something owned inside the loop** — a count, a scalar, encoded
+So you still **reduce each frame to something owned inside the loop** — a count, a scalar, encoded
 bytes, an owned `Managed[Mat]` from an `Ops` op. Writing each frame out as you go is fine, because
 the work happens before the next pull:
 
@@ -612,7 +619,7 @@ Video.open("clip.mp4").map { capture =>
   capture.use { c =>
     Video.frames(c) { frames =>
       frames.zipWithIndex.foreach { case (frame, i) =>
-        frame.cvtColor(ColorConversion.BgrToGray).use(Images.encode(_, ".png")).foreach { png =>
+        frame.mat.cvtColor(ColorConversion.BgrToGray).use(Images.encode(_, ".png")).foreach { png =>
           Files.write(Path.of(s"frame-$i.png"), png)
         }
       }
@@ -622,14 +629,15 @@ Video.open("clip.mp4").map { capture =>
 ```
 
 What you must **not** do is retain the frame — stash it in a collection, or use any iterator
-combinator that buffers. `toList`, `toVector`, `sliding` and `buffered` all compile and all lie:
-they hand you N references to the one buffer, every one showing the last frame decoded.
+combinator that buffers. `toList`, `toVector`, `sliding` and `buffered` all compile, and what they
+collect is N *spent* views: the first access to any of them throws. (To keep a frame, take an owned
+copy — `frame.clone()` — or use [`Video.framesCopied`](#keeping-a-frame).)
 
 ```scala mdoc:compile-only
 import scalacv.*
 import org.opencv.videoio.VideoCapture
 
-// WRONG: this is N aliases of a single Mat holding the final frame — not N frames.
+// WRONG: N spent views that throw on first access — not N frames.
 Video.open("clip.mp4").map { capture =>
   capture.use { c =>
     Video.frames(c)(_.toList)
@@ -637,15 +645,16 @@ Video.open("clip.mp4").map { capture =>
 }
 ```
 
-Here is the borrowing contract as a table — what the one `Mat` supports, and what silently breaks:
+Here is the borrowing contract as a table — what a borrowed frame supports, and what the liveness
+guard turns into an `IllegalStateException`:
 
 | Operation | Safe? | Why |
 |---|---|---|
 | Read pixels, query (`empty`, `size`, `findContours`) | ✅ | consumed before the next pull |
-| `frame.cvtColor(...)` / `canny` / `resize` (any `Ops` op) | ✅ | allocates its own owned output |
-| Write the frame out (`rec.write`, encode to bytes) | ✅ | work happens before the next pull |
-| `it.toList` / `toVector` / `sliding` / `buffered` | ❌ | N references to one reused buffer |
-| Stash the `Mat` in a `var` / field / collection | ❌ | dangling after the next pull / block exit |
+| `frame.mat.cvtColor(...)` / `canny` / `resize` (any `Ops` op) | ✅ | allocates its own owned output |
+| Write the frame out (`rec.write(frame.mat)`, encode to bytes) | ✅ | work happens before the next pull |
+| `it.toList` / `toVector` / `sliding` / `buffered` | ❌ | N spent views; first access throws |
+| Stash the frame in a `var` / field / collection | ❌ | spent after the next pull / block exit; access throws |
 | `frame.clone()` and keep the clone | ✅ | but that is exactly what [`framesCopied`](#keeping-a-frame) does for you |
 
 **Why not just make it a `LazyList`?** Because memoisation and per-frame release cannot both be
@@ -726,7 +735,7 @@ import org.opencv.videoio.VideoCapture
 Video.open(0).map { capture =>
   capture.use { c =>
     Video.frames(c, attemptsPerFrame = 3) { frames =>
-      frames.foreach(frame => analyse(frame))
+      frames.foreach(frame => analyse(frame.mat))
     }
   }
 }

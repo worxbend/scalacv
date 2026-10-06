@@ -184,8 +184,8 @@ photo.gray.adaptiveThreshold(blockSize = 31, c = 12)
 The weighting is `AdaptiveMethod.Gaussian` by default, which is what `forOcr` gets --- a
 Gaussian-weighted neighbourhood, softer at the edges than the flat `AdaptiveMethod.Mean` and slightly
 more tolerant of a stroke sitting near the edge of the window. `Image.adaptiveThreshold` also takes
-`method` and `inverse` (`inverse = true` gives white ink on a black page, which is what `contours`
-and the morphology below want); `forOcr` exposes neither, so a pipeline that needs them is a
+`method` and `mode` (`mode = Threshold.Mode.BinaryInv` gives white ink on a black page, which is what
+`contours` and the morphology below want); `forOcr` exposes neither, so a pipeline that needs them is a
 hand-built one.
 
 #figure-table("The three knobs on `forOcr`, and which way to turn them.")[

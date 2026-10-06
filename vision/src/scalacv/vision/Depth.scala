@@ -40,7 +40,20 @@ object StereoDepth:
         Mats
           .grayscale(right.mat)
           .use: r =>
-            Managed(StereoSGBM.create(0, numDisparities, blockSize)).use: sgbm =>
+            // A build without the stereo contrib module returns null from `create` (the same failure
+            // mode Tracker.create guards against); wrapping that in Managed would surface later as an
+            // opaque "already released" at the first `compute`. It is an environment failure, not a
+            // programmer error, so it is a CvError.NativeCall — thrown, not returned, because this
+            // method's contract is Image-or-throw, exactly like the `compute` orThrow below it.
+            val created = StereoSGBM.create(0, numDisparities, blockSize)
+            if created == null then
+              throw CvError.NativeCall(
+                "StereoSGBM.create",
+                IllegalStateException(
+                  "OpenCV returned no stereo matcher — this build may not include the stereo module"
+                )
+              )
+            Managed(created).use: sgbm =>
               Managed.use(Mat()): raw => // CV_16S disparity, fixed-point
                 Cv.orThrow("StereoSGBM.compute")(sgbm.compute(l, r, raw))
                 // `normalize` defaults to an 8-bit result, which is exactly what a viewable disparity map
@@ -64,7 +77,7 @@ object Obstacles:
     val cutoff = (minNearness * 255).toInt.toDouble
     disparity.mat
       .threshold(cutoff, 255)
-      ._1
+      .image
       .use: near =>
         near
           .morphology(MorphOp.Close, radius = 2)

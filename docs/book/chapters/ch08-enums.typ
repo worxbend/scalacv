@@ -72,9 +72,9 @@ the next section rather than to be passed on their own: `Threshold.Mode` and `Th
 
 Outside core the pattern travels, but not unchanged. `CaptureBackend` in `Video.scala` and
 `ArucoDictionary` in `Detectors.scala` carry a `cvValue` exactly as above. Two others deliberately do
-not: `Codec` in `Camera.scala` carries `fourcc: Int`, because a codec identifier is four packed
+not: `Codec` in `Codec.scala` carries `fourcc: Int`, because a codec identifier is four packed
 characters rather than an OpenCV flag, and `CascadeName` in `Cascades.scala` carries
-`fileName: String`, because what it names is a bundled resource. `TrackerKind` in `Tracking.scala`
+`fileName: String`, because what it names is a bundled resource. `TrackerKind` in `Tracker.scala`
 carries nothing at all --- there is no integer behind `Csrt`, `Kcf` and `Mil`, only three different
 Java factory classes that `Tracker.create` matches on. The accessor is named for what it holds, so
 seeing `cvValue` on a case is itself the signal that a raw OpenCV constant is underneath.
@@ -209,7 +209,7 @@ Mirroring is right for a filter, because a constant black edge bleeds inward and
 of a blurred image; a constant colour is right for padding, because a visible margin is usually the
 entire point. The parameter names differ with the domain, too: `pad` and `border` take
 `borderType`, while the filters and `rotated` take `border` --- and `rotated` splits the mode from
-the colour, taking `border` alongside a separate `borderValue`.
+the colour, taking `border` alongside a separate `color`.
 
 #sect("Colour, and the space you reason in")
 

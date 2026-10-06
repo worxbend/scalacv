@@ -16,6 +16,11 @@ import org.opencv.imgproc.Imgproc
   *
   * The measurements ([[Point]] carries `Double`) come back whole: `findContours` produces `CV_32SC2`, so
   * every coordinate is an integer that happens to be widened.
+  *
+  * Construction copies the points into an immutable `Vector` (see the companion's `apply`): the metrics are
+  * lazy, so a `Contour` that merely retained the caller's `Seq` would see a mutable buffer's later edits
+  * halfway through a measurement chain, and `convexHull` indexes into the points once per hull vertex —
+  * constant-time against a `Vector`, quadratic against a `List`.
   */
 final case class Contour(points: Seq[Point]):
 
@@ -110,6 +115,16 @@ final case class Contour(points: Seq[Point]):
 
 object Contour:
 
+  /** Builds a contour, copying the points into an immutable `Vector`.
+    *
+    * This `apply` replaces the case-class-generated one, and the copy is the whole point of that: retaining
+    * the caller's `Seq` by reference would make the lazy metrics observe a mutable buffer's later edits, and
+    * a `List` would make `convexHull`'s per-vertex indexing quadratic. `Vector.toVector` is the same
+    * instance, so contours built from already-immutable data pay nothing. The remaining way to hand in a
+    * sequence by reference is `new Contour(...)` or `copy(points = ...)` — explicit, not the default.
+    */
+  def apply(points: Seq[Point]): Contour = new Contour(points.toVector)
+
   /** Copies a native contour out. Does **not** free `m` — the caller owns it. */
   private[scalacv] def from(m: MatOfPoint): Contour =
     Contour(m.toArray.toIndexedSeq.map(Point.from))
@@ -140,18 +155,21 @@ extension (mat: Mat)
       retrieval: ContourRetrieval = ContourRetrieval.External,
       approximation: ContourApproximation = ContourApproximation.Simple
   ): Seq[Contour] =
-    require(!mat.empty(), "findContours needs a non-empty image; this Mat has no data")
+    Preconditions.requireNonEmpty("findContours", mat)
 
-    val found = java.util.ArrayList[MatOfPoint]()
-    val hierarchy = Mat()
-    try
-      Cv.orThrow("findContours")(
-        Imgproc.findContours(mat, found, hierarchy, retrieval.cvValue, approximation.cvValue)
-      )
-      found.asScala.iterator.map(Contour.from).toIndexedSeq
-    finally
-      // In the finally block, not after the map: if findContours or the copy throws, OpenCV has
-      // still allocated whatever it managed to fill in, and that is precisely when a leak goes
-      // unnoticed.
-      found.asScala.foreach(_.release())
-      hierarchy.release()
+    // The hierarchy Mat is scoped through Managed, which is exactly the allocate-run-release shape this
+    // used to hand-roll: `use` releases it even when the native call or the copy below throws. The
+    // found-list cleanup stays a `finally`, because its unit of work is not one allocation but every
+    // MatOfPoint OpenCV managed to fill in before a failure — there is no single value for a scope to own.
+    Managed.use(Mat()): hierarchy =>
+      val found = java.util.ArrayList[MatOfPoint]()
+      try
+        Cv.orThrow("findContours")(
+          Imgproc.findContours(mat, found, hierarchy, retrieval.cvValue, approximation.cvValue)
+        )
+        found.asScala.iterator.map(Contour.from).toIndexedSeq
+      finally
+        // In the finally block, not after the map: if findContours or the copy throws, OpenCV has
+        // still allocated whatever it managed to fill in, and that is precisely when a leak goes
+        // unnoticed.
+        found.asScala.foreach(_.release())

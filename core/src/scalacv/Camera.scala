@@ -1,43 +1,11 @@
 package scalacv
 
-import org.opencv.core.{CvType, Mat}
-import org.opencv.videoio.{VideoCapture, VideoWriter}
+import org.opencv.videoio.VideoCapture
 
-/** A video container/codec, as a FOURCC.
-  *
-  * The four-character code is packed in pure Scala — the same bit layout as OpenCV's `CV_FOURCC` — so naming
-  * a codec needs no native call and the enum can be referenced before `OpenCv.load()`. Whether a codec
-  * actually *works* still depends on what the platform's videoio build links (FFmpeg, the OS frameworks); an
-  * unavailable one surfaces as a `Left` from [[Recorder.open]], never a silent black file.
-  */
-enum Codec(val fourcc: Int):
-
-  /** MPEG-4 Part 2 in an `.mp4`. Smaller files than [[Mjpg]], but it needs a videoio linked against FFmpeg or
-    * a platform MPEG-4 encoder, and that is not a given: the `org.bytedeco` `linux-x86_64` and
-    * `windows-x86_64` payloads this project builds against ship no FFmpeg plugin at all, so opening a writer
-    * for this codec fails there. Take the `Left` from [[Recorder.open]] seriously rather than assuming it.
-    */
-  case Mp4v extends Codec(Codec.of('m', 'p', '4', 'v'))
-
-  /** H.264 in an `.mp4`. Best compression, but only if the build ships an H.264 encoder. */
-  case Avc1 extends Codec(Codec.of('a', 'v', 'c', '1'))
-
-  /** Motion-JPEG in an `.avi` — large files, but it is served by videoio's built-in MJPEG writer and so needs
-    * no FFmpeg, no GStreamer and no system codec. That makes it the one combination that opens on every
-    * build, which is why it is the default for [[Recorder.open]], [[Recorder.using]], [[Camera.recordTo]] and
-    * `Animation.record`.
-    *
-    * The container is part of the bargain: MJPG opens only in an `.avi`, so a path ending in `.mp4` or `.mkv`
-    * fails to open even though the codec itself is available.
-    */
-  case Mjpg extends Codec(Codec.of('M', 'J', 'P', 'G'))
-
-  /** Xvid MPEG-4 in an `.avi`. */
-  case Xvid extends Codec(Codec.of('X', 'V', 'I', 'D'))
-
-object Codec:
-  private def of(a: Char, b: Char, c: Char, d: Char): Int =
-    (a.toInt & 0xff) | ((b.toInt & 0xff) << 8) | ((c.toInt & 0xff) << 16) | ((d.toInt & 0xff) << 24)
+/* High-level video capture — reading a camera or a video file as owned [[Image]]s. The writer side lives in
+ * Recorder.scala and the codec enum in Codec.scala; this file keeps only the capture concern and its scoped
+ * combinators.
+ */
 
 /** High-level video capture — a camera or a video file, walked as owned [[Image]]s.
   *
@@ -63,7 +31,8 @@ object Codec:
   * The capture is **caller-owned**: [[close]] it, or acquire it through [[Camera.using]] /
   * [[Camera.usingFile]], which close for you. `Camera` is `AutoCloseable`.
   */
-final class Camera private (private val handle: Managed[VideoCapture]) extends AutoCloseable:
+final class Camera private (private val handle: Managed[VideoCapture], sourceLabel: String)
+    extends AutoCloseable:
 
   /** What the backend claims about this source — advisory, every field a `CAP_PROP_*` query. See
     * [[CaptureInfo]]; a live camera commonly reports `frameCount == 0` and an `fps` of `0` until it warms up.
@@ -83,8 +52,10 @@ final class Camera private (private val handle: Managed[VideoCapture]) extends A
 
   /** Grabs a single frame as an owned [[Image]].
     *
-    * `Left` when the stream has ended or the device delivered nothing within `attemptsPerFrame` reads — a
-    * camera can drop a frame without being dead, so the default retries a few times.
+    * `Left(CvError.EndOfStream)` when the stream has ended or the device delivered nothing within
+    * `attemptsPerFrame` reads — a camera can drop a frame without being dead, so the default retries a few
+    * times. The error names this camera's own source (the file path or the device index), not the bare word
+    * "camera".
     *
     * On a camera this is the *first frame after warm-up*, not the first frame off the device: [[Camera.open]]
     * discards a few frames so the auto-exposure loop has converged, which is what stops a snapshot taken
@@ -95,9 +66,9 @@ final class Camera private (private val handle: Managed[VideoCapture]) extends A
       case Some(frame) => Right(Image.wrap(frame))
       case None =>
         Left(
-          CvError.LoadFailed(
-            "camera",
-            "no frame available — the stream ended or the device delivered nothing"
+          CvError.EndOfStream(
+            sourceLabel,
+            "the stream ended or the device delivered nothing"
           )
         )
 
@@ -201,11 +172,11 @@ object Camera:
     * it.
     */
   def open(index: Int, options: CaptureOptions = CaptureOptions.Default): Either[CvError, Camera] =
-    Video.open(index, options).map(new Camera(_))
+    Video.open(index, options).map(new Camera(_, s"camera $index"))
 
   /** Opens a video file, URL (`rtsp://`, `http://`), or `frame_%04d.png` sequence. */
   def openFile(source: String, options: CaptureOptions = CaptureOptions.Default): Either[CvError, Camera] =
-    Video.open(source, options).map(new Camera(_))
+    Video.open(source, options).map(new Camera(_, source))
 
   /** Opens camera `index`, runs `use`, and closes the camera afterwards — even on an exception.
     *
@@ -215,132 +186,11 @@ object Camera:
     */
   def using[A](index: Int, options: CaptureOptions = CaptureOptions.Default)(
       use: Camera => A
-  ): Either[CvError, A] = scoped(open(index, options))(use)
+  ): Either[CvError, A] = Scoped.using(open(index, options), "camera")(use)
 
   /** Opens `source`, runs `use`, and closes the camera afterwards. The body runs inside [[Cv.attempt]] for
     * the reason given on [[using]].
     */
   def usingFile[A](source: String, options: CaptureOptions = CaptureOptions.Default)(
       use: Camera => A
-  ): Either[CvError, A] = scoped(openFile(source, options))(use)
-
-  /** Runs `use` over a successfully opened camera and closes it afterwards. The shared body of [[using]] and
-    * [[usingFile]], which differ only in how the camera is opened — a failed open is passed straight through,
-    * so there is nothing to close.
-    */
-  private def scoped[A](opened: Either[CvError, Camera])(use: Camera => A): Either[CvError, A] =
-    opened.flatMap: camera =>
-      Cv.attempt("camera")(
-        try use(camera)
-        finally camera.close()
-      )
-
-/** Writes [[Image]]s to a video file — the counterpart to [[Camera]] for output.
-  *
-  * A recorder is fixed at open time to one frame size, fps and codec; every frame written must match that
-  * size and be 8-bit. `VideoWriter` is one of the three OpenCV types with a real public `release()`, and the
-  * recorder is **caller-owned** — [[close]] it, or use [[Recorder.using]].
-  */
-final class Recorder private (private val handle: Managed[VideoWriter], val size: Size) extends AutoCloseable:
-
-  /** Appends `image` as the next frame. The image is **borrowed**, not consumed. `Left` if OpenCV rejects the
-    * write; throws [[IllegalArgumentException]] if the frame size does not match the recorder's, or if the
-    * frame is not 8-bit.
-    */
-  def write(image: Image): Either[CvError, Unit] = write(image.mat)
-
-  /** Appends a raw `Mat` as the next frame — the borrowing overload, so the zero-copy frames from
-    * `Video.frames` can be recorded without the per-frame clone an [[Image]] would require. The Mat is
-    * **borrowed**, not consumed. `Left` if OpenCV rejects the write; throws [[IllegalArgumentException]] if
-    * the frame size does not match the recorder's, or if the frame is not 8-bit.
-    */
-  def write(frame: Mat): Either[CvError, Unit] =
-    require(
-      frame.cols == size.width.toInt && frame.rows == size.height.toInt,
-      s"frame ${frame.cols}x${frame.rows} does not match the recorder's ${size.width.toInt}x${size.height.toInt}"
-    )
-    // `VideoWriter.write` returns void and the encoder never inspects the depth, so a CV_32F or CV_16S frame
-    // is accepted, its raw bytes reinterpreted as 8-bit pixels, and a playable file of noise is produced with
-    // every call reporting success. This precondition is the only signal that can exist — it sits beside the
-    // size check because a wrong-depth frame is the same class of programmer error, per the policy in [[Cv]].
-    require(
-      CvType.depth(frame.`type`()) == CvType.CV_8U,
-      s"a recorder needs 8-bit frames, got ${CvType.typeToString(frame.`type`())} — convert first, for " +
-        "example with convertScaleAbs, or by normalising to 0..255 and converting to CV_8U"
-    )
-    Cv.attempt("VideoWriter.write")(handle.get.write(frame)).map(_ => ())
-
-  /** The raw `VideoWriter`, **borrowed** — the low-level escape hatch. Owned by this `Recorder`. */
-  def writer: VideoWriter = handle.get
-
-  /** Finalises and closes the file. Idempotent; called for you by [[Recorder.using]] and `Using`. */
-  def close(): Unit = handle.release()
-
-object Recorder:
-
-  /** Opens a recorder writing to `path`.
-    *
-    * @param size
-    *   the exact frame size every written frame must have.
-    * @param fps
-    *   output frames per second.
-    * @param codec
-    *   defaults to [[Codec.Mjpg]], the one codec videoio can always write, because it is served by the
-    *   built-in MJPEG writer instead of an optional FFmpeg or system encoder. MJPG opens only in an `.avi`,
-    *   so the default and `path`'s extension go together.
-    * @param color
-    *   `false` for a single-channel (greyscale) stream.
-    * @return
-    *   `Left` if the writer cannot open — most often an unavailable codec for this build, or an unwritable
-    *   path. OpenCV reports that by leaving `isOpened` false rather than throwing.
-    */
-  def open(
-      path: String,
-      size: Size,
-      fps: Double = 30.0,
-      codec: Codec = Codec.Mjpg,
-      color: Boolean = true
-  ): Either[CvError, Recorder] =
-    require(fps > 0, s"fps must be positive, got $fps")
-    require(size.width > 0 && size.height > 0, s"a recorder needs a positive frame size, got $size")
-    val vw = VideoWriter()
-    // `vw` is a native object with no owner until it reaches `new Recorder`, so every exit that does not get
-    // there has to release it by hand. Failure arrives in two shapes: `vw.open` can throw at the codec
-    // boundary, which `Cv.attempt` turns into a `Left` so `flatMap` never runs its body, or it can return
-    // without throwing while leaving the writer closed. Releasing once, after the whole attempt, whenever the
-    // outcome is a `Left` covers both — the same discipline `Video.openCapture` applies to its capture.
-    val outcome =
-      Cv.attempt(s"VideoWriter.open('$path')")(vw.open(path, codec.fourcc, fps, size.toCv, color))
-        .flatMap: opened =>
-          if opened && vw.isOpened then Right(new Recorder(Managed(vw), size))
-          else
-            Left(
-              CvError.LoadFailed(
-                path,
-                s"VideoWriter could not open with codec $codec — the codec may be unavailable in this OpenCV " +
-                  "build, or the path may not be writable. Try Codec.Mjpg with an .avi extension, which " +
-                  "encodes with the built-in codecs."
-              )
-            )
-    if outcome.isLeft then vw.release()
-    outcome
-
-  /** Opens a recorder, runs `use`, and closes it afterwards — even on an exception. `codec` defaults to
-    * [[Codec.Mjpg]] for the reason given on [[open]]; `path` should end in `.avi` to match it.
-    *
-    * The whole `use` body runs inside [[Cv.attempt]], as in [[Image.reading]]: a [[CvError.NativeCall]]
-    * thrown by an operation inside the block comes back as a `Left` rather than escaping past the `Either`.
-    * Programmer errors (`IllegalArgumentException`, use-after-close) still throw.
-    */
-  def using[A](
-      path: String,
-      size: Size,
-      fps: Double = 30.0,
-      codec: Codec = Codec.Mjpg,
-      color: Boolean = true
-  )(use: Recorder => A): Either[CvError, A] =
-    open(path, size, fps, codec, color).flatMap: recorder =>
-      Cv.attempt("recorder")(
-        try use(recorder)
-        finally recorder.close()
-      )
+  ): Either[CvError, A] = Scoped.using(openFile(source, options), "camera")(use)

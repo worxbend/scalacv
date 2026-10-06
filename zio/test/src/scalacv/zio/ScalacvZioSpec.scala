@@ -107,7 +107,7 @@ object ScalacvZioSpec extends ZIOSpecDefault:
           assertTrue(greys.head < greys.last)
     ,
 
-    test("frameStream stays flat in memory: every element is the same one buffer"):
+    test("frameStream stays flat in memory: every element is a view over the same one buffer"):
       ZIO.scoped:
         for
           _ <- loadNatives
@@ -119,6 +119,56 @@ object ScalacvZioSpec extends ZIOSpecDefault:
           // distinct addresses, the stream has started retaining frames and the contract is broken.
           assertTrue(addrs.size == FrameCount) &&
             assertTrue(addrs.toSet.size == 1)
+    ,
+
+    test("frameStream spends each frame when the stream advances, and the last one when the stream ends"):
+      ZIO.scoped:
+        for
+          _ <- loadNatives
+          path <- writeSample()
+          cap <- openCapture(path.toString)
+          previous <- Ref.make(Option.empty[BorrowedMat])
+          violations <- Ref.make(0)
+          pulled <- frameStream(cap).mapZIO { view =>
+            previous.get.flatMap:
+              case Some(spent) =>
+                // One pull later the previous view must refuse every access — loudly, instead of
+                // serving stale pixels from the buffer the stream has already decoded over.
+                ZIO
+                  .attempt(spent.dataAddr())
+                  .either
+                  .flatMap:
+                    case Left(_: IllegalStateException) => ZIO.unit
+                    case _ => violations.update(_ + 1)
+              case None => ZIO.unit
+            *> previous.set(Some(view))
+          }.runCount
+          last <- previous.get
+          afterEnd <- ZIO.attempt(last.get.dataAddr()).either
+          n <- violations.get
+        yield assertTrue(pulled == FrameCount.toLong) &&
+          assertTrue(n == 0) &&
+          // The stream is over and its scope has closed: the final frame's view is spent too.
+          assertTrue(afterEnd.isLeft)
+    ,
+
+    test("frameStream exposes the core read step's retry bound, and rejects a bound below one"):
+      ZIO.scoped:
+        for
+          _ <- loadNatives
+          path <- writeSample()
+          cap <- openCapture(path.toString)
+          // attemptsPerFrame rides out dropped frames on live sources; on a file every read succeeds
+          // on the first try, so a larger bound must stream exactly the same frames.
+          withRetry <- frameStream(cap, attemptsPerFrame = 3).runCount
+          // Below one is a programmer error, surfaced in the error channel rather than as a defect.
+          invalid <- frameStream(cap, 0).runCount.exit
+        yield assertTrue(withRetry == FrameCount.toLong) &&
+          assertTrue(
+            invalid.causeOption.exists(
+              _.failures.exists(_.isInstanceOf[IllegalArgumentException])
+            )
+          )
     ,
 
     test("frameStream forces exception mode off, completes at EOF, and restores the caller's mode"):

@@ -54,25 +54,31 @@ object Animation:
     Recorder
       .open(path, Size(width.toDouble, height.toDouble), fps, codec)
       .flatMap: recorder =>
+        // One close, in the finally: the recorder is released exactly once however the loop ends, and the
+        // close must run BEFORE `deletePartial` — the writer holds the file, and an open file will not
+        // delete on Windows. Recording the failure and acting on it after the finally keeps that order
+        // with a single close call; the previous shape closed in the try and again in the catch, correct
+        // only because `Managed.release` happens to be idempotent.
+        var written = 0L
+        var failure: Throwable | Null = null
         try
-          var written = 0L
           var i = 0
           while i < frames do
             val canvas = frame(i).render(width, height, background)
             try recorder.write(canvas).fold(e => throw e, _ => written += 1)
             finally canvas.close()
             i += 1
-          recorder.close()
-          Right(written)
-        catch
-          // Close before deleting: the writer holds the file, and an open file will not delete on Windows. A
-          // CvError (a failed encode) becomes a Left; a bad Picture's IllegalArgumentException stays a throw.
-          case e =>
-            recorder.close()
+        catch case e => failure = e
+        finally recorder.close()
+        // A CvError (a failed encode) becomes a Left; a bad Picture's IllegalArgumentException stays a throw.
+        failure match
+          case null => Right(written)
+          case cv: CvError =>
             deletePartial(path)
-            e match
-              case cv: CvError => Left(cv)
-              case other => throw other
+            Left(cv)
+          case other =>
+            deletePartial(path)
+            throw other
 
   /** Renders `count` frames as owned [[Image]]s (each `frame(i)` on a fresh `width`×`height` `background`
     * canvas) — for feeding elsewhere than a file. **Each image is yours to close.**
@@ -138,6 +144,14 @@ object Animation:
     *
     * GIF is 256 colours per frame; OpenCV dithers to fit. For full-colour or long clips, use [[record]] to a
     * video instead.
+    *
+    * ==Peak memory: every frame is held natively at once==
+    *
+    * `imwriteanimation` takes the whole animation in a single call, so unlike [[record]] — which streams one
+    * canvas at a time through the writer — this renders and holds **all `frames` canvases in native memory
+    * until the encode returns**: a peak of `frames × width × height × 3` bytes, about 6 MB per frame at 1080p
+    * (a 60-frame 1080p GIF peaks near 373 MB). That is the exact accumulation [[Video.frames]] warns against,
+    * forced here by the encoder's API; keep GIFs short and small, and reach for [[record]] past that.
     */
   def gif(
       path: String,

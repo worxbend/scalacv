@@ -72,7 +72,7 @@ to, unless you are writing inside a package of your own with the same collision.
   [`readImage(path, flags)`], [`IO[CvError, Image]`], [Decodes an image; caller-owned.],
   [`imageScoped(path, flags)`], [`ZIO[Scope, CvError, Image]`], [Decodes and closes with the scope.],
   [`captureScoped(source, options)`], [`ZIO[Scope, CvError, VideoCapture]`], [Opens a source, releases with the scope.],
-  [`frameStream(capture)`], [`ZStream[Any, Throwable, Mat]`], [Frames as one *borrowed*, reused buffer.],
+  [`frameStream(capture)`], [`ZStream[Any, Throwable, BorrowedMat]`], [Frames as one *borrowed*, reused buffer.],
   [`framesCopied(capture)`], [`ZStream[Any, Throwable, Managed[Mat]]`], [Frames as *owned* clones.],
 )
 ]
@@ -200,33 +200,33 @@ rather than returning --- `.catchAllDefect` can still match it by type. You shou
 
 #sect("Frames as a stream, with Chapter 19's borrowing contract intact")
 
-`frameStream` hands you frames as a `ZStream[Any, Throwable, Mat]`, and it inherits the contract of
-the synchronous `Video.frames` rather than ZStream's usual value semantics. The emitted `Mat` is one
-buffer decoded into in place, and it is valid only until the next pull. That is not an oversight; it
+`frameStream` hands you frames as a `ZStream[Any, Throwable, BorrowedMat]`, and it inherits the contract of
+the synchronous `Video.frames` rather than ZStream's usual value semantics. Each emitted `BorrowedMat` is a liveness-checked view over one
+buffer decoded into in place, and it is valid only until the next pull or stream exit. That is not an oversight; it
 is the property that lets the stream stay flat in memory across an arbitrarily long video, and the
 module's test suite asserts it directly: streaming eight frames yields eight elements whose
 `dataAddr()` values collapse to a single distinct address.
 
-The consequence is that every combinator which *retains* elements is wrong here, and wrong quietly.
+The consequence is that every combinator which *retains* elements is wrong here, and the spent views throw on access.
 
 #figure-table("Combinators that mislead on `frameStream`. Map to an owned value first, then combine.")[
 #tbl(
   columns: (1fr, 2.4fr),
   [Combinator], [What you actually get],
-  [`runCollect`], [N references to one buffer holding the newest frame.],
+  [`runCollect`], [N spent views; accessing their pixels throws.],
   [`broadcast`], [Fan-out consumers racing on a single buffer.],
-  [`buffer`, `bufferSliding`], [A queue of aliases, all stale but one.],
-  [`zipWithNext`], [Both sides of every pair aliasing the same Mat.],
+  [`buffer`, `bufferSliding`], [A queue of spent views.],
+  [`zipWithNext`], [The previous view is spent by the next pull.],
 )
 ]
 
-#example("Wrong. One element per frame, every one of them the same image, and no error anywhere to say so.")[
+#example("Wrong. Collecting borrowed views succeeds, but their pixels are no longer accessible.")[
 ```scala
 ZIO.scoped {
   for
     _   <- loadNatives
     cap <- captureScoped("clip.mp4")
-    all <- frameStream(cap).runCollect        // Chunk[Mat], every entry the same Mat
+    all <- frameStream(cap).runCollect        // Chunk[BorrowedMat]; views are spent at stream exit
   yield all.size
 }
 ```
@@ -323,9 +323,8 @@ consumer always sees recent work. `bufferDropping` is the opposite policy --- a 
 the *incoming* element --- and it is the wrong one for frames, because the element it throws away is
 the newest one, which is the one you wanted. If you need the two ends on separate fibers, the same
 choice appears as `Queue.sliding(capacity)` against `Queue.dropping(capacity)`, with `ZStream.fromQueue`
-on the consuming side; that is also the shape to use when you want the bounded-retry loop of
-`Video.frames(cap, attemptsPerFrame = 3)` on the producing side, since `frameStream` has no
-`attemptsPerFrame` of its own and ends at the first empty read.
+on the consuming side. `frameStream(cap, attemptsPerFrame = 3)` uses the same bounded read-retry
+policy as `Video.frames`; both default to one attempt for file end-of-stream.
 
 #warning[
   Neither buffer bounds how long a *read* can block. `frameStream` wraps its read in
@@ -392,10 +391,9 @@ threads underneath you.
 
 #sect("A complete application")
 
-Everything above, as one program: open a source, run a detector over every frame, annotate in place,
-and write an annotated recording. Note what is *not* copied --- `Recorder.write` has a `Mat` overload
-that borrows the frame, which is exactly what `frameStream` produces, so annotate-and-record costs
-zero clones per frame.
+Everything above, as one program: open a source, clone each borrowed frame into a scoped owner,
+run a detector, annotate the owned copy, and write it. Recording an unmodified borrowed frame can
+use `rec.write(frame.mat)` without copying; this example copies because it mutates the pixels.
 
 #example("Open, detect, annotate, record. Every native object belongs to a scope.")[
 ```scala
@@ -437,9 +435,13 @@ object AnnotatedRecording extends ZIOAppDefault:
         rec      <- recorderScoped("annotated.avi", info)
         written  <- frameStream(cap)
                       .mapZIO { frame =>
-                        // The frame is borrowed: mutate it, write it, never retain it.
-                        ZIO.attemptBlocking(annotate(frame, detector)) *>
-                          fromCv(rec.write(frame))
+                        // Own the mutable copy and release it before the next pull.
+                        ZIO.attemptBlocking {
+                          Managed.use(frame.clone()) { owned =>
+                            annotate(owned, detector)
+                            rec.write(owned)
+                          }
+                        }.flatMap(result => fromCv(result))
                       }
                       .runCount
         _        <- Console.printLine(s"wrote $written frames")

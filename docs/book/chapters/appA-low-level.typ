@@ -6,7 +6,8 @@
 )
 
 Sooner or later you will want a function this library does not have. `Image` carries 65 public
-methods and the mid-level `Mat` extensions in `Ops.scala` add 44 more, which between them cover the
+methods and the mid-level `Mat` extensions in `Ops.scala` --- with the photo effects in `Effects.scala` and
+the deskew pipeline in `Deskew.scala` --- add 45 more, which between them cover the
 operations people reach for repeatedly --- and that is a small fraction of what `imgproc`, `core`,
 `photo`, `calib3d`, `features2d`, `video`, `dnn` and `objdetect` expose. The gap is not a defect waiting to be
 closed. A wrapper that tried to cover all of OpenCV would be a worse wrapper, so the interesting

@@ -376,7 +376,9 @@ object examples extends ScalacvModule {
   * written up under "Guard against native leaks with an RSS assertion" in docs/mdoc/testing.md.
   */
 object leaks extends ScalacvModule {
-  def moduleDeps = Seq(core, vision, graphs)
+  // zio is here too: its Scope-mapped release paths (Mat.scoped, frameStream) are ownership code like
+  // any other, and the RSS canary is the only gate that would see them leak.
+  def moduleDeps = Seq(core, vision, graphs, zio)
   def mvnDeps    = Deps.opencvNatives
   def forkArgs   = Task { Deps.headlessJvmArgs(jvmMajor()) }
 

@@ -114,7 +114,7 @@ final class scalacv.graphs.Color
   def saturate(double): scalacv.graphs.Color
   def spin(double): scalacv.graphs.Color
   def toBgr(): scalacv.Scalar
-  def toScalar(): scalacv.Scalar
+  def toBgrScalar(): scalacv.Scalar
   def toString(): java.lang.String
   def withAlpha(int): scalacv.graphs.Color
 final class scalacv.graphs.Dash

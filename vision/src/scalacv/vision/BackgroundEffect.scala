@@ -28,6 +28,16 @@ object BackgroundEffect:
       mask.rows == fg.rows && mask.cols == fg.cols,
       s"the mask (${mask.cols}x${mask.rows}) must match the image (${fg.cols}x${fg.rows})"
     )
+    // The doc above promises a CV_8UC1 mask; a colour or float mask would get as far as the native
+    // multiply/convert before failing with a raw CvException, so its shape is asserted up front.
+    require(
+      mask.depth() == CvType.CV_8U && mask.channels() == 1,
+      s"the mask must be CV_8UC1, got ${CvType.typeToString(mask.`type`())}"
+    )
+    require(
+      bg.rows == fg.rows && bg.cols == fg.cols,
+      s"the background (${bg.cols}x${bg.rows}) must match the image (${fg.cols}x${fg.rows})"
+    )
     require(feather >= 0, s"feather cannot be negative, got $feather")
     // One `orThrow` around the whole block rather than eight around the individual calls. Every step below
     // is part of one operation from a caller's point of view, and OpenCV's own message already quotes the

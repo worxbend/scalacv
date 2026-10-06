@@ -1,6 +1,6 @@
 package scalacv.vision
 
-import org.opencv.core.{Core, Mat}
+import org.opencv.core.{Core, CvType, Mat}
 import org.opencv.imgproc.Imgproc
 
 import scalacv.*
@@ -100,6 +100,13 @@ object Screen:
       a.rows == b.rows && a.cols == b.cols,
       s"the two captures must be the same size, got ${a.cols}x${a.rows} and ${b.cols}x${b.rows}"
     )
+    // Size alone is not enough: `absdiff` also requires matching channel count and depth, and a mismatch
+    // there escapes as a raw CvException from native code. Reject it up front, as a programmer error.
+    require(
+      a.channels() == b.channels() && a.depth() == b.depth(),
+      s"the two captures must have the same type, got ${CvType.typeToString(a.`type`())} and " +
+        s"${CvType.typeToString(b.`type`())}"
+    )
     a.absdiff(b)
       .use: d =>
         Mats
@@ -107,7 +114,7 @@ object Screen:
           .use: gray =>
             gray
               .threshold(threshold.toDouble, 255)
-              ._1
+              .image
               .use: mask =>
                 mask
                   .dilate(radius = 2)

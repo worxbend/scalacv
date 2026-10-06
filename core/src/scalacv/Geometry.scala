@@ -16,6 +16,19 @@ import org.opencv.core as cv
 final case class Point(x: Double, y: Double):
   private[scalacv] def toCv: cv.Point = cv.Point(x, y)
 
+  /** Component-wise sum — this point translated by `other` read as an offset vector. */
+  def +(other: Point): Point = Point(x + other.x, y + other.y)
+
+  /** Component-wise difference — the offset vector from `other` to this point, so `a - b + b == a` and
+    * `(a - b).distanceTo(Point(0, 0)) == a.distanceTo(b)`.
+    */
+  def -(other: Point): Point = Point(x - other.x, y - other.y)
+
+  /** Both components scaled by the same factor, i.e. scaled as a vector from the origin — distances from
+    * `(0, 0)` multiply by `by`.
+    */
+  def scale(by: Double): Point = Point(x * by, y * by)
+
   /** The straight-line distance to `other`, in pixels.
     *
     * Uses `math.hypot` rather than `math.sqrt(dx * dx + dy * dy)`. The two agree on ordinary pixel
@@ -57,6 +70,35 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     * the sum passes `Int.MaxValue`, the same overflow [[area]] widens to `Long` to avoid.
     */
   def bottomRight: Point = Point(x.toDouble + width, y.toDouble + height)
+
+  /** Whether `p` lies inside this rectangle. Half-open, like the rectangle itself: the left and top edges
+    * count, the right and bottom — one past the last enclosed pixel — do not.
+    *
+    * The far edges are compared in widened arithmetic, the same widening [[bottomRight]] does: `x + width` as
+    * an `Int` wraps negative once it passes `Int.MaxValue`, and a wrapped edge would report points on the far
+    * side of the image as contained.
+    */
+  def contains(p: Point): Boolean =
+    p.x >= x.toDouble && p.x < x.toDouble + width &&
+      p.y >= y.toDouble && p.y < y.toDouble + height
+
+  /** The overlap of the two rectangles, or `None` when they share no pixel — including when they merely touch
+    * along an edge, which would produce a zero-extent rectangle that consumers like `Mat.submat` reject. That
+    * is the half-open convention the rest of the library already follows (see `Face.clippedBox`): abutting
+    * rects do not overlap.
+    *
+    * Edges are computed in `Long` because `x + width` can overflow an `Int` before the `min`/`max` is
+    * applied. The result always narrows back safely: its left edge is one of the inputs' left edges, and its
+    * width is bounded by that input's own `width`, already a valid `Int`.
+    */
+  def intersect(other: Rect): Option[Rect] =
+    val left = math.max(x.toLong, other.x.toLong)
+    val top = math.max(y.toLong, other.y.toLong)
+    val right = math.min(x.toLong + width, other.x.toLong + other.width)
+    val bottom = math.min(y.toLong + height, other.y.toLong + other.height)
+    if right <= left || bottom <= top then None
+    else Some(Rect(left.toInt, top.toInt, (right - left).toInt, (bottom - top).toInt))
+
   private[scalacv] def toCv: cv.Rect = cv.Rect(x, y, width, height)
 
 /** A pixel value: up to four channel components, in whatever channel order the Mat uses. OpenCV's default is

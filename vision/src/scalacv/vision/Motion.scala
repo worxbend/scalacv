@@ -140,8 +140,9 @@ object MotionDetector:
     require(history >= 1, s"history must be at least 1, got $history")
     require(minArea >= 0, s"minArea cannot be negative, got $minArea")
     require(motionRatio >= 0 && motionRatio <= 1, s"motionRatio must be in [0, 1], got $motionRatio")
-    val mog2 = org.opencv.video.Video.createBackgroundSubtractorMOG2(history, varThreshold, detectShadows)
-    BgSubtract(Managed(mog2), minArea, motionRatio, learningRate)
+    val rebuild = () =>
+      org.opencv.video.Video.createBackgroundSubtractorMOG2(history, varThreshold, detectShadows)
+    BgSubtract(Managed(rebuild()), rebuild, minArea, motionRatio, learningRate)
 
   /** Grayscale + optional blur — the common front end of both strategies. */
   private def prepare(mat: Mat, blurRadius: Int): Managed[Mat] =
@@ -187,7 +188,7 @@ object MotionDetector:
                 .use: diff =>
                   diff
                     .threshold(threshold.toDouble, 255)
-                    ._1
+                    .image
                     .use: mask =>
                       mask.dilate(radius = 2).use(merged => measure(merged, minArea, motionRatio))
             prev.release() // the old baseline is done
@@ -207,11 +208,16 @@ object MotionDetector:
     override def close(): Unit = reset()
 
   private final class BgSubtract(
-      subtractor: Managed[BackgroundSubtractorMOG2],
+      initial: Managed[BackgroundSubtractorMOG2],
+      rebuild: () => BackgroundSubtractorMOG2,
       minArea: Int,
       motionRatio: Double,
       learningRate: Double
   ) extends MotionDetector:
+
+    // The live model; replaced wholesale by `reset`. Rebuilding is the only meaningful reset MOG2 has —
+    // it exposes no clear/reset of its own.
+    private var subtractor: Managed[BackgroundSubtractorMOG2] = initial
 
     def detect(image: Image): Motion =
       Managed.use(Mat()): fgMask =>
@@ -219,10 +225,16 @@ object MotionDetector:
         // MOG2 marks 0 = background, 255 = foreground, 127 = shadow; keep only strong foreground.
         fgMask
           .threshold(200, 255)
-          ._1
+          .image
           .use: mask =>
             mask.morphology(MorphOp.Open, radius = 2).use(cleaned => measure(cleaned, minArea, motionRatio))
 
-    def reset(): Unit = () // MOG2 adapts on its own; there is no meaningful reset short of rebuilding it
+    def reset(): Unit =
+      // Build the replacement BEFORE releasing the old model: if the native factory throws, the
+      // detector is left holding its previous (still valid) model rather than a spent handle. The old
+      // model is released the moment the new one exists, so no two models are ever live together.
+      val fresh = Managed(rebuild())
+      subtractor.release()
+      subtractor = fresh
 
     override def close(): Unit = subtractor.release()

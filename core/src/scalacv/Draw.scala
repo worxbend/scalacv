@@ -93,7 +93,7 @@ extension (mat: Mat)
       thickness: Thickness.Stroke = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawLine")
+    Preconditions.requireNonEmpty("drawLine", mat)
     Cv.orThrow("line")(
       Imgproc.line(mat, from.toCv, to.toCv, color.toCv, thickness.cvValue, lineType.cvValue)
     )
@@ -112,7 +112,7 @@ extension (mat: Mat)
       lineType: LineType = LineType.Connected8,
       tipLength: Double = 0.1
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawArrow")
+    Preconditions.requireNonEmpty("drawArrow", mat)
     Cv.orThrow("arrowedLine")(
       // The 8-argument overload is the only one that reaches tipLength; `0` is the shift,
       // which this API does not expose.
@@ -138,7 +138,7 @@ extension (mat: Mat)
       thickness: Thickness = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawRect")
+    Preconditions.requireNonEmpty("drawRect", mat)
     Cv.orThrow("rectangle")(
       Imgproc.rectangle(mat, rect.toCv, color.toCv, thickness.cvValue, lineType.cvValue)
     )
@@ -151,7 +151,7 @@ extension (mat: Mat)
       thickness: Thickness = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawCircle")
+    Preconditions.requireNonEmpty("drawCircle", mat)
     require(radius >= 0, s"a circle cannot have a negative radius, got $radius")
     Cv.orThrow("circle")(
       Imgproc.circle(mat, center.toCv, radius, color.toCv, thickness.cvValue, lineType.cvValue)
@@ -174,7 +174,7 @@ extension (mat: Mat)
       thickness: Thickness.Stroke = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawText")
+    Preconditions.requireNonEmpty("drawText", mat)
     Cv.orThrow("putText")(
       Imgproc.putText(
         mat,
@@ -204,7 +204,7 @@ extension (mat: Mat)
       thickness: Thickness.Stroke = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawPolyline")
+    Preconditions.requireNonEmpty("drawPolyline", mat)
     if points.nonEmpty then
       DrawOps.withPolygons(Seq(points)): polys =>
         Cv.orThrow("polylines")(
@@ -220,7 +220,7 @@ extension (mat: Mat)
       color: Scalar = Scalar.White,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "fillPolygon")
+    Preconditions.requireNonEmpty("fillPolygon", mat)
     if points.nonEmpty then
       DrawOps.withPolygons(Seq(points)): polys =>
         Cv.orThrow("fillPoly")(Imgproc.fillPoly(mat, polys, color.toCv, lineType.cvValue))
@@ -236,7 +236,7 @@ extension (mat: Mat)
       thickness: Thickness = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawContours")
+    Preconditions.requireNonEmpty("drawContours", mat)
     val outlines = contours.map(_.points).filter(_.nonEmpty)
     if outlines.nonEmpty then
       DrawOps.withPolygons(outlines): polys =>
@@ -255,7 +255,13 @@ extension (mat: Mat)
       thickness: Thickness.Stroke = Thickness.Default,
       lineType: LineType = LineType.Connected8
   ): Unit =
-    DrawOps.requireDrawable(mat, "drawSegments")
+    Preconditions.requireNonEmpty("drawSegments", mat)
+    // One JNI call per segment, deliberately — there is no batched primitive to prefer. The batch entry
+    // points (`polylines`, `fillPoly`, `drawContours`) all funnel their input through the generated
+    // `Converters.vector_vector_Point_to_Mat`, which leaks one Mat per polygon (see `withPolygons` below),
+    // and a segment cloud is exactly the input shape that would multiply that residue. `Imgproc.line`
+    // allocates nothing native beyond its scalar arguments, so this loop is the leak-free form; the
+    // per-call JNI overhead is the accepted price.
     segments.foreach(s => mat.drawLine(s.start, s.end, color, thickness, lineType))
 
 /** File-private helpers. Wrapped in an object rather than left top-level so their names cannot collide with
@@ -263,20 +269,14 @@ extension (mat: Mat)
   */
 private object DrawOps:
 
-  /** Drawing into a Mat with no allocated data throws from native code with a message that names neither the
-    * call nor the reason. A precondition failure is a programmer error under the B0 error policy, so it
-    * throws [[IllegalArgumentException]] rather than yielding a [[CvError]].
-    */
-  def requireDrawable(mat: Mat, op: String): Unit =
-    require(!mat.empty(), s"$op needs an image with data; this Mat is empty")
-
   /** Materialises Scala point lists as the `java.util.List[MatOfPoint]` OpenCV's polygon calls demand, and
     * frees the ones it allocated.
     *
     * Each `MatOfPoint` is a native allocation the drawing call does not take ownership of, so releasing them
-    * is ours to do. `finally`, not a trailing statement: a `CvException` from the draw is exactly when the
-    * cleanup is most likely to be skipped. The list is built incrementally inside the `try` so that a failure
-    * partway through still releases what was already allocated.
+    * is ours to do. Scoped through [[Managed.scope]] rather than a hand-rolled `try`/`finally`: every
+    * `MatOfPoint` is registered with the scope the moment it is created, so a constructor throwing partway
+    * through the list — or a `CvException` from the draw, which is exactly when cleanup is most likely to be
+    * skipped — still releases everything already allocated, in reverse order.
     *
     * **This does not make the call leak-free, and it would be dishonest to claim otherwise.** The generated
     * Java binding for `polylines`, `fillPoly` and `drawContours` runs the input through
@@ -286,8 +286,6 @@ private object DrawOps:
     * in this class of bug, unbounded across a video loop.
     */
   def withPolygons[A](polygons: Seq[Seq[Point]])(f: java.util.List[MatOfPoint] => A): A =
-    val mats = scala.collection.mutable.ListBuffer.empty[MatOfPoint]
-    try
-      polygons.foreach(points => mats += MatOfPoint(points.map(_.toCv)*))
-      f(mats.toList.asJava)
-    finally mats.foreach(_.release())
+    Managed.scope: own =>
+      val mats = polygons.map(points => own(MatOfPoint(points.map(_.toCv)*)))
+      f(mats.asJava)

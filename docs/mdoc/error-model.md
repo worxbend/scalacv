@@ -31,9 +31,9 @@ OpenCV's Java API reports failure three incompatible ways — a `false` return, 
 
 `CvError` is a `sealed abstract class` that extends `RuntimeException`. That looks unusual for an error ADT, and it is a considered choice: the core cannot be made total. `CvException` escapes from ordinary `Imgproc` calls — including on the empty `Mat` a failed `imread` hands back — and no wrapper can prevent that. Because `CvError` *is* a `Throwable`, it interoperates with that JNI boundary: it can be the `cause` of a wrapped native throw, it can be rethrown by [`Cv.orThrow`](#the-escape-hatch-cv-attempt), and it can cross a `try`/`catch` unchanged. You still get exhaustive `match` on the sealed hierarchy where you want it; you also get a type that behaves correctly at the one place the language cannot help you.
 
-## The six cases
+## The seven cases {#the-six-cases}
 
-`CvError` has exactly six shapes. Each names *when you see it*.
+`CvError` has exactly seven shapes. Each names *when you see it*.
 
 ### `NativesMissing`
 
@@ -80,6 +80,13 @@ def explain(e: CvError): String = e match
 ```
 
 This is the failure you handle when loading detectors and networks — see [Object detection](/object-detection). A `Recorder` that cannot open its codec reports `LoadFailed` too; see [Troubleshooting](/troubleshooting#codec).
+
+### `EndOfStream`
+
+A capture opened successfully, but `Camera.snapshot` could not obtain another frame within its bounded
+read attempts. The error names the file or device, rather than reporting a loading failure. OpenCV
+cannot distinguish file exhaustion from a camera that stopped delivering; `Video.frames` and
+`frameStream` complete their traversal normally for the same condition.
 
 ### `EncodeFailed`
 

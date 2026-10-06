@@ -662,7 +662,7 @@ val ciGlobalStrokes = ciGlobalInk.contours().size
 ciGlobalInk.close()
 
 // Unevenly lit: a cutoff computed per 25x25 neighbourhood instead.
-val ciAdaptiveInk = ciPage.gray.adaptiveThreshold(blockSize = 25, c = 10, inverse = true)
+val ciAdaptiveInk = ciPage.gray.adaptiveThreshold(blockSize = 25, c = 10, mode = Threshold.Mode.BinaryInv)
 val ciAdaptiveStrokes = ciAdaptiveInk.contours().size
 ciAdaptiveInk.close()
 ```
@@ -699,15 +699,16 @@ val ciBimodal =
     .blank(80, 80, Scalar(40), channels = 1) // a dark background...
     .drawRect(Rect(20, 20, 40, 40), Scalar(200), Thickness.Filled) // ...and a bright block
 
-// `.mat` borrows the Mat inside the Image. The mid-level `threshold` hands back a pair: the
-// Managed[Mat] holding the mask (ours to release) and a ThresholdResult holding the number.
+// `.mat` borrows the Mat inside the Image. The mid-level `threshold` hands back a `Thresholded`:
+// the Managed[Mat] holding the mask (ours to release) as `image`, and the computed value as
+// `computed` — the number Otsu or Triangle chose, which is often the reason you called it.
 val ciOtsuPick: Double =
-  val (mask, result) = ciBimodal.mat.threshold(0, 255, Threshold.otsu())
+  val Thresholded(mask, result) = ciBimodal.mat.threshold(0, 255, Threshold.otsu())
   mask.release()
   result.value
 
 val ciTrianglePick: Double =
-  val (mask, result) = ciBimodal.mat.threshold(0, 255, Threshold.triangle())
+  val Thresholded(mask, result) = ciBimodal.mat.threshold(0, 255, Threshold.triangle())
   mask.release()
   result.value
 
@@ -1263,14 +1264,14 @@ gfxBoxes.size
 ```
 
 `Color` is the RGBA palette the `Picture` layer uses; the core drawing verbs take an OpenCV `Scalar`, and
-`toScalar` is the bridge between the two:
+`toBgrScalar` is the bridge between the two (named for the channel order it produces):
 
 ```scala mdoc:silent
 val gfxTagged: Either[CvError, Array[Byte]] =
   gfxBoxes
     .zip(gfxPalette)
     .foldLeft(gfxScene) { case (img, (box, colour)) =>
-      img.drawRect(box, colour.toScalar, Thickness.Stroke(2))
+      img.drawRect(box, colour.toBgrScalar, Thickness.Stroke(2))
     }
     .bytes(".png")
 ```
@@ -1281,10 +1282,10 @@ gfxTagged.fold(_.getMessage, bytes => s"${bytes.length} bytes")
 
 Three things worth knowing:
 
-- **`toScalar` drops the alpha.** A `Color` carries transparency and the `Picture` renderer honours it, but a
+- **`toBgrScalar` drops the alpha.** A `Color` carries transparency and the `Picture` renderer honours it, but a
   `Scalar`'s fourth channel is not an alpha the `draw*` verbs respect. If you want a washed-out colour in a
-  core drawing call, bake it in first — `colour.fadeOut(0.5).toScalar` is *not* how (that only lowers an alpha
-  nobody reads); blend toward the background instead, with `colour.blend(Color.Black, 0.5).toScalar`.
+  core drawing call, bake it in first — `colour.fadeOut(0.5).toBgrScalar` is *not* how (that only lowers an alpha
+  nobody reads); blend toward the background instead, with `colour.blend(Color.Black, 0.5).toBgrScalar`.
 - **`Color.categorical` is exactly eight colours.** It is `wheel(8)`, a good default for a legend, but with
   nine or more detections two of them share a colour. `Color.wheel(n)` sized to the actual count is the fix.
   `wheel(0)` is a legal empty palette, and `zip` against it yields nothing — so a frame with no detections
@@ -2583,7 +2584,7 @@ import org.opencv.core.Scalar as CvScalar
 val otsuValue: Double =
   Managed.use(Mat(50, 50, CvType.CV_8UC1, CvScalar(0.0))) { m =>
     m.drawRect(Rect(10, 10, 30, 30), Scalar(200), Thickness.Filled) // two populations for Otsu to split
-    val (out, result) = m.threshold(0, 255, Threshold.otsu())
+    val Thresholded(out, result) = m.threshold(0, 255, Threshold.otsu())
     out.release()
     result.value
   }

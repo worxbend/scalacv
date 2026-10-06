@@ -43,3 +43,12 @@ class GestureTest extends munit.FunSuite:
   test("a non-Hand21 pose is rejected"):
     val body = Pose(Seq(Keypoint("nose", Point(0, 0), 0.9f)), PoseTopology(Seq("nose"), Seq.empty))
     intercept[IllegalArgumentException](GestureRecognizer.recognize(body))
+
+  test("a finger whose middle joint is unscored is not extended, however confident the tip"):
+    // Geometrically the index is out (tip far above the wrist, joint near it), and the tip's score
+    // clears the gate — but the middle joint the comparison runs against was never really seen. Gating
+    // only the tip would call this finger extended (Pointing); it must read as not extended (Fist).
+    val base = hand((false, true, false, false, false))
+    val unscoredJoint = base.keypoints.updated(6, base.keypoints(6).copy(score = 0.1f))
+    val pose = Pose(unscoredJoint, base.topology)
+    assertEquals(GestureRecognizer.recognize(pose, minScore = 0.3f), HandGesture.Fist)

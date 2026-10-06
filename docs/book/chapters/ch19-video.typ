@@ -129,11 +129,11 @@ iterator decide when the video is over.
 
 #example("The frame loop, and its full signature.")[
 ```scala
-def frames[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(f: Iterator[Mat] => A): A
+def frames[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(f: Iterator[BorrowedMat] => A): A
 ```
 ]
 
-`Video.frames` runs your function over an `Iterator[Mat]` created when the block begins and retired
+`Video.frames` runs your function over an `Iterator[BorrowedMat]` created when the block begins and retired
 when it returns. The iterator owns *exactly one* `Mat` and decodes every frame into it, in place.
 That is the whole design: the native footprint of a frame loop is one frame, whether the video runs
 five seconds or five hours, and there is no per-frame allocation to pay for.
@@ -181,21 +181,20 @@ exception path too.
 
 So the mistake is the one that looks most like ordinary Scala:
 
-#example("Wrong. Not ten frames --- ten references to one buffer holding the last frame.")[
+#example("Wrong. Not ten owned frames --- ten views that are spent when the block ends.")[
 ```scala
 Video.open("clip.mp4").map { capture =>
   capture.use { c =>
-    Video.frames(c)(_.toVector)   // compiles, runs, lies
+    Video.frames(c)(_.toVector)   // collects views that throw after the traversal
   }
 }
 ```
 ]
 
-Nothing here fails. You get a `Vector` of the right length, every element non-null, every element the
-same `Mat` showing whatever was decoded last --- and once the block returns that one `Mat` is
-released, so the whole vector is dangling handles. The test suite asserts the shape on purpose
-(`retained.forall(_ eq retained.head)`). `toList`, `sliding` and `buffered` fail identically, because
-they all retain.
+The collection itself succeeds, but accessing any retained `BorrowedMat` throws
+`IllegalStateException` after the traversal. The view checks liveness before JNI; extracting and
+retaining the raw `frame.mat` bypasses that protection and remains unsafe. `toList`, `sliding` and
+`buffered` retain views too, so reduce each frame or take an owned copy before combining.
 
 The right version reduces each frame to something owned *before* pulling the next one:
 
@@ -206,7 +205,7 @@ val contourCensus: Either[CvError, Vector[Int]] =
     capture.use { c =>
       Video.frames(c) { frames =>
         frames.map { frame =>
-          frame.cvtColor(ColorConversion.BgrToGray)
+          frame.mat.cvtColor(ColorConversion.BgrToGray)
             .pipe(_.canny(80, 160))
             .use(_.findContours().size)
         }.toVector
@@ -229,15 +228,15 @@ Retirement is what makes an iterator you accidentally let escape *inert* --- it 
 frames, and `next()` throws a message naming the cause --- rather than a slow leak.
 ]
 
-#figure-table("What the one borrowed `Mat` supports, and what silently breaks.")[
+#figure-table("What a borrowed frame supports, and what the liveness guard rejects.")[
 #tbl(
   columns: (1fr, auto, 1fr),
   [Operation], [Safe?], [Why],
   [Read pixels, query `empty`, `size`, `findContours`], [yes], [consumed before the next pull],
   [Any `Ops` call: `cvtColor`, `canny`, `resize`], [yes], [allocates its own owned destination],
-  [`rec.write(frame)`, encoding to bytes], [yes], [the work happens before the next pull],
-  [`toList` / `toVector` / `sliding` / `buffered`], [no], [N references to one reused buffer],
-  [Stashing the `Mat` in a `var`, field or collection], [no], [dangling after the next pull, or at block exit],
+  [`rec.write(frame.mat)`, encoding to bytes], [yes], [the work happens before the next pull],
+  [`toList` / `toVector` / `sliding` / `buffered`], [no], [spent views; access throws],
+  [Stashing the `Mat` in a `var`, field or collection], [no], [the view is spent after the next pull or at block exit],
   [`frame.clone()`, keeping and releasing the clone], [yes], [a raw `Mat` you now own; `framesCopied` wraps it for you],
 )
 ]
@@ -568,7 +567,7 @@ which is frequently the largest single cost in the loop.
 ```scala
 Video.frames(c) { frames =>
   frames.zipWithIndex.collect { case (frame, i) if i % 5 == 0 =>
-    frame.cvtColor(ColorConversion.BgrToGray)
+    frame.mat.cvtColor(ColorConversion.BgrToGray)
       .pipe(_.canny(80, 160))
       .use(_.findContours().size)
   }.toVector

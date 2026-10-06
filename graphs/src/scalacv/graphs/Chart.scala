@@ -18,7 +18,12 @@ object Chart:
   private def requireBox(width: Int, height: Int): Unit =
     require(width > 0 && height > 0, s"a chart needs a positive box, got ${width}x$height")
 
-  /** A bottom-aligned bar chart of `values` (scaled to the tallest). */
+  /** A bottom-aligned bar chart of `values` (scaled to the tallest).
+    *
+    * **Magnitude semantics:** a value is plotted as `math.abs(v)` — `-5` draws the very bar `5` draws, rising
+    * from the bottom edge. There is no zero line and no downward bar; if the sign of your data carries
+    * meaning, split the series or re-base it yourself before charting.
+    */
   def bars(values: Seq[Double], width: Int, height: Int, color: Color = Color.Blue, gap: Int = 4): Picture =
     requireBox(width, height)
     if values.isEmpty then Picture.empty
@@ -49,7 +54,12 @@ object Chart:
       Point(i.toDouble / (values.size - 1) * width, height - math.abs(v) / peak * (height - 2))
     }
 
-  /** A line chart of `values` across the width (scaled to the largest magnitude). */
+  /** A line chart of `values` across the width (scaled to the largest magnitude).
+    *
+    * **Magnitude semantics:** points sit at `math.abs(v)` — a signed series traces the same polyline as its
+    * absolute values, measured up from the bottom edge. The sign is not plotted; chart a re-based series if
+    * you need it.
+    */
   def line(
       values: Seq[Double],
       width: Int,
@@ -84,7 +94,9 @@ object Chart:
       else height - ((y - minY) / (maxY - minY) * (height - 2 * radius) + radius)
       Picture.all(points.map((x, y) => Picture.marker(Point(sx(x), sy(y)), color, radius)))
 
-  /** A filled area chart of `values` across the width — a [[line]] closed down to the baseline. */
+  /** A filled area chart of `values` across the width — a [[line]] closed down to the baseline. Shares
+    * [[line]]'s **magnitude semantics**: negative values fill as their absolute values, up from the baseline.
+    */
   def area(
       values: Seq[Double],
       width: Int,
@@ -103,7 +115,11 @@ object Chart:
         .strokeWidth(strokeWidth)
         .under(Picture.polygon(filled).fillColor(color.fadeOut(0.7)).noStroke)
 
-  /** A pie chart of `values` (their proportions), coloured from `palette` and cycling it if short. */
+  /** A pie chart of `values` (their proportions), coloured from `palette` and cycling it if short.
+    *
+    * **Magnitude semantics:** each slice's share is `math.abs(v)` over the summed magnitudes — a negative
+    * value buys the same wedge as its absolute value, never a negative or missing slice.
+    */
   def pie(
       values: Seq[Double],
       width: Int,

@@ -139,14 +139,15 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   def equalizeHist: Image = transform(_.equalizeHist())
 
   /** Fixed or automatic thresholding. Drops the computed value ([[Threshold.Auto]] users who need it should
-    * use the mid-level `threshold`, which returns it); this is the common "binarise" case.
+    * use the mid-level `threshold`, which returns it in a [[Thresholded]]); this is the common "binarise"
+    * case.
     */
   def threshold(
       value: Double,
       maxValue: Double = 255,
       kind: Threshold = Threshold.Binary
   ): Image =
-    transform(_.threshold(value, maxValue, kind)._1)
+    transform(_.threshold(value, maxValue, kind).image)
 
   /** Resizes to an absolute pixel size. */
   def resizeTo(size: Size, interpolation: Interpolation = Interpolation.Linear): Image =
@@ -228,8 +229,8 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
       blockSize: Int = 11,
       c: Double = 2.0,
       method: AdaptiveMethod = AdaptiveMethod.Gaussian,
-      inverse: Boolean = false
-  ): Image = transform(_.adaptiveThreshold(255, method, blockSize, c, inverse))
+      mode: Threshold.Mode = Threshold.Mode.Binary
+  ): Image = transform(_.adaptiveThreshold(255, method, blockSize, c, mode))
 
   /** Morphological erosion — shrinks bright regions, clears small bright specks. */
   def erode(radius: Int = 1, shape: MorphShape = MorphShape.Rect): Image = transform(_.erode(radius, shape))
@@ -383,8 +384,9 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   ): Image = paint(m => rects.foreach(r => m.drawRect(r, color, thickness)))
 
   // Domain overlays that turn a domain result into pixels — `markFaces` (FaceDetect.scala), `drawSkeleton`
-  // (Pose.scala), `drawMarkerAxes`/`drawMarkerCube` (Ar.scala), `drawTracks` (Tracking.scala), and `draw` for
-  // the Picture layer (Graphics.scala) — are extension methods in their own files, built on `paint`.
+  // (Pose.scala), `drawMarkerAxes`/`drawMarkerCube` (Ar.scala), `drawTracks` (ObjectTracker.scala), and
+  // `draw` for the Picture layer (Graphics.scala) — are extension methods in their own files, built on
+  // `paint`.
 
   // -- Terminals: consume this Image and release ---------------------------------------------------
 
@@ -487,8 +489,4 @@ object Image:
     * use-after-move) still throw, as everywhere else.
     */
   def reading[A](path: String, flags: ImreadFlags = ImreadFlags.Color)(use: Image => A): Either[CvError, A] =
-    read(path, flags).flatMap: img =>
-      Cv.attempt("reading")(
-        try use(img)
-        finally img.close()
-      )
+    Scoped.using(read(path, flags), "reading")(use)

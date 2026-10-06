@@ -386,11 +386,11 @@ generate here can feed the raw [drawing](/drawing) verbs and vice versa:
 
 | Direction | Call | Notes |
 | --- | --- | --- |
-| `Color` → `Scalar` | `color.toScalar` | Drops alpha (pre-blend with `fadeOut`/`blend` if you need it baked in) |
+| `Color` → `Scalar` | `color.toBgrScalar` | BGR-ordered; drops alpha (pre-blend with `fadeOut`/`blend` if you need it baked in) |
 | `Scalar` → `Color` | `scalar.toColor` | Reads BGR, result is fully opaque |
 
 ```scala mdoc
-Color.Orange.toScalar.toColor == Color.Orange
+Color.Orange.toBgrScalar.toColor == Color.Orange
 ```
 
 ## Data visualisation

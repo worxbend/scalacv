@@ -392,25 +392,37 @@ private[scalacv] object Graphics:
     * and they are already written to handle a `None`. Returning a `Bounds` unconditionally meant taking `min`
     * of no points, which threw `UnsupportedOperationException` out of `bounds` — from a signature that
     * already says "or nothing".
+    *
+    * The box describes the *geometry*, not the ink: a thick stroke and antialiasing spread paint a few pixels
+    * outside it (the renderer's `roiOf` pads for exactly that). Keeping bounds geometric is what lets `Chart`
+    * promise that a chart's bounds fit its width×height box.
     */
   private def primBounds(prim: Picture.Prim, tf: Affine, style: Style): Option[Bounds] =
     import Picture.Prim.*
-    val local = prim match
+    prim match
       case Circle(center, radius) =>
-        Seq(
-          Point(center.x - radius, center.y - radius),
-          Point(center.x + radius, center.y + radius)
-        )
+        // A circle is rotation-invariant: only its centre transforms, and its radius scales. Transforming
+        // the two bbox corners instead collapses the box under rotation — at 45° the diagonal corners map
+        // onto a single line and an axis of the bounds vanishes, while drawPrim still paints the whole
+        // circle with r = radius * tf.scaleFactor, the same radius computed here.
+        val c = tf(center)
+        val r = radius * tf.scaleFactor
+        extentOf(Seq(Point(c.x - r, c.y - r), Point(c.x + r, c.y + r)))
       case Quad(rect) =>
-        Seq(
-          Point(rect.x.toDouble, rect.y.toDouble),
-          Point((rect.x + rect.width).toDouble, (rect.y + rect.height).toDouble)
+        extentOf(
+          Seq(
+            Point(rect.x.toDouble, rect.y.toDouble),
+            Point((rect.x + rect.width).toDouble, (rect.y + rect.height).toDouble)
+          ).map(tf.apply)
         )
-      case Path(points, _) => points
+      case Path(points, _) => extentOf(points.map(tf.apply))
       case Text(txt, at) =>
-        val m = Draw.textSize(txt, style.font, style.fontScale)
-        Seq(Point(at.x, at.y - m.size.height), Point(at.x + m.size.width, at.y + m.baseline))
-    extentOf(local.map(tf.apply))
+        // putText cannot rotate: drawPrim renders the glyphs axis-aligned at the *transformed anchor* and
+        // at the transform-scaled font. The bounds are therefore the axis-aligned glyph box at tf(at) —
+        // rotating the box would match neither the drawn pixels nor a true rotated glyph quad.
+        val p = tf(at)
+        val m = Draw.textSize(txt, style.font, style.fontScale * tf.scaleFactor)
+        extentOf(Seq(Point(p.x, p.y - m.size.height), Point(p.x + m.size.width, p.y + m.baseline)))
 
   private def extentOf(points: Seq[Point]): Option[Bounds] =
     if points.isEmpty then None

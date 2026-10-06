@@ -1,7 +1,5 @@
 package scalacv.vision
 
-import java.io.File
-
 import org.opencv.core.{Mat, Size as CvSize}
 import org.opencv.dnn.{Dnn as CvDnn, Net}
 
@@ -62,18 +60,19 @@ object Dnn:
     *   a caller-owned `Net`, or the reason it could not be read.
     */
   def fromOnnx(path: String): Either[CvError, Managed[Net]] =
-    val file = File(path)
-    if !file.isFile then
-      Left(CvError.LoadFailed(path, "no such file (or it is a directory), so there is no model to read"))
-    else if !file.canRead then Left(CvError.LoadFailed(path, "the file exists but is not readable"))
-    else
-      Cv.attempt(s"reading an ONNX model from '$path'")(CvDnn.readNetFromONNX(path))
-        .flatMap: net =>
-          if net.empty() then
-            // The handle is real even though the graph is not, so it still has to be freed.
-            Managed(net).release()
-            Left(CvError.LoadFailed(path, "OpenCV read this file but produced a network with no layers"))
-          else Right(Managed(net))
+    internal.ModelLoader
+      .loadNative[Net](
+        path,
+        describe = s"reading an ONNX model from '$path'",
+        missingDetails = "no such file (or it is a directory), so there is no model to read",
+        // The empty() guard is belt-and-braces: 4.13.0's importer throws rather than handing back an
+        // empty Net, but the sibling readers in the same header do not all behave that way
+        // (CascadeClassifier famously does the opposite), and an empty Net that reaches a caller fails
+        // much later, inside forward, with nothing pointing back at the load.
+        validate =
+          net => Option.when(net.empty())("OpenCV read this file but produced a network with no layers")
+      )(CvDnn.readNetFromONNX(path))
+      .map(Managed(_))
 
   /** Turns an image into the 4-dimensional NCHW blob a network expects.
     *

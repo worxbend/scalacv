@@ -420,7 +420,7 @@ channel order and meaning.
   [Alpha], [A fourth channel the drawing verbs ignore], [Honoured: real per-shape blending],
   [Range], [`Double`, unchecked], [`Int` in `[0, 255]`, checked],
   [Used by], [`drawRect`, `drawText`, `Image.blank`, `org.opencv.*`], [`Picture` styling, `Chart`, `Animation`],
-  [Bridge], [`scalar.toColor`], [`color.toScalar`],
+  [Bridge], [`scalar.toColor`], [`color.toBgrScalar`],
 )
 ]
 
@@ -446,7 +446,7 @@ Two generators produce palettes, and choosing between them is a statement about 
 `Color.categorical` is `wheel(8)`, kept around as a sensible default. Both generators accept `n = 0`
 and refuse a negative one.
 
-The bridge is lossy in exactly one way, and it is documented rather than hidden: `color.toScalar`
+The bridge is lossy in exactly one way, and it is documented rather than hidden: `color.toBgrScalar`
 reorders to BGR and *drops the alpha*, because a `Scalar`'s fourth channel is not an alpha the
 OpenCV drawing verbs honour. If you want translucency baked into a colour you are handing to
 `drawRect`, pre-blend it with `blend` against the background you expect. Going the other way,

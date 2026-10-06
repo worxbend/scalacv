@@ -38,7 +38,7 @@ class OcrTest extends munit.FunSuite:
     val doc = document()
     val uprightRatio = horizontalRatio(doc) // borrows doc
     // Rotate on a WHITE background, as a real skewed scan would be (a black fill would look like ink).
-    val skewed = Image.wrap(doc.mat.rotated(12.0, borderValue = Scalar.White))
+    val skewed = Image.wrap(doc.mat.rotated(12.0, color = Scalar.White))
     doc.close()
     val skewedRatio = horizontalRatio(skewed)
     val deskewed = skewed.deskew() // consumes skewed

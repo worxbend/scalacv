@@ -37,6 +37,14 @@ object CvError:
   final case class EncodeFailed(path: String, details: String)
       extends CvError(s"could not write an image to '$path': $details", null)
 
+  /** A video source yielded no frame where one was expected — a file's last frame read, a camera that went
+    * away, a device that never delivered. Distinct from [[LoadFailed]], which is about *opening or resolving*
+    * a resource: the source here opened fine and has simply run dry, which for a finite file is the ordinary,
+    * expected end rather than a failure at all.
+    */
+  final case class EndOfStream(source: String, details: String)
+      extends CvError(s"no frame available from '$source': $details", null)
+
   /** A camera calibration could not be produced. Either too few views showed the whole calibration target for
     * the solver to be well-posed, or `calibrateCamera` did not converge. This is *data-dependent* — it turns
     * on how many boards the capture actually saw, not on a programmer error — so it is returned rather than

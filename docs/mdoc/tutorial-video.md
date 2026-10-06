@@ -107,7 +107,7 @@ Video.open("clip.mp4").map { capture =>
   capture.use { c =>
     // `frame` is one reused buffer; reduce it inside the loop, never collect it.
     Video.frames(c) { frames =>
-      frames.map(frame => frame.cvtColor(ColorConversion.BgrToGray).use(_.rows)).sum
+      frames.map(frame => frame.mat.cvtColor(ColorConversion.BgrToGray).use(_.rows)).sum
     }
   }
 }

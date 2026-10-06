@@ -83,20 +83,20 @@ Video is where copies add up — a 1080p BGR frame is ~6 MB, so 30 fps is **~180
 | [`Video.frames`](/video) | **borrowed** reused `Mat` | **zero** | you only read/reduce the frame, or run mid-level `Ops` over it |
 | [`Video.framesCopied`](/video) | owned `Managed[Mat]` per pulled frame | one clone per frame you pull | you must keep specific frames past their turn |
 
-`Video.frames` decodes into a **single reused buffer** — the same `Mat`, refilled in place — so per-frame allocation is zero no matter how long the video runs (this is also why the frame source is an `Iterator`, not a memoising `LazyList`; see the [Video](/video) rationale). Mid-level ops allocate their own destination and never alias the receiver, so running them over a borrowed frame is correct and yields a Mat *you* own:
+`Video.frames` decodes into a **single reused buffer** — the same `Mat`, refilled in place — so per-frame native-buffer allocation is zero no matter how long the video runs (this is also why the frame source is an `Iterator`, not a memoising `LazyList`; see the [Video](/video) rationale). Mid-level ops allocate their own destination and never alias the receiver, so running them over a borrowed frame is correct and yields a Mat *you* own:
 
 ```scala mdoc:compile-only
 Video.open("clip.mp4").map { capture =>
   capture.use { c =>
-    // No per-frame Mat allocation: `frame` is one reused buffer; the reduction is a plain Int.
+    // The decode buffer is reused; cvtColor owns a separate destination, released by use.
     Video.frames(c) { frames =>
-      frames.map(frame => frame.cvtColor(ColorConversion.BgrToGray).use(_.rows)).sum
+      frames.map(frame => frame.mat.cvtColor(ColorConversion.BgrToGray).use(_.rows)).sum
     }
   }
 }
 ```
 
-The trade is the borrowing contract: don't retain a borrowed frame past its turn, and don't feed it to an `Iterator` combinator that retains (`toList`, `sliding`, `buffered` all hand you N references to one Mat holding the *last* frame). See [Mat lifecycle](/mat-lifecycle).
+The trade is the borrowing contract: don't retain a borrowed frame past its turn, and don't feed it to an `Iterator` combinator that retains (`toList`, `sliding`, `buffered` retain views that throw once spent). See [Mat lifecycle](/mat-lifecycle).
 
 :::tip[Record the zero-copy frame with no extra clone]
 `Recorder.write` has a `Mat` overload, so a borrowed frame from `Video.frames` can be written straight through without the per-frame `Image` clone. Pay the copy only where you genuinely branch.

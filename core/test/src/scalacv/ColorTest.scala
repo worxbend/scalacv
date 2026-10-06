@@ -15,16 +15,16 @@ class ColorTest extends munit.FunSuite:
     intercept[IllegalArgumentException](Color(0, 0, 0, 300))
     Color(0, 255, 128, 40) // in range: no throw
 
-  test("toScalar maps RGBA to OpenCV BGR order and drops alpha"):
+  test("toBgrScalar maps RGBA to OpenCV BGR order and drops alpha"):
     // Color.Red is RGBA(220, 40, 40); as a BGR Scalar that is (blue=40, green=40, red=220).
-    val s = Color.Red.toScalar
+    val s = Color.Red.toBgrScalar
     assertEquals((s.v0, s.v1, s.v2), (40.0, 40.0, 220.0))
     // The alpha is not carried into the Scalar's fourth channel.
-    assertEquals(Color(10, 20, 30, 128).toScalar, Scalar(30.0, 20.0, 10.0))
+    assertEquals(Color(10, 20, 30, 128).toBgrScalar, Scalar(30.0, 20.0, 10.0))
 
-  test("Scalar.toColor is the inverse of toScalar and comes back opaque"):
+  test("Scalar.toColor is the inverse of toBgrScalar and comes back opaque"):
     val c = Color(17, 200, 99)
-    assertEquals(c.toScalar.toColor, c)
+    assertEquals(c.toBgrScalar.toColor, c)
     // A BGR scalar reads back with channels swapped into RGB.
     assertEquals(Scalar(30.0, 20.0, 10.0).toColor, Color(10, 20, 30, 255))
 

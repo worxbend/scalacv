@@ -181,6 +181,24 @@ class TrackingTest extends munit.ScalaCheckSuite:
     intercept[IllegalArgumentException](ObjectTracker.create(iouThreshold = 1.5)): Unit
     intercept[IllegalArgumentException](ObjectTracker.create(maxAge = -1)): Unit
 
+  test("ObjectTracker.create rejects a minHits below 1 — a track must be hit before it confirms"):
+    intercept[IllegalArgumentException](ObjectTracker.create(minHits = 0)): Unit
+    intercept[IllegalArgumentException](ObjectTracker.create(minHits = -1)): Unit
+
+  test("ObjectTracker.update after close is an IllegalStateException, not a native leak"):
+    val t = ObjectTracker.create()
+    t.update(Seq(Rect(10, 10, 20, 20))): Unit
+    t.close()
+    val e = intercept[IllegalStateException](t.update(Seq(Rect(10, 10, 20, 20))))
+    assert(e.getMessage.contains("already been closed"), e.getMessage)
+    assertEquals(t.count, 1, "a closed tracker must not spawn new tracks")
+
+  test("ObjectTracker.close is idempotent"):
+    val t = ObjectTracker.create()
+    t.update(Seq(Rect(10, 10, 20, 20))): Unit
+    t.close()
+    t.close() // second close must not throw
+
   test("Tracker.update before init is an IllegalArgumentException, not a native call"):
     val fresh = Tracker.create(TrackerKind.Csrt).fold(throw _, identity)
     val f0 = frame(50)

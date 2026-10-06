@@ -155,7 +155,7 @@ class OpsTest extends munit.FunSuite:
 
   test("a fixed threshold hands back the value it was given"):
     withImages: (_, grey) =>
-      val (out, result) = grey.threshold(128)
+      val Thresholded(out, result) = grey.threshold(128)
       Using.resource(out): binary =>
         assertEquals(result.value, 128.0)
         assertEquals(binary.get.`type`(), CvType.CV_8UC1)
@@ -167,7 +167,7 @@ class OpsTest extends munit.FunSuite:
       // `value` is ignored for Otsu — OpenCV computes its own and returns it. The fixture's modes are
       // 30 (ground) and 200/255 (shapes); every threshold in [30, 199] induces the same partition and
       // Otsu returns the lowest maximiser, so the bound below is `>= 30`, not `> 30`.
-      val (out, result) = grey.threshold(0, kind = Threshold.otsu())
+      val Thresholded(out, result) = grey.threshold(0, kind = Threshold.otsu())
       Using.resource(out): binary =>
         assert(result.value > 0.0, s"Otsu returned ${result.value}; the computed value was dropped")
         assert(
@@ -181,8 +181,57 @@ class OpsTest extends munit.FunSuite:
 
   test("Triangle also computes a threshold"):
     withImages: (_, grey) =>
-      val (out, result) = grey.threshold(0, kind = Threshold.triangle())
+      val Thresholded(out, result) = grey.threshold(0, kind = Threshold.triangle())
       Using.resource(out)(_ => assert(result.value > 0.0, s"Triangle returned ${result.value}"))
+
+  test("threshold's named pair pipes like every other op"):
+    withImages: (colour, _) =>
+      // The point of `Thresholded`: `.image` is a bare Managed[Mat], so threshold composes in a chain
+      // where the tuple it replaced forced a `._1` outside `pipe`.
+      val edges = colour
+        .cvtColor(ColorConversion.BgrToGray)
+        .pipe(m => m.threshold(128).image)
+        .pipe(_.bitwiseNot())
+      try
+        assertEquals(edges.get.`type`(), CvType.CV_8UC1)
+        assertNotEquals(colour.dataAddr(), 0L, "the chain's source is borrowed, not consumed")
+      finally edges.release()
+
+  test("adaptiveThreshold's mode parameter inverts the output exactly"):
+    withImages: (_, grey) =>
+      scoped: use =>
+        val binary = use(grey.adaptiveThreshold(blockSize = 11, c = 2, mode = Threshold.Mode.Binary))
+        val inverted =
+          use(grey.adaptiveThreshold(blockSize = 11, c = 2, mode = Threshold.Mode.BinaryInv))
+        val total = grey.rows() * grey.cols()
+        assertEquals(
+          Core.countNonZero(binary.get) + Core.countNonZero(inverted.get),
+          total,
+          "BinaryInv must be the exact complement of Binary, pixel for pixel"
+        )
+
+  test("adaptiveThreshold rejects a mode OpenCV has no adaptive form of"):
+    withImages: (_, grey) =>
+      val e = intercept[IllegalArgumentException](
+        grey.adaptiveThreshold(mode = Threshold.Mode.Truncate)
+      )
+      assert(e.getMessage.contains("adaptiveThreshold"), e.getMessage)
+      assert(e.getMessage.contains("Truncate"), e.getMessage)
+
+  test("inRange rejects a lo above hi, channel by channel"):
+    withImages: (colour, _) =>
+      // Only the second channel is inverted; a whole-Scalar comparison would miss it.
+      val e = intercept[IllegalArgumentException](
+        colour.inRange(Scalar(0, 200, 0), Scalar(255, 100, 255))
+      )
+      assert(e.getMessage.contains("inRange"), e.getMessage)
+
+  test("Mats.grayscale rejects a 2-channel Mat by name instead of passing it off as already grey"):
+    val twoChannel = Mat(10, 10, CvType.CV_8UC2)
+    try
+      val e = intercept[IllegalArgumentException](Mats.grayscale(twoChannel))
+      assert(e.getMessage.contains("2 channels"), e.getMessage)
+    finally twoChannel.release()
 
   test("resize hits the exact requested size"):
     withImages: (colour, _) =>

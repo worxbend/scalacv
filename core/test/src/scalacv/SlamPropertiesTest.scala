@@ -265,6 +265,27 @@ class SlamPropertiesTest extends munit.ScalaCheckSuite:
     odo.close()
     odo.close() // a second close must be a no-op, not a crash
 
+  test("framesProcessed does not count a failed update"):
+    // The second update is handed an already-consumed frame: the track/snapshot step touches its Mat and
+    // throws before any work completes. A counter bumped up front would count the frame anyway.
+    val odo = Odometry.monocular(Intrinsics(fx = 500, fy = 500, cx = 110, cy = 90))
+    try
+      val f0 = scene(0)
+      try
+        odo.update(f0)
+        assertEquals(odo.framesProcessed, 1)
+      finally f0.close()
+      val spent = scene(3)
+      spent.close()
+      intercept[IllegalStateException](odo.update(spent))
+      assertEquals(odo.framesProcessed, 1, "a throwing update is not a processed frame")
+      // The pipeline itself must survive the failed frame: the next good update works and counts.
+      val f1 = scene(6)
+      try odo.update(f1)
+      finally f1.close()
+      assertEquals(odo.framesProcessed, 2)
+    finally odo.close()
+
   // -- LoopDetector: detect vs. add, and the exclusion window --------------------------------------
 
   private def place(seed: Int): Image =

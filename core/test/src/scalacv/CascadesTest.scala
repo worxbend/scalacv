@@ -65,6 +65,17 @@ class CascadesTest extends munit.FunSuite:
     assert(e.isInstanceOf[CvError.LoadFailed], s"expected LoadFailed, got ${e.getClass.getName}")
     assert(e.getMessage.contains("/does/not/exist.xml"), e.getMessage)
 
+  test("load on a name the platform jar does not ship is a Left, never a silent empty classifier"):
+    // The typed-name equivalent of the missing-path guard above: resolve fails for every name where the
+    // classifier jar ships no cascades, and load must surface that as a Left rather than an empty
+    // classifier. Only Windows exercises it — everywhere else every CascadeName resolves.
+    assume(!cascadesShipped, "this platform ships the cascades, so no name is missing")
+    CascadeName.values.foreach: n =>
+      Cascades.load(n) match
+        case Left(e: CvError.LoadFailed) =>
+          assert(e.getMessage.contains(n.fileName), e.getMessage)
+        case other => fail(s"${n.fileName}: expected a LoadFailed, got $other")
+
   test("loadFrom a file that is not a cascade is a Left"):
     val junk = Files.createTempFile("scalacv-not-a-cascade", ".xml")
     try

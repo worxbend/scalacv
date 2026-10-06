@@ -36,6 +36,13 @@ import org.opencv.photo.Photo
  * throw [[IllegalArgumentException]]. Everything OpenCV itself rejects arrives as a `CvException` from
  * native code and is rethrown as [[CvError.NativeCall]] naming the operation — see [[Cv]]. In that case the
  * half-built destination Mat is released before the throw propagates, so a failed op leaks nothing.
+ *
+ * ==What lives elsewhere==
+ *
+ * This file keeps the core imgproc verbs. The social-media effects (sepia, stylize and friends) are in
+ * Effects.scala, the deskew document pipeline is in Deskew.scala, and the `Mats` helpers that do not belong
+ * on a Mat are in Mats.scala — all four share this contract and the `scalacv` package, so nothing at a call
+ * site changes.
  */
 
 /** The destination depth for the operators that can change it — the derivative operators, and [[normalize]].
@@ -168,9 +175,10 @@ extension (self: Mat)
 
   /** Thresholding.
     *
-    * Returns the thresholded image **and** the `double` OpenCV computed. Most wrappers drop that number; for
-    * [[Threshold.Auto.Otsu]] and [[Threshold.Auto.Triangle]] it is the threshold OpenCV chose, which is
-    * frequently the reason the call was made. For a fixed threshold it is just `value` handed back.
+    * Returns a [[Thresholded]] — the thresholded image **and** the `double` OpenCV computed. Most wrappers
+    * drop that number; for [[Threshold.Auto.Otsu]] and [[Threshold.Auto.Triangle]] it is the threshold OpenCV
+    * chose, which is frequently the reason the call was made. For a fixed threshold it is just `value` handed
+    * back. A named pair, not a tuple, so `.image` chains with [[pipe]] like every other op.
     *
     * `Imgproc.threshold` has a single 5-argument overload with no defaults, so every argument is spelled out
     * here rather than being layered over Java defaults that do not exist.
@@ -179,14 +187,14 @@ extension (self: Mat)
       value: Double,
       maxValue: Double = 255,
       kind: Threshold = Threshold.Binary
-  ): (Managed[Mat], ThresholdResult) =
+  ): Thresholded =
     // `Mats.produce` fills a destination and returns only that, so the `double` OpenCV computes has to be
     // carried out of the callback by hand. It is written exactly once, before `produce` returns, so the var
     // never outlives this expression.
     var computed = 0.0
     val out = Mats.produce("threshold"): dst =>
       computed = Imgproc.threshold(self, dst, value, maxValue, kind.cvValue)
-    (out, ThresholdResult(computed))
+    Thresholded(out, ThresholdResult(computed))
 
   /** Resizes to an absolute size, given here as a [[Size]] whose two `Double` extents are **truncated toward
     * zero** on the way into native code: `Size(1.9, 1.9)` asks for a 1×1 image.
@@ -264,6 +272,11 @@ extension (self: Mat)
   /** Adaptive threshold — a threshold computed per neighbourhood rather than once for the whole image, which
     * is what makes it hold up under uneven lighting (document scans, OCR pre-processing). `CV_8UC1` only.
     *
+    * `mode` is restricted to [[Threshold.Mode.Binary]] / [[Threshold.Mode.BinaryInv]] because OpenCV's
+    * `adaptiveThreshold` accepts exactly those two; it replaces the `inverse: Boolean` this parameter used to
+    * be — a boolean trap at the call site (`inverse = true` says nothing about *what* is inverted) when
+    * `Threshold.Mode` already models the distinction by name.
+    *
     * @param blockSize
     *   the neighbourhood side; must be odd and ≥ 3.
     * @param c
@@ -274,15 +287,19 @@ extension (self: Mat)
       method: AdaptiveMethod = AdaptiveMethod.Gaussian,
       blockSize: Int = 11,
       c: Double = 2.0,
-      inverse: Boolean = false
+      mode: Threshold.Mode = Threshold.Mode.Binary
   ): Managed[Mat] =
     require(
       blockSize >= 3 && blockSize % 2 == 1,
       s"adaptiveThreshold blockSize must be odd and ≥ 3, got $blockSize"
     )
-    val kind = if inverse then Imgproc.THRESH_BINARY_INV else Imgproc.THRESH_BINARY
+    require(
+      mode == Threshold.Mode.Binary || mode == Threshold.Mode.BinaryInv,
+      s"adaptiveThreshold accepts only Binary or BinaryInv, not $mode — OpenCV has no adaptive " +
+        "Truncate/ToZero"
+    )
     Mats.produce("adaptiveThreshold"):
-      Imgproc.adaptiveThreshold(self, _, maxValue, method.cvValue, kind, blockSize, c)
+      Imgproc.adaptiveThreshold(self, _, maxValue, method.cvValue, mode.cvValue, blockSize, c)
 
   /** Mirrors the image across an axis — see [[Flip]]. */
   def flip(flip: Flip): Managed[Mat] =
@@ -294,36 +311,23 @@ extension (self: Mat)
 
   /** Rotates by an arbitrary angle (degrees, counter-clockwise) about the centre, **expanding the canvas so
     * no corner is clipped**. `scale` zooms at the same time. The exposed border is filled per `border`.
+    *
+    * The fill is named `color` here just as in [[border]], and the `Constant` default — where the filters
+    * default to [[BorderType.Reflect101]] — is deliberate: a filter reflects so the kernel's support region
+    * stays *inside* the image content, which avoids edge ringing; a geometric transform exposes pixels that
+    * were never in the frame at all, and there a reflected or replicated edge would smear the image's own
+    * content into the border. A constant outside colour (black, or white for a scanned page) reads as
+    * background instead.
     */
   def rotated(
       degrees: Double,
       scale: Double = 1.0,
       interpolation: Interpolation = Interpolation.Linear,
       border: BorderType = BorderType.Constant,
-      borderValue: Scalar = Scalar.Black
+      color: Scalar = Scalar.Black
   ): Managed[Mat] =
     require(scale > 0, s"rotated scale must be positive, got $scale")
-    val w = self.cols
-    val h = self.rows
-    // getRotationMatrix2D gives a 2x3 affine about the centre; we widen the destination to the rotated
-    // bounding box and shift the translation column so the whole image lands inside it.
-    Managed.use(Imgproc.getRotationMatrix2D(Point(w / 2.0, h / 2.0).toCv, degrees, scale)): m =>
-      val cos = math.abs(m.get(0, 0)(0))
-      val sin = math.abs(m.get(0, 1)(0))
-      val newW = math.round(h * sin + w * cos).toInt
-      val newH = math.round(h * cos + w * sin).toInt
-      m.put(0, 2, m.get(0, 2)(0) + (newW - w) / 2.0)
-      m.put(1, 2, m.get(1, 2)(0) + (newH - h) / 2.0)
-      Mats.produce("warpAffine"): dst =>
-        Imgproc.warpAffine(
-          self,
-          dst,
-          m,
-          Size(newW.toDouble, newH.toDouble).toCv,
-          interpolation.cvValue,
-          border.cvValue,
-          borderValue.toCv
-        )
+    warpAboutCenter(self, degrees, scale, expandCanvas = true, interpolation, border, color, "warpAffine")
 
   /** Removes lens distortion using calibrated camera [[Intrinsics]] — the barrel/pincushion bend a real lens
     * adds is mapped back out, so straight edges in the world come back straight. A no-op (a plain copy) when
@@ -386,9 +390,15 @@ extension (self: Mat)
     Mats.produce("absdiff")(Core.absdiff(self, other, _))
 
   /** A binary mask (`CV_8UC1`, 0 or 255) of the pixels whose every channel lies within `[lo, hi]`. The core
-    * of colour segmentation — usually run on an HSV image.
+    * of colour segmentation — usually run on an HSV image. `lo` must not exceed `hi` in any channel; checked
+    * here, per [[extractChannel]]'s index precheck, because OpenCV reports an inverted range only as an empty
+    * mask — a plausible-looking result that is silently wrong.
     */
   def inRange(lo: Scalar, hi: Scalar): Managed[Mat] =
+    require(
+      lo.v0 <= hi.v0 && lo.v1 <= hi.v1 && lo.v2 <= hi.v2 && lo.v3 <= hi.v3,
+      s"inRange needs lo <= hi channel by channel, got lo=$lo hi=$hi"
+    )
     Mats.produce("inRange")(Core.inRange(self, lo.toCv, hi.toCv, _))
 
   /** Keeps this image only where `mask` (`CV_8UC1`) is non-zero; the rest becomes black. `mask` is borrowed.
@@ -440,28 +450,6 @@ extension (self: Mat)
   def colorMap(map: Colormap): Managed[Mat] =
     Mats.produce("applyColorMap")(Imgproc.applyColorMap(self, _, map.cvValue))
 
-  /** Stylisation — a smooth, painterly cartoon look via edge-aware smoothing. Needs 8-bit 3-channel input. */
-  def stylize(strength: Float = 60, detail: Float = 0.45f): Managed[Mat] =
-    Mats.produce("stylization")(Photo.stylization(self, _, strength, detail))
-
-  /** A colour pencil-sketch rendering. Needs 8-bit 3-channel input. */
-  def pencilSketch(strength: Float = 60, detail: Float = 0.07f, shade: Float = 0.02f): Managed[Mat] =
-    Managed.use(Mat()): grayscale =>
-      Mats.produce("pencilSketch")(colour =>
-        Photo.pencilSketch(self, grayscale, colour, strength, detail, shade)
-      )
-
-  /** Detail enhancement — boosts local contrast and texture. Needs 8-bit 3-channel input. */
-  def detailEnhance(strength: Float = 10, detail: Float = 0.15f): Managed[Mat] =
-    Mats.produce("detailEnhance")(Photo.detailEnhance(self, _, strength, detail))
-
-  /** Edge-preserving smoothing — flattens texture while keeping edges (the basis of the painterly filters).
-    */
-  def edgePreserving(strength: Float = 60, detail: Float = 0.4f): Managed[Mat] =
-    Mats.produce("edgePreservingFilter")(
-      Photo.edgePreservingFilter(self, _, Photo.RECURS_FILTER, strength, detail)
-    )
-
   /** Inpaints the region under `mask` (`CV_8UC1`, non-zero = repair) from its surroundings — remove a
     * scratch, an object, or a watermark. `mask` is borrowed.
     */
@@ -476,91 +464,6 @@ extension (self: Mat)
     Mats.produce("seamlessClone")(
       Photo.seamlessClone(self, background, mask, center.toCv, _, Photo.NORMAL_CLONE)
     )
-
-  /** Sepia tone, via a colour matrix. */
-  def sepia: Managed[Mat] =
-    Managed.use(Mat(3, 3, CvType.CV_32F)): m =>
-      m.put(0, 0, 0.131, 0.534, 0.272, 0.168, 0.686, 0.349, 0.189, 0.769, 0.393)
-      Mats.produce("sepia")(Core.transform(self, _, m))
-
-  /** Gamma correction: `g` < 1 darkens the mid-tones, `g` > 1 lifts them. */
-  def gamma(g: Double): Managed[Mat] =
-    require(g > 0, s"gamma must be positive, got $g")
-    lut(Array.tabulate(256)(i => math.round(math.pow(i / 255.0, 1.0 / g) * 255).toInt.min(255).max(0)))
-
-  /** Posterises to `levels` tones per channel. */
-  def posterize(levels: Int): Managed[Mat] =
-    require(levels >= 2 && levels <= 256, s"levels must be in [2, 256], got $levels")
-    val step = 255.0 / (levels - 1)
-    lut(Array.tabulate(256)(i => (math.round(i / step) * step).round.toInt.min(255)))
-
-  /** Emboss, via a directional convolution. */
-  def emboss: Managed[Mat] =
-    Managed.use(Mat(3, 3, CvType.CV_32F)): k =>
-      k.put(0, 0, -2.0, -1.0, 0.0, -1.0, 1.0, 1.0, 0.0, 1.0, 2.0)
-      Mats.produce("emboss")(Imgproc.filter2D(self, _, OutputDepth.SameAsSource.cvValue, k))
-
-  /** Adjusts saturation: `factor` > 1 is more vivid, `< 1` toward grey, `0` fully grey (still 3-channel). */
-  def saturate(factor: Double): Managed[Mat] =
-    require(factor >= 0, s"saturation factor cannot be negative, got $factor")
-    cvtColor(ColorConversion.BgrToGray)
-      .pipe(_.cvtColor(ColorConversion.GrayToBgr))
-      .use(grey => addWeighted(factor, grey, 1 - factor))
-
-  /** Colour temperature: `shift` > 0 warms (more red), `< 0` cools (more blue), in `[-1, 1]`. */
-  def temperature(shift: Double): Managed[Mat] =
-    require(shift >= -1 && shift <= 1, s"temperature shift must be in [-1, 1], got $shift")
-    Managed.use(Mat(3, 3, CvType.CV_32F)): m =>
-      m.put(0, 0, 1 - 0.3 * shift, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1 + 0.3 * shift)
-      Mats.produce("temperature")(Core.transform(self, _, m))
-
-  /** A 256-entry lookup table applied to every channel — the engine behind [[gamma]] and [[posterize]]. */
-  private def lut(table: Array[Int]): Managed[Mat] =
-    Managed.use(Mat(1, 256, CvType.CV_8UC1)): lookup =>
-      lookup.put(0, 0, table.map(_.toByte))
-      Mats.produce("LUT")(Core.LUT(self, lookup, _))
-
-  /** Detects the dominant text skew and rotates the image upright — the classic OCR pre-step. Works on any
-    * image: it binarises internally to find the text pixels, fits a minimum-area rectangle to them, and
-    * rotates by that tilt. The exposed corners are filled white, and a detected skew beyond `maxAngle` is
-    * treated as a misread and left alone (a page of large graphics can fool the estimate).
-    */
-  def deskew(maxAngle: Double = 45.0): Managed[Mat] =
-    require(maxAngle > 0 && maxAngle <= 90, s"maxAngle must be in (0, 90], got $maxAngle")
-    // The scope owns the working Mats; the rotated result this returns is allocated outside it and escapes.
-    Managed.scope: own =>
-      // Otsu-inverted, so the text becomes white and `findNonZero` reads the ink rather than the page.
-      val bin = own.adopt(
-        Mats.grayscale(self).pipe(_.threshold(0, 255, Threshold.otsu(Threshold.Mode.BinaryInv))._1)
-      )
-      val coords = own(Mat())
-      Cv.orThrow("deskew")(Core.findNonZero(bin, coords))
-      if coords.rows == 0 then Managed(self.clone()) // a blank page — nothing to straighten
-      else
-        val pts = own(org.opencv.core.MatOfPoint2f())
-        Cv.orThrow("deskew")(coords.convertTo(pts, CvType.CV_32F))
-        val skew = normalizeSkew(Cv.orThrow("deskew")(Imgproc.minAreaRect(pts)).angle)
-        if math.abs(skew) < 0.1 || math.abs(skew) > maxAngle then Managed(self.clone())
-        else deskewRotate(self, skew)
-
-  /** Folds a `minAreaRect` angle into the equivalent tilt in `(-45, 45]`. */
-  private def normalizeSkew(angle: Double): Double =
-    val a = angle % 90.0
-    if a > 45.0 then a - 90.0 else if a <= -45.0 then a + 90.0 else a
-
-  /** Rotates `mat` by `degrees` about its centre, keeping the frame size, white outside. */
-  private def deskewRotate(mat: Mat, degrees: Double): Managed[Mat] =
-    Managed.use(Imgproc.getRotationMatrix2D(Point(mat.cols / 2.0, mat.rows / 2.0).toCv, degrees, 1.0)): m =>
-      Mats.produce("deskew"): dst =>
-        Imgproc.warpAffine(
-          mat,
-          dst,
-          m,
-          Size(mat.cols.toDouble, mat.rows.toDouble).toCv,
-          Interpolation.Linear.cvValue,
-          BorderType.Constant.cvValue,
-          Scalar.White.toCv
-        )
 
   /** Builds a `radius`-derived structuring element, runs `f` with it, and frees it — the one place morphology
     * allocates a kernel.
@@ -596,118 +499,48 @@ extension (self: Managed[Mat])
     try f(self.get)
     finally self.release()
 
-/** Helpers that do not belong on a Mat. */
-object Mats:
-
-  /** Runs `stages` in order, releasing each intermediate as soon as the next stage has consumed it.
-    *
-    * `src` is borrowed and never released — it belongs to whoever created it. Everything the stages allocate
-    * except the final result is released, including when a stage throws. Equivalent to a fold of [[pipe]],
-    * which is exactly how it is implemented; it exists because a long pipeline reads better as a list of
-    * stages than as a chain of nested lambdas.
-    *
-    * {{{
-    * Mats.chain(frame)(
-    *   _.cvtColor(ColorConversion.BgrToGray),
-    *   _.gaussianBlur(Size(5, 5), 1.5),
-    *   _.canny(50, 150)
-    * )
-    * }}}
-    */
-  def chain(src: Mat)(stages: (Mat => Managed[Mat])*): Managed[Mat] =
-    require(
-      stages.nonEmpty,
-      "chain needs at least one stage: with none there is no owned Mat to return, and returning the " +
-        "source would hand back something the caller does not own"
-    )
-    stages.tail.foldLeft(stages.head(src))(_.pipe(_))
-
-  /** Allocates the destination, runs the native call, and wraps the result.
-    *
-    * Private, and the single place a destination Mat is created, so the ownership contract is enforced in one
-    * spot rather than at every operation in this file. If the native call throws, the destination is released
-    * before the exception propagates — otherwise every failed operation would leak a Mat that no caller ever
-    * saw and therefore could not free.
-    */
-  private[scalacv] def produce(operation: String)(fill: Mat => Unit): Managed[Mat] =
-    val dst = Mat()
-    try
-      Cv.orThrow(operation)(fill(dst))
-      Managed(dst)
-    catch
-      case e: Throwable =>
-        dst.release()
-        throw e
-
-  /** A single-channel greyscale version of `mat`, owned by the caller.
-    *
-    * Almost every algorithm that is not about colour — corner detection, optical flow, stereo matching, ORB,
-    * template differencing, chessboard detection, deskewing — starts by reducing to one channel, and each has
-    * to cope with being handed an image that is *already* one channel. This is that step, in one place: it
-    * used to be copied verbatim into seven files, which is seven chances for one of them to drift on the
-    * question below and no way to notice.
-    *
-    * The question is what to do when the input is already grey, and the answer is **clone**, not "hand the
-    * receiver back". Every op in this file returns a Mat the caller owns and must release; a `Managed`
-    * wrapping the borrowed receiver would look identical at the call site and would free an image belonging
-    * to someone else the moment the `use` block ended — a caller's frame, a detector's input. One extra copy
-    * on an already-grey image is the price of a uniform ownership rule, and the alternative is a
-    * use-after-free that only appears on greyscale input.
-    *
-    * `channels >= 3` rather than `== 3`: a BGRA frame converts through the same `BGR2GRAY`, which ignores the
-    * fourth channel.
-    */
-  private[scalacv] def grayscale(mat: Mat): Managed[Mat] =
-    if mat.channels >= 3 then mat.cvtColor(ColorConversion.BgrToGray) else Managed(mat.clone())
-
-  /** Reads the top-left `r`×`c` block of a `CV_64F` Mat into plain Scala rows — for lifting a small solver
-    * result (a rotation, a camera matrix) out of native memory into immutable data. The Mat is borrowed.
-    */
-  private[scalacv] def readMatrix(mat: Mat, r: Int, c: Int): Seq[Seq[Double]] =
-    (0 until r).map(i => (0 until c).map(j => mat.get(i, j)(0)))
-
-  /** Reads the first `r` entries of a `CV_64F` column vector into a plain Scala `Seq` — the companion to
-    * [[readMatrix]] for a translation or similar single-column result. The Mat is borrowed.
-    */
-  private[scalacv] def readColumn(mat: Mat, r: Int): Seq[Double] =
-    (0 until r).map(i => mat.get(i, 0)(0))
-
-  /** The bounding boxes of the blobs in a binary mask (`CV_8UC1`, 0/255), boxes smaller than `minArea`
-    * dropped, largest first. The shared tail of every foreground-mask pipeline (motion, screen diff, obstacle
-    * detection): find the contours, box them, filter, sort. The mask is borrowed; the result is plain data.
-    * The *cleanup* step in front of this (dilate, open or close, and at what radius) is deliberately left to
-    * the caller — those are different operations chosen per pipeline, not drift.
-    */
-  private[scalacv] def blobs(mask: Mat, minArea: Int): Seq[Rect] =
-    mask.findContours().map(_.boundingRect).filter(_.area >= minArea).sortBy(-_.area)
-
-  /** The inverse of [[readColumn]]: `values` as a caller-owned `n`×1 `CV_64F` Mat, for handing a small vector
-    * — a Rodrigues rotation, a translation — back to a native solver.
-    *
-    * The write is guarded because it is the one step that can fail after the allocation: between a bare
-    * `Mat(...)` and the caller taking ownership there is nobody to free it, so a throwing `put` would strand
-    * a native buffer no one ever saw.
-    */
-  private[scalacv] def column(values: Seq[Double]): Mat =
-    require(values.nonEmpty, "a column Mat needs at least one value")
-    val m = Mat(values.size, 1, CvType.CV_64F)
-    try
-      m.put(0, 0, values*): Unit
-      m
-    catch
-      case e: Throwable =>
-        m.release()
-        throw e
-
-  /** Shared kernel validation. OpenCV's own check lives in native code and aborts with a `CvException`
-    * quoting a C++ expression; failing here names the parameter the caller actually passed.
-    */
-  private[scalacv] def requireKernel(op: String, kernel: Size, allowZero: Boolean): Unit =
-    val w = kernel.width.toInt
-    val h = kernel.height.toInt
-    val zero = allowZero && w == 0 && h == 0
-    val hint = if allowZero then " (or Size(0, 0) to derive it from sigma)" else ""
-    require(
-      zero || (w > 0 && h > 0 && w % 2 == 1 && h % 2 == 1),
-      s"$op needs an odd, positive kernel$hint, got $kernel"
-    )
+/** The one place a `getRotationMatrix2D` + `warpAffine` rotation about the image centre is assembled — shared
+  * by [[rotated]] here and `deskew` in Deskew.scala, which differ only in canvas policy:
+  * `expandCanvas = true` widens the destination to the rotated bounding box so no corner is clipped; `false`
+  * keeps the source's frame size (a deskew must not resize the page it is correcting).
+  *
+  * getRotationMatrix2D gives a 2x3 affine about the centre; with an expanded canvas the translation column is
+  * shifted so the whole rotated image lands inside it. The rotation matrix is borrowed from `Managed.use` and
+  * freed before this returns; only the produced destination escapes.
+  *
+  * A plain function rather than an extension member because it never touches the receiver — the source Mat
+  * arrives as `src` — and `private[scalacv]` rather than `private` so Deskew.scala can call it; the cohesion
+  * call (recorded in Deskew.scala's header) is that one shared rotation beats two copies of the same geometry
+  * drifting apart.
+  */
+private[scalacv] def warpAboutCenter(
+    src: Mat,
+    degrees: Double,
+    scale: Double,
+    expandCanvas: Boolean,
+    interpolation: Interpolation,
+    border: BorderType,
+    color: Scalar,
+    op: String
+): Managed[Mat] =
+  val w = src.cols
+  val h = src.rows
+  Managed.use(Imgproc.getRotationMatrix2D(Point(w / 2.0, h / 2.0).toCv, degrees, scale)): m =>
+    val (newW, newH) =
+      if expandCanvas then
+        val cos = math.abs(m.get(0, 0)(0))
+        val sin = math.abs(m.get(0, 1)(0))
+        (math.round(h * sin + w * cos).toInt, math.round(h * cos + w * sin).toInt)
+      else (w, h)
+    m.put(0, 2, m.get(0, 2)(0) + (newW - w) / 2.0)
+    m.put(1, 2, m.get(1, 2)(0) + (newH - h) / 2.0)
+    Mats.produce(op): dst =>
+      Imgproc.warpAffine(
+        src,
+        dst,
+        m,
+        Size(newW.toDouble, newH.toDouble).toCv,
+        interpolation.cvValue,
+        border.cvValue,
+        color.toCv
+      )

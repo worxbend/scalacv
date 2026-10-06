@@ -179,6 +179,42 @@ class GraphicsDeepTest extends munit.FunSuite:
     val turned = Picture.rectangle(Rect(0, 0, 20, 20)).rotate(90, about = Point(10, 10)).bounds.get
     assertBounds(turned, 0, 0, 20, 20)
 
+  test("a rotated circle's bounds keep both axes — the corners must not collapse onto the rotation line"):
+    // A circle is rotation-invariant: rotating about its own centre changes nothing, so the bounds are the
+    // centre ± the radius. The previous implementation transformed the two bbox *corners*, which at 45° map
+    // onto a single line — the width collapsed to zero while the full circle was still drawn.
+    val b = Picture.circle(Point(50, 50), 20).rotate(45, about = Point(50, 50)).bounds.get
+    assertBounds(b, 30, 30, 70, 70)
+
+  test("a rotated circle's bounds still cover every painted pixel"):
+    // Rotated about a point that is not the centre, so the centre genuinely moves. The geometry bounds
+    // describe the circle, so the stroke (1 px) and antialiasing may paint a couple of pixels outside —
+    // the tolerance is exactly that, no more.
+    val pic = Picture
+      .circle(Point(50, 50), 20)
+      .strokeColor(Color.White)
+      .noFill
+      .rotate(30, about = Point(20, 20))
+    val b = pic.bounds.get
+    val img = pic.render(100, 100, Color.Black)
+    try
+      val outside =
+        for
+          y <- 0 until 100
+          x <- 0 until 100
+          if px(img, x, y).sum > 128
+          if x < b.minX - 2 || x > b.maxX + 2 || y < b.minY - 2 || y > b.maxY + 2
+        yield (x, y)
+      assert(outside.isEmpty, s"painted pixels escaped the bounds (±2px ink): ${outside.take(5)}")
+    finally img.close()
+
+  test("rotated text's bounds are the axis-aligned glyph box at the rotated anchor"):
+    // putText cannot rotate: the glyphs are drawn axis-aligned wherever the anchor lands, so the bounds are
+    // that box — not a rotated glyph quad. 90° about the origin maps (x, y) to (-y, x) (y is down).
+    val m = Draw.textSize("hi", Font.Simplex, 1.0)
+    val b = Picture.text("hi", Point(100, 60)).fontScale(1.0).rotate(90, about = Point(0, 0)).bounds.get
+    assertBounds(b, -60.0, 100.0 - m.size.height, -60.0 + m.size.width, 100.0 + m.baseline)
+
   test("above centres the lower picture under the upper one, a gap below it"):
     val wide = Picture.rectangle(Rect(0, 0, 40, 10))
     val narrow = Picture.rectangle(Rect(0, 0, 10, 10))
@@ -262,8 +298,8 @@ class GraphicsDeepTest extends munit.FunSuite:
     val opaque = Image.blank(40, 40, Scalar.Black, channels = 4).draw(square.fillColor(Color.White).noStroke)
     try
       assertEquals(opaque.channels, 4)
-      // The alpha channel is deliberately not asserted: Color.toScalar carries no alpha, so what lands there
-      // is not part of the contract.
+      // The alpha channel is deliberately not asserted: Color.toBgrScalar carries no alpha, so what lands
+      // there is not part of the contract.
       val p = px(opaque, 20, 20)
       assert(p.take(3).forall(_ == 255.0), s"the colour channels should be white, got ${p.toList}")
     finally opaque.close()

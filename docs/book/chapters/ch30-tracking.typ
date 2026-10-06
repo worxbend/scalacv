@@ -26,7 +26,8 @@ behind a pillar stops producing detections, and a tracker that models motion car
 across the gap and picks it up on the far side. And a motion model smooths the jitter that makes a
 detector's box wobble by several pixels even on a stationary object.
 
-scalacv puts all of this in one file, `vision/src/scalacv/Tracking.scala`, so every type in this
+scalacv puts all of this in the `scalacv.vision` package --- `Tracker.scala`, `Kalman.scala` and
+`ObjectTracker.scala`, one type per file --- so every type in this
 chapter needs `scalacv-vision` on the classpath beside `scalacv` --- the same module as the detectors
 of Chapters 24 to 29, and as the `MotionDetector` of Chapter 21. It arrives in three layers that
 build on each other: a `Kalman` filter that models one moving point, a `Tracker` that follows one
