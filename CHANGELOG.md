@@ -6,6 +6,20 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-07
+
+### Security
+- Updated website transitive dependencies: `serialize-javascript` 7.1.2, `brace-expansion` 5.0.12,
+  `proxy-addr` 2.0.8, `shell-quote` 1.12.0, `compression` 1.8.2, `joi` 17.13.8,
+  `source-map-js` 1.2.2 and `fast-uri` 3.1.8. These updates address their reviewed advisories;
+  other website dependency audit findings remain.
+
+### Internal
+- Updated the pinned `coursier/setup-action` to 3.0.4 and the external native RSS stress driver to
+  JDK 25, while preserving the Java 17 consumer and bytecode floor.
+- Optimized website logos and the social-card image without changing their decoded pixels or SVG
+  accessibility metadata.
+
 ## [0.4.0] — 2026-10-07
 
 ### Breaking
