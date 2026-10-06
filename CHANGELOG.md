@@ -6,6 +6,8 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-07
+
 ### Breaking
 - `Video.frames` and ZIO `frameStream` now yield `BorrowedMat`, a liveness-checked view over the
   reused decode buffer. Use `frame.mat` for Mat-based operations inside the loop; use `framesCopied`
@@ -24,13 +26,25 @@ All notable changes to scalacv are recorded here. The format follows
 - `pencilSketchBoth` retains both native sketch outputs instead of discarding the grayscale result.
 - Typed `PnpSolver` and shared ScalaCV point conversion at the PnP native boundary.
 - ZIO `frameStream` accepts `attemptsPerFrame`, sharing the synchronous reader's bounded retry policy.
+- Pure, validated `RigidTransform` supplies composition, inverse, point mapping and stable Rodrigues
+  conversion; `Pose3D`, `CameraPose` and `CameraMotion` expose frame-labelled transform views.
+- Backend-neutral `Renderer`, `RenderPrimitive`, `PictureStyle`, `TextMeasurer` and `PictureLayout`;
+  the explicit `OpenCvRenderer` preserves existing raster and Image-consumption behavior.
 
 ### Fixed
-- Rotated circle bounds retain both axes, and text bounds match axis-aligned rendering.
+- Rotated circle and rectangle bounds enclose the full geometry; text bounds match axis-aligned
+  rendering. Rectangle paths and rounded rectangles widen edge sums before integer overflow.
+- `Size` rejects non-finite extents while preserving fractional geometry and raster rounding rules.
+  Pose value constructors reject malformed, non-finite or non-rigid transforms; composition and inverse
+  stabilize computed rotations instead of rejecting accepted near-orthogonal inputs.
 - `ObjectTracker` rejects invalid confirmation thresholds and updates after close. Head-pose defaults
   use `Intrinsics.approx` consistently. Intrinsics allocations release on fill failure.
 - SFace downloads use verified Git LFS media URLs; feature decoding checks embedding shape. Shared
-  model loading validates files and rejects null/empty native handles.
+  model loading validates files, rejects null/empty native handles, and releases handles if validation
+  throws while preserving the typed native-error channel.
+- Closed frame sources reject reads before JNI. Borrowed-frame documentation distinguishes sequential
+  liveness checks from concurrent lifetime locking and the unchecked raw-Mat escape hatch.
+- PnP solver documentation reflects OpenCV's DLS/UPnP-to-EPnP fallback and IPPE point requirements.
 - Image, contour, drawing, effect, vision and graph boundaries reject invalid inputs before JNI;
   geometry arithmetic and transform conventions have regression coverage.
 
@@ -38,6 +52,13 @@ All notable changes to scalacv are recorded here. The format follows
 - Split effects, deskew, Mat helpers, codecs, recording, pose estimation, head pose and tracking into
   focused files without changing their Scala packages. Shared preconditions and native scopes replace
   duplicated guards and cleanup islands.
+- Vision/graphs suites run in their owning test modules; integration, property, API and POM gates
+  remain in core. Shared test settings reject empty discovery, and CI/release run every owning suite.
+- Scene data uses immutable style overrides instead of captured functions; native drawing and
+  text-dependent layout are separate from the reusable scene model.
+- Corrected module imports and API links to the published vision/graphs packages; preserved the borrowing
+  guide anchor. The website typecheck unsets its preset's removed TypeScript `baseUrl` option and keeps
+  the `@site/*` alias explicit.
 - Added borrowed-frame lifecycle, validation and native RSS regressions, including ZIO scope cleanup;
   refreshed public API goldens and migrated documentation examples.
 

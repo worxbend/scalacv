@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 import org.opencv.calib3d.Calib3d

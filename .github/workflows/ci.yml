@@ -48,7 +48,9 @@ jobs:
         # `+`-separated, not space-separated: `test` is a Mill *command*, so in
         # `./mill core.test zio.test examples.test` the later targets are passed to core.test as munit
         # test-name filters (matching nothing) and zio/examples never run at all -- green in 2 s.
-        run: ./mill core.test + zio.test + examples.test
+        # vision/graphs run their owning suites; core keeps the integration/property/API/POM gates.
+        # ScalacvTests rejects empty suite discovery instead of silently passing an unwired module.
+        run: ./mill core.test + vision.test + graphs.test + zio.test + examples.test
 
       - name: Docs snippets still compile
         # The docs are a gate, not a courtesy: a code change that breaks an example fails here.
@@ -198,7 +200,7 @@ jobs:
         # (the build header) is enough; the point is the architecture, not another JDK rung.
         # `+`-separated for the same reason as the build matrix's Test step. examples.test is
         # included so the QR/ArUco/Haar/Canny end-to-end assertions also run on arm64.
-        run: ./mill core.test + zio.test + examples.test
+        run: ./mill core.test + vision.test + graphs.test + zio.test + examples.test
 
   publish-shape:
     name: Published artifact shape

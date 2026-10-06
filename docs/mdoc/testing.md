@@ -16,6 +16,26 @@ OpenCv.load()
 The techniques below assume you know how `Image` ownership works — a transform *consumes* its receiver, a query borrows it, a terminal releases it. If any of that is surprising, read [Mat lifecycle](/mat-lifecycle) first; it explains the move semantics these tests deliberately exercise.
 :::
 
+## Run the owning test module
+
+Run every test module from the repository root:
+
+```sh
+./mill --no-server -j 1 core.test + vision.test + graphs.test + zio.test + examples.test + leaks.test
+```
+
+The `+` separators matter: `test` is a Mill command, so space-separated targets can be interpreted as test-name filters instead of running the other modules. `-j 1` keeps the full native/RSS run sequential; `--no-server` avoids sharing a long-lived Mill worker with another build.
+
+Choose the module that owns the suite when running a targeted regression:
+
+```sh
+./mill --no-server -j 1 core.test.testOnly scalacv.FrameSourceSafetyTest
+./mill --no-server -j 1 vision.test.testOnly scalacv.vision.RigidPoseInteropTest
+./mill --no-server -j 1 graphs.test.testOnly scalacv.RendererContractTest
+```
+
+Vision and graphics unit suites live in `vision.test` and `graphs.test`. Core retains its unit tests, cross-module integration and ownership/property tests, and the public API/POM gates. Suite package names do not determine module ownership: a suite in package `scalacv` can belong to `vision.test` or `graphs.test`. The build rejects empty suite discovery and forks each MUnit suite into its own JVM so a native crash cannot erase another suite's results. The RSS canaries remain in the separate `leaks.test` module.
+
 ## A first test, end to end
 
 Before the theory, here is the whole shape of a scalacv test in miniature: **draw** a scene with known geometry, **run** the code under test, then **assert** on a value you can predict. No files, no golden image, no platform assumptions.

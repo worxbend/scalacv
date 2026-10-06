@@ -60,8 +60,7 @@ final class ObjectTracker private (
   /** Advances every track, associates `detections` to them, and returns the tracks confirmed this frame (seen
     * at least `minHits` times and matched to a detection this frame), each with its stable id.
     *
-    * @throws IllegalStateException
-    *   if this tracker has been closed.
+    * Throws `IllegalStateException` if this tracker has been closed.
     */
   def update(detections: Seq[Rect]): Seq[ObjectTrack] =
     if closed then

@@ -16,7 +16,7 @@ Scan the left column for what you saw, then jump to the section:
 | Symptom | Likely cause | Section |
 | --- | --- | --- |
 | `UnsatisfiedLinkError` at load, natives "missing" | no platform-classifier jar on the classpath | [natives missing](#natives-missing) |
-| `Not found: Cascades` / `value faces is not a member of Image` | the symbol lives in a module you have not added | [missing module](#missing-module) |
+| `Not found: Cascades` / `value faces is not a member of Image` | missing module dependency or its wildcard import | [missing module](#missing-module) |
 | Fails only on a headless server / CI, mentions GTK | loaded via `Loader.load` instead of `OpenCv.load()` | [headless / no GTK](#headless) |
 | `IllegalStateException: already been released or consumed` | reused an `Image` a transform already spent | [move semantics](#move-semantics) |
 | `Image.read` returns `Left(DecodeFailed)` on a real file | wrong working directory, or no decoder for the format | [decode failed](#decode-failed) |
@@ -56,7 +56,7 @@ If you would rather not pick, `org.bytedeco:opencv-platform:4.14.0-1.5.14` bundl
 
 ## `Not found: Cascades` / `value faces is not a member of Image` {#missing-module}
 
-These two are **compile** errors, not runtime ones, and they have the same single cause: the symbol you named lives in a scalacv module that is not on your classpath. scalacv is published as four separate artifacts under the group id `com.worxbend`, and only the first is required:
+These two are **compile** errors, not runtime ones. Check both the dependency and the import: the module must be on your classpath, and its wildcard import must bring its types and extensions into scope. scalacv is published as four separate artifacts under the group id `com.worxbend`, and only core is required:
 
 | Artifact | What lives in it |
 | --- | --- |
@@ -65,7 +65,7 @@ These two are **compile** errors, not runtime ones, and they have the same singl
 | `scalacv-graphs` | the `Picture` scene graph, `Color`, `Chart`, animated GIFs |
 | `scalacv-zio` | the ZIO integration (`frameStream` and friends) |
 
-An **object** that is not on the classpath produces the first message — `Not found: Cascades` — which is at least recognisable. An **extension method** produces the second — `value faces is not a member of scalacv.Image` — which is the confusing one, because `import scalacv.*` is already at the top of your file and `Image` is clearly there. That import is doing its job: `faces` is defined in the vision jar as an extension method on `Image`, and an import can only bring into scope what the classpath actually contains. Add the module and the same import starts producing the same method.
+An unavailable **object** produces the first message — `Not found: Cascades`. An unavailable **extension method** produces the second — `value faces is not a member of scalacv.Image` — even when `import scalacv.*` brings `Image` into scope. `faces` belongs to `scalacv.vision`, not core: add `scalacv-vision` to the build and `import scalacv.vision.*` to the source. Adding only the jar or only the import is insufficient.
 
 Add the line for the module you need (delete the ones you do not). In Mill:
 
@@ -91,8 +91,16 @@ libraryDependencies ++= Seq(
 
 Two follow-on details:
 
-- `scalacv-vision` and `scalacv-graphs` put their types in the **same** package as the core, so `import scalacv.*` is still the only import you need — nothing else changes in your file. `scalacv-zio` is the exception: it lives in `scalacv.zio`, so it needs `import scalacv.zio.*` as well.
-- If the module *is* on your classpath and the error persists, check the import is the wildcard `import scalacv.*` and not a single-symbol `import scalacv.Image`. A single-symbol import brings in the type but none of the extension methods defined alongside it.
+- Each module owns a distinct package: `scalacv`, `scalacv.vision`, `scalacv.graphs`, or `scalacv.zio`. Import core plus the modules you use:
+
+```scala mdoc:silent
+import scalacv.*
+import scalacv.vision.* // faces, detectors, tracking, OCR, AR
+import scalacv.graphs.* // Picture, charts, Image drawing extensions
+import scalacv.zio.*    // scoped resources and frame streams
+```
+
+- If the module *is* on your classpath and the error persists, check its wildcard import. `import scalacv.Image` imports the core type but no extension methods; `import scalacv.*` does not import extensions from `scalacv.vision` or `scalacv.graphs`.
 
 The bytedeco natives are a separate question — those give you an `UnsatisfiedLinkError` at run time, not a compile error; see [natives missing](#natives-missing) above. Full build files for both tools are in [Getting Started](/getting-started).
 

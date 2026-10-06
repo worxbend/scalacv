@@ -7,9 +7,9 @@ import org.opencv.core.{Mat, MatOfPoint2f, MatOfPoint3f}
   *
   * The choice is not cosmetic: each solver has its own degenerate-input behaviour (some answer `ok = false`,
   * some abort with a native `CV_Assert` — see [[Pnp.solve]]), so the flag is part of a call site's error
-  * story and deserves a name, not a number. Only the solvers this library has a use for (or a caller is
-  * plausibly choosing between) are listed; the rest of OpenCV's dozen are experimental or deprecated
-  * upstream.
+  * story and deserves a name, not a number. This is a subset of OpenCV's solvers, not its full catalog. See
+  * https://docs.opencv.org/4.x/d5/d1f/calib3d_solvePnP.html for each solver's point-count and geometry
+  * requirements; in particular, DLS and UPnP are fallback aliases in OpenCV, not distinct robust estimators.
   */
 enum PnpSolver(val cvValue: Int):
 
@@ -23,19 +23,23 @@ enum PnpSolver(val cvValue: Int):
     */
   case EPnP extends PnpSolver(Calib3d.SOLVEPNP_EPNP)
 
-  /** Direct least squares with a refinement pass; robust when the points may be mismatched. */
+  /** OpenCV's DLS flag currently falls back to EPnP because the DLS implementation is broken. Prefer
+    * [[EPnP]]; this flag does not add refinement or reject mismatched correspondences.
+    */
   case DLS extends PnpSolver(Calib3d.SOLVEPNP_DLS)
 
-  /** Exhaustive PnP — samples and keeps the best; slower, steadier on noisy correspondences. */
+  /** OpenCV's UPnP flag currently falls back to EPnP because its implementation is broken. It does not
+    * estimate focal length in that fallback; prefer [[EPnP]] with calibrated [[Intrinsics]].
+    */
   case UPnP extends PnpSolver(Calib3d.SOLVEPNP_UPNP)
 
-  /** Infinitesimal plane-based pose — exactly four coplanar points. */
+  /** Infinitesimal plane-based pose — at least four coplanar points, not necessarily a square. */
   case IPPE extends PnpSolver(Calib3d.SOLVEPNP_IPPE)
 
   /** IPPE specialised to a square — faster and steadier on a flat tag; the marker-AR solver. */
   case IppeSquare extends PnpSolver(Calib3d.SOLVEPNP_IPPE_SQUARE)
 
-  /** SQPnP — the most accurate general solver OpenCV ships, at a small extra cost over [[Iterative]]. */
+  /** Globally optimal SQPnP, with at least three point correspondences. */
   case SQPnP extends PnpSolver(Calib3d.SOLVEPNP_SQPNP)
 
 /** The shared `solvePnP` ceremony.

@@ -726,6 +726,30 @@ final class scalacv.Rect
   def width(): int
   def x(): int
   def y(): int
+final class scalacv.RigidTransform
+  extends java.lang.Object
+  implements java.io.Serializable, scala.Product
+  def <init>(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>, scala.collection.immutable.Seq<java.lang.Object>): void
+  def _1(): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
+  def _2(): scala.collection.immutable.Seq<java.lang.Object>
+  def canEqual(java.lang.Object): boolean
+  def compose(scalacv.RigidTransform): scalacv.RigidTransform
+  def copy$default$1(): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
+  def copy$default$2(): scala.collection.immutable.Seq<java.lang.Object>
+  def copy(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>, scala.collection.immutable.Seq<java.lang.Object>): scalacv.RigidTransform
+  def equals(java.lang.Object): boolean
+  def hashCode(): int
+  def inverse(): scalacv.RigidTransform
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def rotation(): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
+  def rotationVector(): scala.collection.immutable.Seq<java.lang.Object>
+  def toString(): java.lang.String
+  def transformPoint(scalacv.Point3): scalacv.Point3
+  def translation(): scala.collection.immutable.Seq<java.lang.Object>
+  def translationNorm(): double
 final class scalacv.Scalar
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -1658,6 +1682,16 @@ object scalacv.Releasable.package
   extends java.lang.Object
   implements java.io.Serializable
   def addOpensRemedy(java.lang.Class<?>): java.lang.String
+object scalacv.RigidTransform
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def apply(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>, scala.collection.immutable.Seq<java.lang.Object>): scalacv.RigidTransform
+  def fromProduct(scala.Product): scalacv.RigidTransform
+  def fromRotationVector(scala.collection.immutable.Seq<java.lang.Object>, scala.collection.immutable.Seq<java.lang.Object>): scalacv.RigidTransform
+  def identity(): scalacv.RigidTransform
+  def scalacv$RigidTransform$$$orthonormalized(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
+  def scalacv$RigidTransform$$$validate(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>, scala.collection.immutable.Seq<java.lang.Object>): void
+  def unapply(scalacv.RigidTransform): scalacv.RigidTransform
 object scalacv.Rotation
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum

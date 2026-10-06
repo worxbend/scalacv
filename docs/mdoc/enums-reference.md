@@ -128,7 +128,7 @@ def caption(img: Image, text: String): Image =
 **`CascadeName`** — bundled Haar cascades for `detectHaar`:
 `FrontalFaceAlt`, `FrontalFaceAlt2`, `FrontalFaceDefault`, `ProfileFace`, `Eye`, `EyeTreeEyeglasses`, `LeftEye2Splits`, `RightEye2Splits`, `Smile`, `FullBody`, `UpperBody`, `LowerBody`, `RussianPlateNumber`.
 
-**`ArucoDictionary`** — marker families: `Dict4x4*`, `Dict5x5*`, `Dict6x6*`, `Dict7x7*` (by count), `ArucoOriginal`, `AprilTag16h5`, and more — see the [API docs](/api/core/scalacv/ArucoDictionary.html).
+**`ArucoDictionary`** — marker families: `Dict4x4*`, `Dict5x5*`, `Dict6x6*`, `Dict7x7*` (by count), `ArucoOriginal`, `AprilTag16h5`, and more — see the [API docs](/api/core/scalacv/vision/ArucoDictionary.html).
 
 **`TrackerKind`** — single-object trackers: `Csrt` (accurate), `Kcf` (fast), `Mil`.
 

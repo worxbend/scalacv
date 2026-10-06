@@ -31,7 +31,7 @@ jobs:
         # "master was green" is not a gate: a tag can be pushed on any commit, and VcsVersion
         # versions whatever it sits on, so the release runs the suite itself. `+`-separated,
         # for the same reason as ci.yml's Test step.
-        run: ./mill core.test + zio.test + examples.test
+        run: ./mill core.test + vision.test + graphs.test + zio.test + examples.test
 
   publish:
     needs: verify

@@ -156,9 +156,10 @@ final case class CaptureInfo(
   * opposite of the contract in `Ops.scala`. Each element is a [[BorrowedMat]] — a liveness-checked view over
   * the iterator's single decode buffer, **spent the moment the iterator advances or the `frames` block
   * returns**. Every access, including the [[BorrowedMat.mat]] escape hatch, throws `IllegalStateException`
-  * once the view is spent, so retention fails loudly instead of reading native memory that has been decoded
-  * over or freed — the use-after-free a raw `Mat` reference used to permit was a SIGSEGV, not an exception,
-  * and it is the same failure mode [[Managed]] guards against.
+  * once the view is spent, so sequential retention of the view fails loudly. The raw Mat returned by `.mat`
+  * is checked only at extraction and remains unsafe to retain. Access must not overlap a pull or close on
+  * another thread/fiber: the liveness check is not a lock. Clone inside the loop before handing pixels to
+  * concurrent work.
   *
   *   - Do read the view, record it through `frame.mat`, and run the `Ops` extensions over `frame.mat`: those
   *     allocate their own destination and never alias the receiver, so `frame.mat.cvtColor(...)` inside the
@@ -249,8 +250,9 @@ object Video:
     * Each element is a [[BorrowedMat]]: a liveness-checked view over that one buffer, valid from the `next()`
     * that produced it until the iterator is next asked for anything — `hasNext` included, since asking
     * decodes over the same memory — and spent for good when this method returns, on the exception path too.
-    * Touching a spent view throws `IllegalStateException`; it cannot read freed memory, because the check
-    * fires before anything crosses JNI. Read the view, record it or run `Ops` operations through `frame.mat`
+    * Sequential access to an already-spent view throws `IllegalStateException` before JNI. Do not race an
+    * access with advancing or closing the source: the check does not lock the buffer. The raw `.mat` result
+    * is checked only at extraction. Read the view, record it or run `Ops` operations through `frame.mat`
     * (those allocate their own output and never alias the receiver), and `frame.clone()` the ones you need to
     * keep — or use [[framesCopied]], which does that for you.
     *
@@ -414,11 +416,14 @@ object Video:
       * native code with no timeout of its own, so an unbounded loop would turn a dead camera into a hung
       * thread that also spins. The first failed read after a success simply starts the count over.
       *
+      * @throws IllegalStateException
+      *   if this source has been closed; rejected before the released buffer can reach the decoder.
       * @throws CvError.NativeCall
       *   if OpenCV fails mid-decode. End-of-stream is `None`, never an error — with exception mode forced off
       *   (see [[FrameSource.apply]]) a clean EOF is a `false` here, not a `CvException`.
       */
     def nextFrame(): Option[BorrowedMat] =
+      if closed then throw IllegalStateException("this frame source has already been closed")
       invalidateCurrent()
       var attempt = 0
       var decoded = false

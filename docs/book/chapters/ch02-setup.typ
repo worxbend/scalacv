@@ -46,20 +46,27 @@ Those names are the `artifactName` values in the project's own `build.mill`, not
 names --- the module directories are `core`, `vision`, `graphs` and `zio`, and without the explicit
 override Mill would have published `com.worxbend:core_3`.
 
-One consequence of the split is worth learning before it bites. `core`, `vision` and `graphs` all
-put their verbs in the same `scalacv` package --- `Cascades`, `Picture` and `Image` are siblings as
-far as the compiler is concerned --- so a single `import scalacv.*` covers all three, but only for
-the jars actually on the classpath. (`scalacv-zio` is the one that does not: its surface lives in
-`scalacv.zio` and needs its own import.) A symbol from a module you have not added does not report a
-missing dependency; it reports a missing member. `Not found: Cascades` is at least recognisable.
-`value faces is not a member of scalacv.Image` is the confusing one, because `import scalacv.*` is
-already at the top of the file and `Image` is plainly there. The import is doing its job: `faces` is
-an extension method defined in the vision jar, and an import can only bring into scope what the
-classpath contains.
+One consequence of the split is worth learning before it bites. Each module owns a distinct
+package: `scalacv`, `scalacv.vision`, `scalacv.graphs`, or `scalacv.zio`. Add the dependency and the
+wildcard import for every layer you use:
+
+#example("Core plus optional layers: keep only the imports whose modules you use.")[
+```scala
+import scalacv.*
+import scalacv.vision.*
+import scalacv.graphs.*
+import scalacv.zio.*
+```
+]
+
+A missing module or import reports a missing symbol or member rather than a missing dependency.
+`Not found: Cascades` is at least recognisable. `value faces is not a member of scalacv.Image` is
+the confusing one, because `import scalacv.*` brings `Image` into scope but cannot activate an
+extension in `scalacv.vision`. Both the vision jar and `import scalacv.vision.*` are required.
 
 #note[
-If a scalacv method the documentation describes will not compile, check your dependency lines before
-you check your spelling. That error is a classpath error wearing a typo's clothes.
+If a scalacv method the documentation describes will not compile, check its dependency and wildcard
+import before you check your spelling. A core import does not import the optional layers.
 ]
 
 #sect("Why there are two dependency lines")

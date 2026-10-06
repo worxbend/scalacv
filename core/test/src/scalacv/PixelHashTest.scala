@@ -6,42 +6,6 @@ import scalacv.vision.*
 import org.opencv.core.{CvType, Mat, Scalar as CvScalar}
 import org.opencv.imgproc.Imgproc
 
-/** The one pixel-exact content hash the test module compares against.
-  *
-  * Every bit-exactness gate in this module — the clone-elimination checks below, the translucent ROI
-  * alpha-blend in `GraphicsAlphaRoiTest`, the roundtrip laws in `PropertyTest` — has to fold pixels the
-  * *same* way, or two of them silently stop comparing what the third compares and the project's "no
-  * optimization without an identical hash" rule quietly weakens. Hence one definition, here, rather than a
-  * private copy per suite.
-  *
-  * Keep this in sync with `BenchImages.hash` in the benchmarks module: that is a deliberate fourth copy,
-  * because the benchmarks module is not on the test classpath and so cannot call this one.
-  */
-object PixelHash:
-
-  /** FNV-1a (a small, fast, well-mixed 64-bit hash) over the raw pixel bytes.
-    *
-    * The bytes are read one row at a time rather than as a single block: an OpenCV `Mat` may be a view into a
-    * larger buffer, in which case its rows are not adjacent in memory and a whole-buffer read would fold in
-    * padding that is not part of the image.
-    */
-  def of(m: Mat): Long =
-    val rowBytes = m.cols * m.elemSize().toInt
-    val buf = new Array[Byte](rowBytes)
-    var h = 0xcbf29ce484222325L
-    var r = 0
-    while r < m.rows do
-      val _ = m.get(r, 0, buf)
-      var i = 0
-      while i < rowBytes do
-        h = (h ^ (buf(i) & 0xffL)) * 0x100000001b3L
-        i += 1
-      r += 1
-    h
-
-  /** Same hash, for callers holding an [[Image]] rather than a bare `Mat`. Consumes nothing. */
-  def of(img: Image): Long = of(img.mat)
-
 /** The CI half of the project's perf rule — "no optimization without a bit-identical output hash" — for the
   * clone-elimination benchmarks. `GrayBlurCloneBench` removes the throwaway clone from `Motion.prepare`'s
   * already-grey + blur branch and blurs the borrowed frame directly, but it only *prints* the two pixel

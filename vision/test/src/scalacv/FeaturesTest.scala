@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 /** Unit tests for [[Features]] — ORB detection and cross-image matching. The existing coverage in

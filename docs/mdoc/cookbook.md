@@ -1237,7 +1237,7 @@ val annotated: Either[CvError, Array[Byte]] =
 ### Give every detection its own colour
 
 **Needs `scalacv-graphs`.** The `Color` palette, the `Picture` scene graph, `Chart` and `Animation` all live
-in that module; `import scalacv.*` brings them in once the jar is on the classpath.
+in that module; add its dependency and `import scalacv.graphs.*` alongside the core import.
 
 When a frame has several detections, one green box around all of them tells you nothing about which is which.
 `Color.wheel(n)` returns `n` colours spaced evenly around the hue wheel, so zipping it against your

@@ -69,8 +69,8 @@ final class Managed[A] private (initial: A, releaser: Releasable[A]) extends Aut
 
   /** The underlying OpenCV object.
     *
-    * @throws IllegalStateException
-    *   if it has already been released or consumed. Deliberately eager: the alternative is a SIGSEGV.
+    * Throws `IllegalStateException` if it has already been released or consumed. Deliberately eager: the
+    * alternative is a SIGSEGV.
     */
   def get: A = ref.get match
     case null => throw spentError("using")

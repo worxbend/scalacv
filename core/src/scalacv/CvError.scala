@@ -48,7 +48,7 @@ object CvError:
   /** A camera calibration could not be produced. Either too few views showed the whole calibration target for
     * the solver to be well-posed, or `calibrateCamera` did not converge. This is *data-dependent* — it turns
     * on how many boards the capture actually saw, not on a programmer error — so it is returned rather than
-    * thrown. See [[Calibration.fromChessboard]].
+    * thrown. See `scalacv.vision.Calibration.fromChessboard`.
     */
   final case class CalibrationFailed(details: String)
       extends CvError(s"camera calibration failed: $details", null)

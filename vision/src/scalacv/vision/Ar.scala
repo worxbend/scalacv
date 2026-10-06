@@ -1,30 +1,29 @@
 package scalacv.vision
 
 import org.opencv.calib3d.Calib3d
-import org.opencv.core.{Mat, MatOfPoint2f, MatOfPoint3f}
+import org.opencv.core.{MatOfPoint2f, MatOfPoint3f}
 
 import scalacv.*
 
-/** A rigid pose: where a marker (or any known object) sits relative to the camera.
+/** An object-to-camera pose: `x_camera = R * x_object + t`.
   *
-  * `rvec` is the rotation in OpenCV's Rodrigues (axis-angle) form and `tvec` the translation, both in the
-  * marker's units. You rarely read these directly — hand the pose back to [[Ar.project]] to draw with it —
-  * but [[distance]] (the length of `tvec`) is the camera-to-marker distance and is often all you want.
+  * `rvec` is a Rodrigues axis-angle vector in radians; `tvec` uses the object's units (metres for a
+  * metre-sized marker). The constructor/accessors stay in OpenCV's familiar vector representation;
+  * [[transform]] supplies shared immutable geometry math without allocating native resources.
   */
 final case class Pose3D(rvec: Seq[Double], tvec: Seq[Double]):
-  // Both vectors are 3-element by definition — Rodrigues is an axis-angle triple and a translation is a
-  // point — and `Pose3D` is public data the docs encourage building by hand from another solver's output.
-  // Without this check a wrong-length vector is not caught anywhere: `distance` quietly returns the norm of
-  // however many numbers it was given, and `rvecMat`/`tvecMat` either pad the missing rows with zeros or
-  // fail much later inside `put`, blaming a line that had nothing to do with the mistake.
-  require(rvec.sizeIs == 3, s"an rvec is an axis-angle triple, got ${rvec.size} values")
-  require(tvec.sizeIs == 3, s"a tvec is a 3D translation, got ${tvec.size} values")
+
+  /** The same object-to-camera mapping as immutable, validated geometry. */
+  val transform: RigidTransform = RigidTransform.fromRotationVector(rvec, tvec)
 
   /** Straight-line distance from camera to object, in the marker's units. */
-  def distance: Double = math.sqrt(tvec.map(t => t * t).sum)
+  def distance: Double = transform.translationNorm
 
-  private[scalacv] def rvecMat: Mat = Mats.column(rvec)
-  private[scalacv] def tvecMat: Mat = Mats.column(tvec)
+object Pose3D:
+
+  /** Wraps an object-to-camera transform; Rodrigues vectors use the principal angle in `[0, pi]`. */
+  def fromTransform(transform: RigidTransform): Pose3D =
+    Pose3D(transform.rotationVector, transform.translation)
 
 /** A detected marker together with the pose recovered for it — what `image.arMarkers` returns. */
 final case class MarkerPose(marker: ArucoMarker, pose: Pose3D):
@@ -88,6 +87,21 @@ object Ar:
     * including when a native call or an allocation throws; the returned [[Point]]s are copies.
     */
   def project(points: Seq[Point3], pose: Pose3D, intrinsics: Intrinsics): Seq[Point] =
+    projectVectors(points, pose.rvec, pose.tvec, intrinsics)
+
+  /** Projects source-frame points through an object-to-camera transform. Translation and points must use the
+    * same units; a monocular motion direction needs scale recovery before metric projection. Native
+    * conversion and ownership are scoped exactly as in the [[Pose3D]] overload.
+    */
+  def project(points: Seq[Point3], transform: RigidTransform, intrinsics: Intrinsics): Seq[Point] =
+    projectVectors(points, transform.rotationVector, transform.translation, intrinsics)
+
+  private def projectVectors(
+      points: Seq[Point3],
+      rotationVector: Seq[Double],
+      translation: Seq[Double],
+      intrinsics: Intrinsics
+  ): Seq[Point] =
     if points.isEmpty then Seq.empty
     else
       Managed.scope: own =>
@@ -95,8 +109,8 @@ object Ar:
         val out = own(MatOfPoint2f())
         val camera = own(intrinsics.cameraMatrix)
         val dist = own(intrinsics.distCoeffs)
-        val rvec = own(pose.rvecMat)
-        val tvec = own(pose.tvecMat)
+        val rvec = own(Mats.column(rotationVector))
+        val tvec = own(Mats.column(translation))
         Cv.orThrow("projectPoints")(Calib3d.projectPoints(obj, rvec, tvec, camera, dist, out))
         // toArray copies the projected corners onto the JVM heap, so this must read `out` before the
         // scope releases it.
@@ -123,7 +137,7 @@ object Ar:
     Seq((0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7))
 
 /** The high-level marker-AR verbs on [[Image]]. Extension methods, not members of [[Image]], so the marker
-  * pipeline lives next to [[Ar]] rather than in the image class; `import scalacv.*` makes
+  * pipeline lives next to [[Ar]] rather than in the image class; `import scalacv.vision.*` makes
   * `image.arMarkers(…)` and the overlays available.
   */
 extension (img: Image)

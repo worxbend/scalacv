@@ -23,8 +23,8 @@ The three steps, and the call that does each:
 | Step | Call | Produces |
 |---|---|---|
 | **Detect** | `image.arucoMarkers` / [`Aruco.detect`](/object-detection#aruco-markers) | `Seq[ArucoMarker]` — id + 4 corners |
-| **Pose** | `image.arMarkers` / [`Ar.estimatePose`](/api/core/scalacv/Ar$.html) | `Seq[MarkerPose]` — marker + [`Pose3D`](/api/core/scalacv/Pose3D.html) |
-| **Project** | [`Ar.project`](/api/core/scalacv/Ar$.html), `drawMarkerAxes`, `drawMarkerCube` | pixel points to draw with |
+| **Pose** | `image.arMarkers` / [`Ar.estimatePose`](/api/core/scalacv/vision/Ar$.html) | `Seq[MarkerPose]` — marker + [`Pose3D`](/api/core/scalacv/vision/Pose3D.html) |
+| **Project** | [`Ar.project`](/api/core/scalacv/vision/Ar$.html), `drawMarkerAxes`, `drawMarkerCube` | pixel points to draw with |
 
 ## The camera model
 
@@ -81,7 +81,7 @@ passed to generation and detection.
 ## Detect and pose in one step
 
 `arMarkers` finds every tag from a dictionary and solves each one's pose, returning a
-[`MarkerPose`](/api/core/scalacv/MarkerPose.html) — the marker plus its [`Pose3D`](/api/core/scalacv/Pose3D.html).
+[`MarkerPose`](/api/core/scalacv/vision/MarkerPose.html) — the marker plus its [`Pose3D`](/api/core/scalacv/vision/Pose3D.html).
 You give it the tag's real side length (metres, conventionally); the pose comes back in that unit, so
 `distance` is a real camera-to-tag distance.
 
@@ -111,7 +111,7 @@ A `MarkerPose` bundles everything the pipeline recovered:
 |---|---|---|
 | `id` | `Int` | the marker's dictionary id |
 | `distance` | `Double` | camera-to-tag distance, in `markerLength`'s unit (exported from the pose) |
-| `pose` | [`Pose3D`](/api/core/scalacv/Pose3D.html) | the full rotation + translation |
+| `pose` | [`Pose3D`](/api/core/scalacv/vision/Pose3D.html) | the full rotation + translation |
 | `marker` | [`ArucoMarker`](/object-detection#aruco-markers) | the raw detection (`id`, 4 `corners`) |
 
 Under the hood this is `solvePnP` with the square-planar `IPPE_SQUARE` solver — faster and steadier for
@@ -185,7 +185,7 @@ display — with no copy.
 
 ## Projecting your own geometry
 
-Both overlays are thin wrappers over [`Ar.project`](/api/core/scalacv/Ar$.html), which maps any set of
+Both overlays are thin wrappers over [`Ar.project`](/api/core/scalacv/vision/Ar$.html), which maps any set of
 3D model points — in the tag's own frame — through a pose and the camera to pixel coordinates you draw
 with the ordinary [drawing verbs](/drawing). The tag's frame has its origin at the marker centre, `x`
 right, `y` up, `z` out of the plane toward the camera. To hang your own model off a tag, project its

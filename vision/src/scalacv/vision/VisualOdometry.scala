@@ -11,7 +11,16 @@ import scalacv.*
   * from a large distant one), so `translation` is a unit direction, not metres. Fuse it with wheel odometry,
   * IMU, or a known baseline to recover scale.
   */
-final case class CameraMotion(rotation: Seq[Seq[Double]], translation: Seq[Double], inliers: Int)
+final case class CameraMotion(rotation: Seq[Seq[Double]], translation: Seq[Double], inliers: Int):
+
+  /** The first-camera-frame to second-camera-frame mapping: `x_2 = R * x_1 + t`.
+    *
+    * Translation from [[VisualOdometry.estimate]] is a unit direction, NOT a metric displacement. This view
+    * does not recover scale: choose a common scale before transforming metric landmarks or composing with
+    * metric [[CameraPose]]/[[Pose3D]] transforms. The original direction is not normalised or otherwise
+    * changed by this wrapper.
+    */
+  val transform: RigidTransform = RigidTransform(rotation, translation)
 
 /** Monocular visual odometry — estimating how the camera moved between two frames from matched point
   * correspondences, via the essential matrix and `recoverPose`.

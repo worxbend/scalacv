@@ -19,7 +19,7 @@ Every operation falls into one of four kinds — knowing which is how you reason
 | **draw** | **consumes**, mutating in place (no copy) | a new `Image` |
 | **terminal** | consumes and **releases** — except `managed`, which consumes but hands ownership on instead of freeing | a result / nothing |
 
-A transform on a consumed image throws — take `.copy` first to branch. Extension verbs from `vision`/`graphs` (faces, AR, OCR, `Picture` drawing) activate with `import scalacv.*` **once the `scalacv-vision` / `scalacv-graphs` jar is on the classpath**. The import cannot conjure a module you have not added as a dependency: if `image.faces(...)` does not resolve, the missing piece is the build file, not the import. See [Getting started](/getting-started).
+A transform on a consumed image throws — take `.copy` first to branch. Extension verbs from `vision`/`graphs` (faces, AR, OCR, `Picture` drawing) require both the corresponding dependency and its import: `scalacv.vision.*` or `scalacv.graphs.*`, alongside `scalacv.*`. If `image.faces(...)` does not resolve, check both the build file and the vision import. See [Getting started](/getting-started).
 
 ## Queries — read without consuming
 

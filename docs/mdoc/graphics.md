@@ -14,8 +14,9 @@ that moment you are only assembling and transforming plain data, so a picture ca
 or laid out as many times as you like without side effects.
 
 :::note[Where this lives]
-`Picture`, `Color`, `Chart`, and `Animation` are in the **`scalacv-graphs`** module. `import scalacv.*`
-brings all of them in, along with the `image.draw(picture)` extension. The module depends only on `core`.
+`Picture`, `Color`, `Chart`, and `Animation` are in the **`scalacv-graphs`** module. Add that dependency
+and `import scalacv.graphs.*` alongside `import scalacv.*` to bring in the types and the
+`image.draw(picture)` extension. The module depends only on `core`.
 :::
 
 ```scala mdoc:invisible
@@ -25,6 +26,35 @@ import scalacv.*
 OpenCv.load()
 lazy val detector: org.opencv.objdetect.FaceDetectorYN = ??? // a YuNet model, from FaceDetect.create
 ```
+
+## Choose a renderer and its text metrics
+
+`render` and `image.draw` retain the OpenCV backend. `renderWith` instead sends the scene to a
+`Renderer` you implement. It receives transformed primitives in painter's order and a resolved style;
+it owns its destination's lifetime. Geometry and traversal do not allocate native objects:
+
+```scala mdoc:silent
+class CommandRenderer extends Renderer:
+  val textMeasurer: TextMeasurer = new TextMeasurer:
+    def measure(text: String, font: Font, scale: Double): TextMetrics =
+      TextMetrics(Size(text.length * 6 * scale, 8 * scale), 2)
+  val commands = scala.collection.mutable.ListBuffer.empty[RenderPrimitive]
+  protected def draw(primitive: RenderPrimitive, style: PictureStyle): Unit =
+    commands += primitive
+    ()
+
+val commandRenderer = new CommandRenderer
+val commandScene = Picture.circle(Point(5, 10), 2).scale(2)
+commandScene.renderWith(commandRenderer)
+assert(commandRenderer.commands.toList == List(RenderPrimitive.Circle(Point(10, 20), 4)))
+```
+
+Use `renderer.layout` (or `new PictureLayout(measurer)`) for bounds, labels, grids, `beside` and
+`above` with that backend's text metrics. Convenience `picture.bounds` and the ordinary layout methods
+still use OpenCV metrics for text. Shape bounds are geometric, not expanded for stroke or antialiasing.
+Text stays axis-aligned at its transformed baseline anchor; its glyph scale follows the scene scale.
+The explicit raster adapter is `OpenCvRenderer.render` / `renderOn`, with the same owned/consumed-image
+contract as the convenience methods.
 
 ## A picture is a value
 
@@ -264,7 +294,7 @@ a filled box around it — so the tag is always legible over a busy frame, and n
 
 `on`/`under` overlay; `at`/`translate`/`rotate`/`scale` move; styling set on a group is a default its members
 inherit unless they override it. On top of that, scalacv adds Doodle-style **layout** — `beside`, `above`,
-and `Picture.grid` — which measure each picture's [bounding box](/api/core/scalacv/Bounds.html) and place
+and `Picture.grid` — which measure each picture's [bounding box](/api/core/scalacv/graphs/Bounds.html) and place
 them relative to one another, so you never hand-compute offsets:
 
 | Combinator | Meaning |
@@ -305,7 +335,7 @@ sheet.render(120, 90, Color.Black).bytes(".png").fold(_.getMessage, b => s"3x2 c
 ### Measuring with `bounds`
 
 `bounds` is what layout uses under the hood, and you can call it yourself to size a canvas or align content.
-It returns `None` for the empty picture (which draws nothing) and a [`Bounds`](/api/core/scalacv/Bounds.html)
+It returns `None` for the empty picture (which draws nothing) and a [`Bounds`](/api/core/scalacv/graphs/Bounds.html)
 otherwise, with `width`, `height`, `centerX`, and `centerY`:
 
 ```scala mdoc
@@ -314,7 +344,7 @@ Picture.circle(Point(50, 50), 30).bounds.map(_.width).getOrElse(0.0)
 
 ## Colour & palettes
 
-[`Color`](/api/core/scalacv/Color.html) is RGBA with named colours, an `hsl` constructor, and a full set of
+[`Color`](/api/core/scalacv/graphs/Color.html) is RGBA with named colours, an `hsl` constructor, and a full set of
 transforms: `lighten`/`darken`/`fadeOut`/`blend`, and `spin`/`complement`/`saturate`/`desaturate` for hue
 work.
 
@@ -395,7 +425,7 @@ Color.Orange.toBgrScalar.toColor == Color.Orange
 
 ## Data visualisation
 
-Because pictures compose, charts are just pictures. [`Chart`](/api/core/scalacv/Chart$.html) covers `bars`,
+Because pictures compose, charts are just pictures. [`Chart`](/api/core/scalacv/graphs/Chart$.html) covers `bars`,
 `line`, `area`, `scatter`, `pie`, and `histogram`. Each returns a `Picture` sized to a `width`×`height` box
 with its origin at the top-left, so you render one standalone or drop it into a corner of a frame with
 `chart.at(Point(x, y))`.

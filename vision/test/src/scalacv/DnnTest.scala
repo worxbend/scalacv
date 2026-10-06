@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 import java.nio.charset.StandardCharsets.UTF_8

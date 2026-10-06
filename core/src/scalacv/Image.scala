@@ -28,7 +28,7 @@ import org.opencv.core.{CvType, Mat}
   *
   * ==Queries borrow, terminals consume==
   *
-  * A **query** ([[width]], [[faces]], [[qrCodes]], [[contours]]) only reads, so it leaves the image alive. A
+  * A **query** ([[width]], `faces`, `qrCodes`, [[contours]]) only reads, so it leaves the image alive. A
   * **terminal** ([[write]], [[bytes]], [[close]]) consumes it and releases the Mat. If a value escapes the
   * chain without ever reaching a terminal it leaks, exactly as a stray [[Managed]] would — so prefer
   * [[Image.reading]], which closes for you even when the body already consumed the image (release is
@@ -40,8 +40,8 @@ import org.opencv.core.{CvType, Mat}
   * `org.opencv.*` call this type does not wrap; [[managed]] hands the whole [[Managed]] over. The high-level
   * API is the pleasant default, not a ceiling. Domain verbs that only *happen* to start from an image — face
   * and marker detection, pose and track overlays, OCR preparation, background replacement — are **extension
-  * methods** brought in with `import scalacv.*`, not members of this class, which is why they are absent
-  * below; they read `image.faces(detector)` all the same.
+  * methods** brought in with `import scalacv.vision.*`, not members of this class, which is why they are
+  * absent below; they read `image.faces(detector)` all the same.
   *
   * ==Failures==
   *
@@ -187,8 +187,8 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
 
   /** Removes lens distortion using calibrated camera [[Intrinsics]], straightening the lines a real lens
     * bends. With an uncalibrated [[Intrinsics.approx]] guess (no distortion) this is a plain copy. Given a
-    * [[Calibration]] value, the `undistort(calibration)` extension overload (in `Calibration.scala`) unwraps
-    * its intrinsics for you.
+    * `scalacv.vision.Calibration` value, the `undistort(calibration)` extension overload (in
+    * `Calibration.scala`) unwraps its intrinsics for you.
     */
   def undistort(intrinsics: Intrinsics): Image = transform(_.undistorted(intrinsics))
 
@@ -277,7 +277,7 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   def channel(index: Int): Image = transform(_.extractChannel(index))
 
   /** False-colours a single-channel image (depth, motion, data) into a heatmap — see [[Colormap]]. Makes the
-    * output of [[StereoDepth]], [[MotionDetector]] and friends actually visible.
+    * output of `scalacv.vision.StereoDepth`, `scalacv.vision.MotionDetector` and friends actually visible.
     */
   def colorMap(map: Colormap): Image = transform(_.colorMap(map))
 

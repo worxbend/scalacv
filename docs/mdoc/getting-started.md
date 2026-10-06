@@ -90,11 +90,11 @@ Which modules do you actually need?
 [Architecture](/architecture#three-modules-split-along-real-lines).
 
 :::note[A missing module looks like a missing method]
-Every module puts its verbs in the same `scalacv` package, so one `import scalacv.*` covers all four
-— but only for the jars that are actually on your classpath. If the compiler says
-`value faces is not a member of Image`, or `Not found: Cascades`, the symbol is not misspelled: it
-lives in `scalacv-vision` (or `scalacv-graphs`) and that dependency line is missing. See
-[Troubleshooting](/troubleshooting).
+Each module has its own package and import: `scalacv.*` for core, `scalacv.vision.*` for vision,
+`scalacv.graphs.*` for graphs, and `scalacv.zio.*` for ZIO. Add both the dependency and its wildcard
+import. If the compiler says `value faces is not a member of Image` or `Not found: Cascades`, check
+that `scalacv-vision` is on the classpath and `import scalacv.vision.*` is in scope; core's import
+alone does not activate vision extensions. See [Troubleshooting](/troubleshooting).
 :::
 
 :::note[If you forget the native lines]

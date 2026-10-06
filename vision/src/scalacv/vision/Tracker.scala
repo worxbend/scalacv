@@ -14,9 +14,10 @@ import scalacv.*
   *
   *   - [[TrackerKind.Csrt]] — the accuracy pick: discriminative correlation filter with channel/spatial
   *     reliability. Slower, but it handles scale change and partial occlusion well.
-  *   - [[Kcf]] — the speed pick: kernelised correlation filter. Fast and steady, but it does not adapt its
-  *     box to scale.
-  *   - [[Mil]] — multiple-instance learning. Robust to small appearance changes; no failure detection.
+  *   - [[TrackerKind.Kcf]] — the speed pick: kernelised correlation filter. Fast and steady, but it does not
+  *     adapt its box to scale.
+  *   - [[TrackerKind.Mil]] — multiple-instance learning. Robust to small appearance changes; no failure
+  *     detection.
   */
 enum TrackerKind:
   case Csrt, Kcf, Mil

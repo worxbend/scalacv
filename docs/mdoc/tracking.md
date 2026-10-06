@@ -6,9 +6,9 @@ box. This page starts from the simplest smoother and builds up to full multi-obj
 
 scalacv gives you three layers, from lowest to highest:
 
-- a [`Kalman`](/api/core/scalacv/Kalman.html) filter — a motion smoother and short-term predictor;
-- a single-object [`Tracker`](/api/core/scalacv/Tracker.html) — model-free CSRT/KCF/MIL tracking;
-- an [`ObjectTracker`](/api/core/scalacv/ObjectTracker.html) — tracking-by-detection with stable ids.
+- a [`Kalman`](/api/core/scalacv/vision/Kalman.html) filter — a motion smoother and short-term predictor;
+- a single-object [`Tracker`](/api/core/scalacv/vision/Tracker.html) — model-free CSRT/KCF/MIL tracking;
+- an [`ObjectTracker`](/api/core/scalacv/vision/ObjectTracker.html) — tracking-by-detection with stable ids.
 
 ```scala mdoc:invisible
 import scalacv.vision.*
@@ -40,7 +40,7 @@ thread, and `close()` (or use `scala.util.Using`) when done.
 
 ## Kalman: smoothing and prediction {#kalman-smoothing-and-prediction}
 
-A [`Kalman`](/api/core/scalacv/Kalman.html) filter models an object's position *and velocity*
+A [`Kalman`](/api/core/scalacv/vision/Kalman.html) filter models an object's position *and velocity*
 `(x, y, vx, vy)`, so it can predict where the object goes next and smooth a noisy measurement toward that
 prediction. The rhythm is always the same two calls:
 
@@ -96,7 +96,7 @@ finally coast.close()
 
 ### Tuning the two noise knobs
 
-[`Kalman.point`](/api/core/scalacv/Kalman.html) takes two parameters that trade responsiveness against
+[`Kalman.point`](/api/core/scalacv/vision/Kalman.html) takes two parameters that trade responsiveness against
 smoothness. They are the whole personality of the filter.
 
 | Parameter | Default | Larger means… |
@@ -117,11 +117,11 @@ handle in scalacv.
 
 ## Tracker: follow one object without re-detecting {#tracker-follow-one-object-without-re-detecting}
 
-A [`Tracker`](/api/core/scalacv/Tracker.html) is *model-free*: you show it a box in one frame and it finds
+A [`Tracker`](/api/core/scalacv/vision/Tracker.html) is *model-free*: you show it a box in one frame and it finds
 that same patch in the next, learning the appearance as it goes. It works on anything — you do not need a
 detector that knows the object's class. This is the tool for "the user clicked a thing, now follow it".
 
-Pick the algorithm with [`TrackerKind`](/api/core/scalacv/TrackerKind.html):
+Pick the algorithm with [`TrackerKind`](/api/core/scalacv/vision/TrackerKind.html):
 
 | `TrackerKind` | Strength | Trade-off | Reports loss? |
 |---|---|---|---|
@@ -203,7 +203,7 @@ the value you show as "3 people entered".
 
 ### What `update` gives back
 
-`update(detections)` returns a `Seq[`[`ObjectTrack`](/api/core/scalacv/ObjectTrack.html)`]` — the tracks
+`update(detections)` returns a `Seq[`[`ObjectTrack`](/api/core/scalacv/vision/ObjectTrack.html)`]` — the tracks
 **confirmed this frame** (seen at least `minHits` times *and* matched to a detection this frame):
 
 | `ObjectTrack` field | Meaning |
@@ -215,7 +215,7 @@ the value you show as "3 people entered".
 
 ### The three tuning knobs
 
-[`ObjectTracker.create`](/api/core/scalacv/ObjectTracker.html) has three parameters that shape how
+[`ObjectTracker.create`](/api/core/scalacv/vision/ObjectTracker.html) has three parameters that shape how
 readily tracks are formed, matched, and dropped:
 
 | Parameter | Default | Effect | Raise it when… |

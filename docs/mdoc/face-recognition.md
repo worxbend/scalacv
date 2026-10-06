@@ -1,10 +1,10 @@
 # Face recognition
 
 [Detection](/object-detection) finds *where* the faces are. **Recognition answers *whose* face it
-is.** scalacv wraps OpenCV's SFace ([`FaceRecognizerSF`](/api/core/scalacv/FaceRecognizer.html)) to
+is.** scalacv wraps OpenCV's SFace ([`FaceRecognizerSF`](/api/core/scalacv/vision/FaceRecognizer.html)) to
 turn an aligned face into a 128-dimensional **embedding** — a fixed-length vector that is close (by
 angle) to other pictures of the same person and far from everyone else. A
-[`Gallery`](/api/core/scalacv/Gallery.html) lets you enrol known people and identify new faces
+[`Gallery`](/api/core/scalacv/vision/Gallery.html) lets you enrol known people and identify new faces
 against them.
 
 The mental model is three steps, and the middle one is the whole trick:
@@ -71,7 +71,7 @@ trip over.
 
 ## From a detected face to an embedding
 
-`embed` takes a [`Face`](/api/core/scalacv/Face.html) (from
+`embed` takes a [`Face`](/api/core/scalacv/vision/Face.html) (from
 [`Image.faces`](/object-detection#faces)) and the frame it came from, aligns and crops the face
 using its five landmarks, and returns the embedding. The image must be the **BGR frame the face was
 detected in** — the landmarks are coordinates into that exact image.

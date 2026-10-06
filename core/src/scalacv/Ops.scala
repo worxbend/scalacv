@@ -49,7 +49,8 @@ import org.opencv.photo.Photo
   *
   * Worth a type of its own rather than a bare `int` because [[OutputDepth.SameAsSource]] is a trap on the
   * commonest input: `Sobel` on an 8-bit unsigned image with `ddepth = -1` clips every negative derivative to
-  * zero, so half of each edge silently disappears. [[Signed16]] then [[convertScaleAbs]] is the standard fix.
+  * zero, so half of each edge silently disappears. [[OutputDepth.Signed16]] then [[convertScaleAbs]] is the
+  * standard fix.
   */
 enum OutputDepth(val cvValue: Int):
 
@@ -331,7 +332,7 @@ extension (self: Mat)
 
   /** Removes lens distortion using calibrated camera [[Intrinsics]] — the barrel/pincushion bend a real lens
     * adds is mapped back out, so straight edges in the world come back straight. A no-op (a plain copy) when
-    * `intrinsics.distortion` is empty. See [[Calibration]].
+    * `intrinsics.distortion` is empty. See `scalacv.vision.Calibration`.
     */
   def undistorted(intrinsics: Intrinsics): Managed[Mat] =
     Managed.scope: own =>
@@ -384,7 +385,7 @@ extension (self: Mat)
     Mats.produce("bitwiseNot")(Core.bitwise_not(self, _))
 
   /** Absolute per-element difference `|self - other|`. `other` is borrowed. The basis of frame-difference
-    * motion detection — see [[MotionDetector]].
+    * motion detection — see `scalacv.vision.MotionDetector`.
     */
   def absdiff(other: Mat): Managed[Mat] =
     Mats.produce("absdiff")(Core.absdiff(self, other, _))

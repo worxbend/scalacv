@@ -11,39 +11,42 @@ import mill.util.VcsVersion
 import com.goyeau.mill.scalafix.ScalafixModule
 
 object Deps {
-  val opencv   = "4.14.0-1.5.14"
+  val opencv = "4.14.0-1.5.14"
   val openblas = "0.3.34-1.5.14"
 
-  /** The Scala version every module compiles with. Read by `ScalacvModule.scalaVersion` and baked
-    * into the generated `scalacv.BuildValues` so `Build.scalaVersion` cannot drift from it. */
+  /** The Scala version every module compiles with. Read by `ScalacvModule.scalaVersion` and baked into the
+    * generated `scalacv.BuildValues` so `Build.scalaVersion` cannot drift from it.
+    */
   val scala = "3.3.8"
 
   /** The OpenCV *release* behind the bytedeco coordinate — `4.14.0` out of `4.14.0-1.5.14`.
     *
-    * Derived rather than written twice: bytedeco's version is `<opencv release>-<javacpp release>`,
-    * and a Scala Steward bump moves both halves at once. Baked into `scalacv.BuildValues` so that
-    * `Build.openCvVersion`, which exists so a bug report can quote an accurate version, reports the
-    * OpenCV that is actually on the classpath. */
+    * Derived rather than written twice: bytedeco's version is `<opencv release>-<javacpp release>`, and a
+    * Scala Steward bump moves both halves at once. Baked into `scalacv.BuildValues` so that
+    * `Build.openCvVersion`, which exists so a bug report can quote an accurate version, reports the OpenCV
+    * that is actually on the classpath.
+    */
   val opencvRelease = opencv.takeWhile(_ != '-')
 
   /** Options for test sources: deliberately looser than main. The leak-catchers
-    * (`-Wvalue-discard`/`-Wnonunit-statement`), `-Werror` and `-Wunused:all` are for the
-    * published surface, not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately
-    * discard, nor for deliberately-unused test bindings. */
+    * (`-Wvalue-discard`/`-Wnonunit-statement`), `-Werror` and `-Wunused:all` are for the published surface,
+    * not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard, nor for
+    * deliberately-unused test bindings.
+    */
   val looseTestScalacOptions = Seq("-deprecation", "-feature", "-unchecked", "-java-output-version", "17")
 
   /** The bytedeco classifier for the machine running the build.
     *
-    * Derived from the JVM's own os/arch rather than hand-rolled, and kept in the same
-    * vocabulary javacpp's `Loader.getPlatform()` uses at runtime — if the two ever disagree,
-    * the natives on the classpath are not the ones the loader looks for.
+    * Derived from the JVM's own os/arch rather than hand-rolled, and kept in the same vocabulary javacpp's
+    * `Loader.getPlatform()` uses at runtime — if the two ever disagree, the natives on the classpath are not
+    * the ones the loader looks for.
     */
   lazy val platform: String = {
     val os = System.getProperty("os.name").toLowerCase
     val arch = System.getProperty("os.arch").toLowerCase match {
-      case "amd64" | "x86_64"  => "x86_64"
+      case "amd64" | "x86_64" => "x86_64"
       case "aarch64" | "arm64" => "arm64"
-      case other               => other
+      case other => other
     }
     val name =
       if (os.startsWith("linux")) "linux"
@@ -57,18 +60,17 @@ object Deps {
     p
   }
 
-  /** The OpenCV Java API. Classifier-less, and the ONLY OpenCV coordinate that may reach a
-    * published POM — Mill 1.1.7 cannot express a classifier in a POM at all, so anything
-    * classified here would be silently stripped and consumers would resolve nothing.
+  /** The OpenCV Java API. Classifier-less, and the ONLY OpenCV coordinate that may reach a published POM —
+    * Mill 1.1.7 cannot express a classifier in a POM at all, so anything classified here would be silently
+    * stripped and consumers would resolve nothing.
     */
   val opencvApi = mvn"org.bytedeco:opencv:$opencv"
 
   /** The natives, for local builds and tests only.
     *
-    * Three coordinates, not one. A classifier dependency *replaces* the classifier-less
-    * artifact rather than adding to it, so declaring only the classifier yields a classpath
-    * with zero `org/opencv/` classes. And `libopencv_core` has a NEEDED on `libopenblas.so.0`,
-    * which ships only in openblas's own classifier jar.
+    * Three coordinates, not one. A classifier dependency *replaces* the classifier-less artifact rather than
+    * adding to it, so declaring only the classifier yields a classpath with zero `org/opencv/` classes. And
+    * `libopencv_core` has a NEEDED on `libopenblas.so.0`, which ships only in openblas's own classifier jar.
     */
   val opencvNatives = Seq(
     opencvApi,
@@ -78,55 +80,62 @@ object Deps {
 
   /** JVM flags for modules that touch natives, gated on the JDK that will actually run them.
     *
-    * Both flags are noise suppression, and both are **younger than our JDK 17 floor** — passing
-    * either to a 17 or 21 JVM is not a warning, it is `Unrecognized option` and the process does
-    * not start. That is a real failure mode: it was caught by CI's per-rung JDK assertion, not by
-    * a local build, because locally everything runs on 25.
+    * Both flags are noise suppression, and both are **younger than our JDK 17 floor** — passing either to a
+    * 17 or 21 JVM is not a warning, it is `Unrecognized option` and the process does not start. That is a
+    * real failure mode: it was caught by CI's per-rung JDK assertion, not by a local build, because locally
+    * everything runs on 25.
     *
     *   - `--enable-native-access` silences the JEP 472 warning `System.load` emits (JDK 24+).
-    *   - `--sun-misc-unsafe-memory-access=allow` silences four lines that scala3-library 3.3.8's
-    *     `LazyVals$` provokes — a direct consequence of pairing D2 (publish on the LTS) with D10
-    *     (build on 25), and cosmetic, but otherwise a preface to every example run.
+    *   - `--sun-misc-unsafe-memory-access=allow` silences four lines that scala3-library 3.3.8's `LazyVals$`
+    *     provokes — a direct consequence of pairing D2 (publish on the LTS) with D10 (build on 25), and
+    *     cosmetic, but otherwise a preface to every example run.
     */
   def runtimeJvmArgs(jvmMajor: Int): Seq[String] =
     if (jvmMajor >= 24) Seq("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
     else Seq.empty
 
-  /** [[runtimeJvmArgs]] plus `-Djava.awt.headless=true`, for every module that forks a JVM which must
-    * never open a window: the CI-built examples, the leak harness, the benchmarks and the tests.
-    * Headless is an assertion rather than a preference — a GUI-toolkit regression then fails loudly in
-    * CI instead of silently opening a window on whichever developer machine happens to have a display.
+  /** [[runtimeJvmArgs]] plus `-Djava.awt.headless=true`, for every module that forks a JVM which must never
+    * open a window: the CI-built examples, the leak harness, the benchmarks and the tests. Headless is an
+    * assertion rather than a preference — a GUI-toolkit regression then fails loudly in CI instead of
+    * silently opening a window on whichever developer machine happens to have a display.
     */
   def headlessJvmArgs(jvmMajor: Int): Seq[String] = runtimeJvmArgs(jvmMajor) :+ "-Djava.awt.headless=true"
 
   /** The JDK a module is compiled and forked with when `MILL_JVM_ID` is not set in the environment.
     *
-    * One `val` rather than a literal repeated per module: main modules and test modules select their
-    * JVM separately (test modules do not extend `ScalacvModule`), so the default used to be written
-    * out twice, and a drift between the two copies is silent — the build keeps working locally, where
-    * everything is 25 anyway, and fails only on a CI matrix rung pinned to an older JDK.
+    * One `val` rather than a literal repeated per module: main modules and test modules select their JVM
+    * separately (test modules do not extend `ScalacvModule`), so the default used to be written out twice,
+    * and a drift between the two copies is silent — the build keeps working locally, where everything is 25
+    * anyway, and fails only on a CI matrix rung pinned to an older JDK.
     */
   val defaultJvmId = "zulu:25"
 
-  /** The major version behind a jvm id such as `zulu:25` or `temurin:21.0.4`, for flags that do not
-    * exist on older JDKs. The fallback is derived from [[defaultJvmId]] rather than written out again,
-    * so an unparseable id lands on exactly the JDK the build would have used anyway.
+  /** The major version behind a jvm id such as `zulu:25` or `temurin:21.0.4`, for flags that do not exist on
+    * older JDKs. The fallback is derived from [[defaultJvmId]] rather than written out again, so an
+    * unparseable id lands on exactly the JDK the build would have used anyway.
     */
   def jvmMajorOf(jvmId: String): Int =
-    jvmId.split(":").last.split("[.+-]").head.toIntOption
+    jvmId
+      .split(":")
+      .last
+      .split("[.+-]")
+      .head
+      .toIntOption
       .getOrElse(defaultJvmId.split(":").last.split("[.+-]").head.toInt)
 
-  /** Scaladoc options shared by the API doc builds (`apidocs`, `zio`). All verified to exist in
-    * scaladoc 3.3.8 via `-help` (see API-REFERENCE.md).
+  /** Scaladoc options shared by the API doc builds (`apidocs`, `zio`). All verified to exist in scaladoc
+    * 3.3.8 via `-help` (see API-REFERENCE.md).
     *   - `-source-links` puts a "source" link on every member, to its exact line on GitHub master.
     *   - `-social-links` adds the GitHub icon to the Scaladoc header.
     *   - `-project` / `-project-version` label the header.
-    * `-external-mappings` (JDK/Bytedeco) is deferred — its regexes match classpath entries and a
-    * wrong URL yields broken links, so it is done deliberately in its own change (tracked issue).
+    * `-external-mappings` (JDK/Bytedeco) is deferred — its regexes match classpath entries and a wrong URL
+    * yields broken links, so it is done deliberately in its own change (tracked issue).
     */
   def scaladocOptions(version: String, sourceRoot: String): Seq[String] = Seq(
-    "-project", "scalacv",
-    "-project-version", version,
+    "-project",
+    "scalacv",
+    "-project-version",
+    version,
     "-social-links:github::https://github.com/w0rxbend/scalacv",
     // The `<local-prefix>=github://…` form strips the build's absolute path prefix so the GitHub
     // blob links are repo-relative (core/src/…). The prefix is the workspace root, computed at
@@ -137,31 +146,31 @@ object Deps {
 
 /** Shared settings for every Scala module in the build.
   *
-  * Scala 3.3.8 (LTS) rather than the newest release: TASTy is not forward-compatible, so a
-  * library published from the Next line cannot be read by anyone on 3.3.x, and no
-  * `-Yscala-release`-style escape hatch has ever existed in Scala 3.
+  * Scala 3.3.8 (LTS) rather than the newest release: TASTy is not forward-compatible, so a library published
+  * from the Next line cannot be read by anyone on 3.3.x, and no `-Yscala-release`-style escape hatch has ever
+  * existed in Scala 3.
   *
-  * The JVM is pinned in the build header above. Mill 1.1.7 defaults to `zulu:21` and ignores
-  * both `JAVA_HOME` and `MILL_JVM_VERSION` when it runs modules, so the header is the only
-  * thing that actually selects a JDK — `actions/setup-java` cannot.
+  * The JVM is pinned in the build header above. Mill 1.1.7 defaults to `zulu:21` and ignores both `JAVA_HOME`
+  * and `MILL_JVM_VERSION` when it runs modules, so the header is the only thing that actually selects a JDK —
+  * `actions/setup-java` cannot.
   */
 trait ScalacvModule extends ScalaModule with ScalafixModule {
   def scalaVersion = Deps.scala
 
   /** The JDK modules compile and run on.
     *
-    * The `//| mill-jvm-version:` header selects the JVM *Mill itself* runs on; this selects the
-    * one modules are compiled and forked with. They are separate on purpose: CI needs to vary
-    * the module JDK per matrix rung, and the header cannot vary — it would freeze every rung to
-    * a single JDK and make the matrix decorative. `actions/setup-java` cannot steer Mill either,
-    * since Mill 1.1.7 ignores JAVA_HOME and MILL_JVM_VERSION for module execution.
+    * The `//| mill-jvm-version:` header selects the JVM *Mill itself* runs on; this selects the one modules
+    * are compiled and forked with. They are separate on purpose: CI needs to vary the module JDK per matrix
+    * rung, and the header cannot vary — it would freeze every rung to a single JDK and make the matrix
+    * decorative. `actions/setup-java` cannot steer Mill either, since Mill 1.1.7 ignores JAVA_HOME and
+    * MILL_JVM_VERSION for module execution.
     */
-  def jvmId = Task.Input { Task.env.getOrElse("MILL_JVM_ID", Deps.defaultJvmId) }
+  def jvmId = Task.Input(Task.env.getOrElse("MILL_JVM_ID", Deps.defaultJvmId))
 
   /** The major version behind [[jvmId]], for flags that do not exist on older JDKs. */
-  def jvmMajor = Task { Deps.jvmMajorOf(jvmId()) }
+  def jvmMajor = Task(Deps.jvmMajorOf(jvmId()))
 
-  def forkArgs = Task { Deps.runtimeJvmArgs(jvmMajor()) }
+  def forkArgs = Task(Deps.runtimeJvmArgs(jvmMajor()))
 
   def scalacOptions = Seq(
     "-deprecation",
@@ -183,14 +192,15 @@ trait ScalacvModule extends ScalaModule with ScalafixModule {
     // Scala 3.5+ Java flexible-types make it far lighter; revisit when the LTS pin moves to 3.9.)
     "-Werror",
     // Consumers only need JDK 17, even though we build on 25.
-    "-java-output-version", "17"
+    "-java-output-version",
+    "17"
   )
 }
 
-/** Test settings. Test sources are deliberately looser than main: `-Wunused:all` (dead test helpers
-  * are common), the leak-catchers (`-Wvalue-discard`/`-Wnonunit-statement`) and `-Werror` are
-  * for the published surface, not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately
-  * discard. So the strict flags do not carry into tests.
+/** Test settings. Test sources are deliberately looser than main: `-Wunused:all` (dead test helpers are
+  * common), the leak-catchers (`-Wvalue-discard`/`-Wnonunit-statement`) and `-Werror` are for the published
+  * surface, not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard. So the
+  * strict flags do not carry into tests.
   */
 trait ScalacvTests extends TestModule.Munit {
   def mvnDeps = Seq(mvn"org.scalameta::munit:1.3.6")
@@ -198,29 +208,38 @@ trait ScalacvTests extends TestModule.Munit {
   /* Test modules pick their own JVM, so they need the same override and the same version-gating as
    * ScalacvModule -- see the comments there. The default and the fallback live in Deps so that this
    * copy and ScalacvModule's cannot drift apart. */
-  def jvmId = Task.Input { Task.env.getOrElse("MILL_JVM_ID", Deps.defaultJvmId) }
-  def jvmMajor = Task { Deps.jvmMajorOf(jvmId()) }
+  def jvmId = Task.Input(Task.env.getOrElse("MILL_JVM_ID", Deps.defaultJvmId))
+  def jvmMajor = Task(Deps.jvmMajorOf(jvmId()))
 
   /* Natives are loaded by dlopen from the caller's classloader, and OpenCV's own error
    * reporting is chatty on stderr. Forking keeps a crashed native call from taking the
    * whole test run with it, and headless=true (see Deps.headlessJvmArgs) makes a GUI-toolkit
    * regression fail loudly rather than silently opening a window on a developer machine. */
-  def forkArgs = Task { Deps.headlessJvmArgs(jvmMajor()) }
+  def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
+
+  /* One forked JVM per suite. The ownership canaries can abort the worker on a double free;
+   * sharing a worker would lose its co-tenants' results too. Keep the same isolation in every
+   * owning module, and fail rather than silently going green if a source-layout change loses
+   * all suite discovery. Per-suite groups still run testParallelism-wide. */
+  def testForkGrouping = Task {
+    val suites = discoveredTestClasses()
+    require(suites.nonEmpty, "scalacv: no test suites discovered; check the test sources and framework")
+    suites.map(Seq(_))
+  }
 }
 
 /** Everything that ships to Maven Central.
   *
-  * Deliberately a separate trait from ScalacvModule: `examples` and `examples-gui` must NOT
-  * extend PublishModule. `publishAll` resolves every PublishModule in the build, so mixing it
-  * into the base trait would ship the example apps -- and examples-gui's per-host OpenJFX --
-  * to Central.
+  * Deliberately a separate trait from ScalacvModule: `examples` and `examples-gui` must NOT extend
+  * PublishModule. `publishAll` resolves every PublishModule in the build, so mixing it into the base trait
+  * would ship the example apps -- and examples-gui's per-host OpenJFX -- to Central.
   */
 trait ScalacvPublishModule extends ScalacvModule with PublishModule {
   /* Without an explicit artifactName Mill publishes the *directory* name, i.e.
    * com.worxbend:core_3 and com.worxbend:zio_3. */
   def artifactName: T[String]
 
-  def publishVersion = Task { VcsVersion.calcVcsState(Task.log).format() }
+  def publishVersion = Task(VcsVersion.calcVcsState(Task.log).format())
 
   def pomSettings = PomSettings(
     description = "A Scala 3 wrapper for the OpenCV 4.14 Java API",
@@ -232,13 +251,13 @@ trait ScalacvPublishModule extends ScalacvModule with PublishModule {
   )
 
   /* Consumers read this to know that 0.x still means breaking changes are allowed. */
-  def versionScheme = Task { Some(VersionScheme.EarlySemVer) }
+  def versionScheme = Task(Some(VersionScheme.EarlySemVer))
 
   /* Project name/version, GitHub source-links and social-links on every *published* doc jar --
    * core, vision, graphs and zio -- so none of them ships to Central with an unlabelled,
    * source-link-less Scaladoc. Previously only zio and the aggregate apidocs set this. */
   def scalaDocOptions =
-    Task { Deps.scaladocOptions(publishVersion(), mill.api.BuildCtx.workspaceRoot.toString) }
+    Task(Deps.scaladocOptions(publishVersion(), mill.api.BuildCtx.workspaceRoot.toString))
 
   // MiMa is deliberately NOT mixed in yet (D13/G7). It is armed from 0.2.0: before a prior
   // release exists, an empty mimaPreviousVersions fails, and 0.1.x under early-semver is allowed
@@ -258,14 +277,13 @@ object core extends ScalacvPublishModule {
   /** The one place the build's own version numbers cross into compiled code.
     *
     * `scalacv.Build` promises a consumer an accurate version to quote in a bug report, and
-    * `OpenCv`/`Cascades` print the exact dependency lines to add when the natives are missing.
-    * Both used to hard-code the numbers, three files away from the `Deps` block that decides
-    * them — so a Scala Steward bump moved the build and left the library telling users to add a
-    * version the build no longer uses. Generating the values makes that drift impossible rather
-    * than merely unlikely.
+    * `OpenCv`/`Cascades` print the exact dependency lines to add when the natives are missing. Both used to
+    * hard-code the numbers, three files away from the `Deps` block that decides them — so a Scala Steward
+    * bump moved the build and left the library telling users to add a version the build no longer uses.
+    * Generating the values makes that drift impossible rather than merely unlikely.
     *
-    * Deliberately `private[scalacv]`: the documented, stable face of these numbers is
-    * `scalacv.Build`, which is hand-written and carries the Scaladoc. This is its data.
+    * Deliberately `private[scalacv]`: the documented, stable face of these numbers is `scalacv.Build`, which
+    * is hand-written and carries the Scaladoc. This is its data.
     */
   def generatedSources = Task {
     val file = Task.dest / "scalacv" / "BuildValues.scala"
@@ -289,11 +307,11 @@ object core extends ScalacvPublishModule {
   }
 
   object test extends ScalaTests with ScalacvTests {
-    def scalacOptions = Task { Deps.looseTestScalacOptions }
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
 
-    /* The vision, graphs and zio surfaces are tested here too, so the one suite covers all four
-     * published modules. A TEST-only dependency: core's own POM never gains vision/graphs/zio, so
-     * the small, MiMa-guarded published core stays exactly that. */
+    /* Owning unit suites live in vision.test and graphs.test. Cross-module integration,
+     * ownership/property laws and the API/POM contract gates stay here with all four published
+     * modules on their classpath. These TEST-only edges never reach core's published POM. */
     def moduleDeps = super.moduleDeps ++ Seq(vision, graphs, zio)
     // munit-scalacheck (pinned to the munit version) powers the property/invariant suite — roundtrip
     // and identity laws over generated Mat type/size/channel combinations.
@@ -307,113 +325,121 @@ object core extends ScalacvPublishModule {
       super.forkArgs() :+
         s"-Dscalacv.poms=${core.pom().path}:${vision.pom().path}:${graphs.pom().path}:${zio.pom().path}"
     }
-
-    /* One forked JVM per suite. The ownership canaries' documented failure mode is the worker JVM
-     * dying (a double free aborts the process), and Mill's default packs several suites into each
-     * worker -- so a crash takes its co-tenants' results with it and the report names none of them.
-     * Per-suite groups still run testParallelism-wide, so this costs JVM startups, not wall clock. */
-    def testForkGrouping = Task { discoveredTestClasses().map(Seq(_)) }
   }
 }
 
-/** The vision layer: detectors, DNN inference, pose/tracking/motion, OCR, camera calibration and
-  * the SLAM/navigation front end. Depends only on `core` (the OpenCV wrapping), so someone who
-  * only wants `Image.read(…).gray.canny(…)` never pulls a SLAM loop-closure detector into their jar.
+/** The vision layer: detectors, DNN inference, pose/tracking/motion, OCR, camera calibration and the
+  * SLAM/navigation front end. Depends only on `core` (the OpenCV wrapping), so someone who only wants
+  * `Image.read(…).gray.canny(…)` never pulls a SLAM loop-closure detector into their jar.
   */
 object vision extends ScalacvPublishModule {
   def artifactName = "scalacv-vision"
-  def moduleDeps   = Seq(core)
-  def mvnDeps      = Seq(Deps.opencvApi)
+  def moduleDeps = Seq(core)
+  def mvnDeps = Seq(Deps.opencvApi)
+
+  object test extends ScalaTests with ScalacvTests {
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
+    def mvnDeps = super.mvnDeps() ++ Deps.opencvNatives
+  }
 }
 
-/** The 2D graphics layer: the `Picture` scene graph, charts, GIF animation and the RGBA `Color`
-  * palette. Depends only on `core`; independent of `vision`.
+/** The 2D graphics layer: the `Picture` scene graph, charts, GIF animation and the RGBA `Color` palette.
+  * Depends only on `core`; independent of `vision`.
   */
 object graphs extends ScalacvPublishModule {
   def artifactName = "scalacv-graphs"
-  def moduleDeps   = Seq(core)
-  def mvnDeps      = Seq(Deps.opencvApi)
+  def moduleDeps = Seq(core)
+  def mvnDeps = Seq(Deps.opencvApi)
+
+  object test extends ScalaTests with ScalacvTests {
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
+    def mvnDeps = super.mvnDeps() ++ Deps.opencvNatives
+
+    /* Only the pixel-hash fixture is shared, not core.test's compiled suites/dependencies.
+     * Both modules compile this tracked source against core, preserving one hash definition
+     * without a test-module dependency cycle or pulling vision/zio into graphs.test. */
+    def sharedPixelHash = Task.Source(core.test.moduleDir / "src" / "scalacv" / "PixelHash.scala")
+    def sources = Task(super.sources() :+ sharedPixelHash())
+  }
 }
 
 object zio extends ScalacvPublishModule {
   def artifactName = "scalacv-zio"
-  def moduleDeps   = Seq(core)
-  def mvnDeps      = Seq(mvn"dev.zio::zio:2.1.26", mvn"dev.zio::zio-streams:2.1.26")
+  def moduleDeps = Seq(core)
+  def mvnDeps = Seq(mvn"dev.zio::zio:2.1.26", mvn"dev.zio::zio-streams:2.1.26")
 
   /* zio-test rather than munit here (D6): the module under test is ZIO, so its own effects are
    * the natural thing to write assertions in. Natives are still needed at run time. */
   object test extends ScalaTests {
-    def scalacOptions = Task { Deps.looseTestScalacOptions }
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
     def testFramework = "zio.test.sbt.ZTestFramework"
     def mvnDeps = Seq(
       mvn"dev.zio::zio-test:2.1.26",
       mvn"dev.zio::zio-test-sbt:2.1.26"
     ) ++ Deps.opencvNatives
-    def forkArgs = Task { Deps.headlessJvmArgs(jvmMajor()) }
+    def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
   }
 }
 
 /** Headless examples. Built in CI, so nothing here may touch a GUI toolkit. */
 object examples extends ScalacvModule {
   def moduleDeps = Seq(core, vision, graphs, zio)
-  def mvnDeps    = Deps.opencvNatives
-  def forkArgs   = Task { Deps.headlessJvmArgs(jvmMajor()) }
+  def mvnDeps = Deps.opencvNatives
+  def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
 
   /* The Track D gate is "CannyEdges + QrDecode produce asserted file output in CI". That means
    * the examples need real assertions, not just successful compilation, so each example is a
    * pure function returning its result and this suite drives them. */
   object test extends ScalaTests with ScalacvTests {
-    def scalacOptions = Task { Deps.looseTestScalacOptions }
-    def mvnDeps       = super.mvnDeps() ++ Deps.opencvNatives
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
+    def mvnDeps = super.mvnDeps() ++ Deps.opencvNatives
   }
 }
 
-/** Native-leak regression tests, in their own module so they run in a **dedicated forked JVM** with a
-  * single suite — process RSS is the only signal that sees scalacv's `org.opencv.core.Mat` buffers
-  * (`Pointer.totalBytes()` is blind to them — see the measurement table in docs/mdoc/performance.md),
-  * and RSS would be contaminated if 40-odd suites shared the JVM as they do in `core.test`. Kept out of
-  * `core.test` for exactly that isolation — the shape, and why the bound is a ceiling rather than zero, is
-  * written up under "Guard against native leaks with an RSS assertion" in docs/mdoc/testing.md.
+/** Native-leak regression tests, in their own module so they run in a **dedicated forked JVM** with a single
+  * suite — process RSS is the only signal that sees scalacv's `org.opencv.core.Mat` buffers
+  * (`Pointer.totalBytes()` is blind to them — see the measurement table in docs/mdoc/performance.md), and RSS
+  * would be contaminated if 40-odd suites shared the JVM as they do in `core.test`. Kept out of `core.test`
+  * for exactly that isolation — the shape, and why the bound is a ceiling rather than zero, is written up
+  * under "Guard against native leaks with an RSS assertion" in docs/mdoc/testing.md.
   */
 object leaks extends ScalacvModule {
   // zio is here too: its Scope-mapped release paths (Mat.scoped, frameStream) are ownership code like
   // any other, and the RSS canary is the only gate that would see them leak.
   def moduleDeps = Seq(core, vision, graphs, zio)
-  def mvnDeps    = Deps.opencvNatives
-  def forkArgs   = Task { Deps.headlessJvmArgs(jvmMajor()) }
+  def mvnDeps = Deps.opencvNatives
+  def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
 
   object test extends ScalaTests with ScalacvTests {
-    def scalacOptions = Task { Deps.looseTestScalacOptions }
-    def mvnDeps       = super.mvnDeps() ++ Deps.opencvNatives
+    def scalacOptions = Task(Deps.looseTestScalacOptions)
+    def mvnDeps = super.mvnDeps() ++ Deps.opencvNatives
   }
 }
 
-/** Performance benchmarks. Never published and never a CI gate — a developer-facing harness for
-  * measuring the wins the perf work claims. Depends on all three published modules plus the natives,
-  * and reuses the same JVM flags as `examples`. Run with `./mill benchmarks.runMain scalacv.bench.<Name>`.
+/** Performance benchmarks. Never published and never a CI gate — a developer-facing harness for measuring the
+  * wins the perf work claims. Depends on all three published modules plus the natives, and reuses the same
+  * JVM flags as `examples`. Run with `./mill benchmarks.runMain scalacv.bench.<Name>`.
   *
-  * Deliberately a plain-JVM harness rather than JMH: JMH's compile-time annotation processor is
-  * awkward to wire into Mill 1.1.7 alongside the JNI natives, and the wins measured here (whole-Mat
-  * allocations and full-image pixel copies eliminated) are large relative to timer noise. The harness
-  * does proper warmup, many measurement iterations, steady-state coefficient-of-variation reporting and
-  * blackhole consumption to defeat dead-code elimination — see `Bench.scala`.
+  * Deliberately a plain-JVM harness rather than JMH: JMH's compile-time annotation processor is awkward to
+  * wire into Mill 1.1.7 alongside the JNI natives, and the wins measured here (whole-Mat allocations and
+  * full-image pixel copies eliminated) are large relative to timer noise. The harness does proper warmup,
+  * many measurement iterations, steady-state coefficient-of-variation reporting and blackhole consumption to
+  * defeat dead-code elimination — see `Bench.scala`.
   */
 object benchmarks extends ScalacvModule {
   def moduleDeps = Seq(core, vision, graphs)
-  def mvnDeps    = Deps.opencvNatives
+  def mvnDeps = Deps.opencvNatives
   // Headless (via Deps.headlessJvmArgs) keeps toBufferedImage benchmarks from opening a window; the
   // GC/JIT flags used for a run are printed by the harness so a run is reproducible.
-  def forkArgs = Task { Deps.headlessJvmArgs(jvmMajor()) }
+  def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
 }
 
-/** JavaFX examples. Deliberately excluded from CI and never published: OpenJFX resolves
-  * per-host through the `<os>` profile in its parent POM, so this module only ever builds
-  * for the machine it is built on.
+/** JavaFX examples. Deliberately excluded from CI and never published: OpenJFX resolves per-host through the
+  * `<os>` profile in its parent POM, so this module only ever builds for the machine it is built on.
   *
-  * The only module that does not honour the JDK 17 floor: OpenJFX 27 ships JDK 25 bytecode (26 was
-  * already 24), so this needs the default `zulu:25`. Building it under a `MILL_JVM_ID` from the CI
-  * matrix's lower rungs fails with UnsupportedClassVersionError -- which costs nothing, because the
-  * rungs never build it.
+  * The only module that does not honour the JDK 17 floor: OpenJFX 27 ships JDK 25 bytecode (26 was already
+  * 24), so this needs the default `zulu:25`. Building it under a `MILL_JVM_ID` from the CI matrix's lower
+  * rungs fails with UnsupportedClassVersionError -- which costs nothing, because the rungs never build it.
   */
 object `examples-gui` extends ScalacvModule {
   def moduleDeps = Seq(core, vision)
@@ -422,39 +448,41 @@ object `examples-gui` extends ScalacvModule {
     mvn"org.openjfx:javafx-graphics:27",
     mvn"org.openjfx:javafx-controls:27"
   )
-  def forkArgs = Task { Deps.runtimeJvmArgs(jvmMajor()) }
+  def forkArgs = Task(Deps.runtimeJvmArgs(jvmMajor()))
 }
 
-/** A unified API reference across the published non-effect modules (core, vision, graphs — all in
-  * package `scalacv`). Unpublished; it exists only so the docs site can present ONE Scaladoc site
-  * instead of three, matching the site's `/api/core/scalacv/…` deep links (many of which point at
-  * vision/graphs types like `FaceRecognizer`, `Color`, `Calibration`). `zio` stays separate — it
-  * lives in `scalacv.zio` and pulls in the effect dependency, so it gets its own `/api/zio`.
+/** A unified API reference across the published non-effect modules (core, vision, graphs — all in package
+  * `scalacv`). Unpublished; it exists only so the docs site can present ONE Scaladoc site instead of three,
+  * matching the site's `/api/core/scalacv/…` deep links (many of which point at vision/graphs types like
+  * `FaceRecognizer`, `Color`, `Calibration`). `zio` stays separate — it lives in `scalacv.zio` and pulls in
+  * the effect dependency, so it gets its own `/api/zio`.
   */
 object apidocs extends ScalacvModule {
   def moduleDeps = Seq(core, vision, graphs)
   // Document all three modules' sources as one site. docJar renders whatever docSources returns;
   // moduleDeps supplies the classpath those sources compile against.
-  def docSources = Task { core.docSources() ++ vision.docSources() ++ graphs.docSources() }
-  def scalaDocOptions = Task { Deps.scaladocOptions(core.publishVersion(), mill.api.BuildCtx.workspaceRoot.toString) }
+  def docSources = Task(core.docSources() ++ vision.docSources() ++ graphs.docSources())
+  def scalaDocOptions = Task {
+    Deps.scaladocOptions(core.publishVersion(), mill.api.BuildCtx.workspaceRoot.toString)
+  }
 }
 
 /** The documentation site's mdoc stage.
   *
-  * No maintained Mill 1.x mdoc plugin exists (atooni/mill-mdoc is archived; quafadas/millSite
-  * pins mdoc 2.7.2 and generates Laika), so mdoc runs as a plain subprocess — settled long ago.
-  * Its own POM pins `scala3-compiler_3:3.3.8`, and the project pins the project there too, so no
-  * explicit compiler co-dep is needed as long as the two agree.
+  * No maintained Mill 1.x mdoc plugin exists (atooni/mill-mdoc is archived; quafadas/millSite pins mdoc 2.7.2
+  * and generates Laika), so mdoc runs as a plain subprocess — settled long ago. Its own POM pins
+  * `scala3-compiler_3:3.3.8`, and the project pins the project there too, so no explicit compiler co-dep is
+  * needed as long as the two agree.
   *
-  * `mdoc` type-checks every ```scala mdoc``` snippet in `docs/mdoc/` against the *natives* runtime
-  * classpath of core+zio+examples — snippets that call OpenCV must link the JNI, not just the Java
-  * API — and writes the spliced markdown into `<dest>/site`. `scripts/assemble-docs.sh` then copies
-  * those pages into the Docusaurus app at `website/docs/` (Mill forbids a task writing into the
-  * source tree, so the copy is a separate step).
+  * `mdoc` type-checks every ```scala mdoc``` snippet in `docs/mdoc/` against the *natives* runtime classpath
+  * of core+zio+examples — snippets that call OpenCV must link the JNI, not just the Java API — and writes the
+  * spliced markdown into `<dest>/site`. `scripts/assemble-docs.sh` then copies those pages into the
+  * Docusaurus app at `website/docs/` (Mill forbids a task writing into the source tree, so the copy is a
+  * separate step).
   */
 object docs extends ScalacvModule {
   def moduleDeps = Seq(core, vision, graphs, zio, examples)
-  def mvnDeps    = Seq(mvn"org.scalameta::mdoc:2.9.2") ++ Deps.opencvNatives
+  def mvnDeps = Seq(mvn"org.scalameta::mdoc:2.9.2") ++ Deps.opencvNatives
 
   /** The markdown sources with mdoc snippets. */
   def mdocSources = Task.Source("mdoc")
@@ -470,9 +498,12 @@ object docs extends ScalacvModule {
       mainClass = "mdoc.Main",
       classPath = cp,
       mainArgs = Seq(
-        "--in", mdocSources().path.toString,
-        "--out", out.toString,
-        "--classpath", cp.mkString(java.io.File.pathSeparator)
+        "--in",
+        mdocSources().path.toString,
+        "--out",
+        out.toString,
+        "--classpath",
+        cp.mkString(java.io.File.pathSeparator)
       ),
       stdout = os.Inherit,
       stderr = os.Inherit,
@@ -481,8 +512,8 @@ object docs extends ScalacvModule {
     mill.api.PathRef(out)
   }
 
-  /** The CI form: mdoc with `--check-only` fails on a snippet that no longer compiles instead of
-    * rewriting it. This is what makes the docs a gate rather than a courtesy.
+  /** The CI form: mdoc with `--check-only` fails on a snippet that no longer compiles instead of rewriting
+    * it. This is what makes the docs a gate rather than a courtesy.
     */
   def mdocCheck = Task {
     val cp = runClasspath().map(_.path)
@@ -490,9 +521,12 @@ object docs extends ScalacvModule {
       mainClass = "mdoc.Main",
       classPath = cp,
       mainArgs = Seq(
-        "--in", mdocSources().path.toString,
-        "--out", (Task.dest / "check").toString,
-        "--classpath", cp.mkString(java.io.File.pathSeparator),
+        "--in",
+        mdocSources().path.toString,
+        "--out",
+        (Task.dest / "check").toString,
+        "--classpath",
+        cp.mkString(java.io.File.pathSeparator),
         "--check"
       ),
       stdout = os.Inherit,

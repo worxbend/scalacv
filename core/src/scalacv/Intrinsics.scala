@@ -11,8 +11,8 @@ import org.opencv.core.{Mat, MatOfDouble}
   * [[Intrinsics.approx]] gives a serviceable guess from the image size and a field-of-view estimate — good
   * enough to *see* an augmented overlay track, not good enough to *measure* with.
   *
-  * This is the core camera model the vision layer builds on: [[Ar]], `HeadPose` and `Localizer` all take an
-  * `Intrinsics`, [[Calibration]] produces one, and `Image.undistort` consumes one.
+  * This is the core camera model the vision layer builds on: `scalacv.vision.Ar`, `HeadPose` and `Localizer`
+  * all take an `Intrinsics`, `scalacv.vision.Calibration` produces one, and `Image.undistort` consumes one.
   */
 final case class Intrinsics(
     fx: Double,

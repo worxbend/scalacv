@@ -26,9 +26,10 @@ changes on every frame, which is a true answer to the question asked and a usele
 belongs to optical flow --- `OpticalFlow`, Chapter 32 --- not to this chapter.
 
 One piece of setup first. `MotionDetector` and `Motion` live in `scalacv-vision`, not in the core
-artifact --- this is the first chapter in this part of the book to need the second module --- so add
-`com.worxbend::scalacv-vision:0.1.0` beside the core dependency of Chapter 2. Everything else here
-is core, and one `import scalacv.*` covers both, since both publish into the same package.
+artifact --- this is the first chapter in this part of the book to need the second module. Add
+`scalacv-vision` at the same version as the core dependency of Chapter 2, then import both
+`scalacv.*` and `scalacv.vision.*`. The motion types and extensions belong to `scalacv.vision`;
+core's wildcard import does not activate them.
 
 #sect("What \"moved\" means in pixels")
 

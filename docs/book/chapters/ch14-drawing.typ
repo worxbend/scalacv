@@ -388,8 +388,8 @@ measured --- a heap that stays small while the resident set climbs.
 
 The nine primitives are general-purpose. `scalacv-vision` builds one-call overlays on top of them,
 each turning a typed result straight into pixels, and each living beside the type it renders rather
-than in `Image`. They are extension methods on `Image` in the same `scalacv` package, so
-`import scalacv.*` reaches them once the module is on the classpath, and every one is built on the
+than in `Image`. They are extension methods on `Image` in `scalacv.vision`, so add the vision
+dependency and `import scalacv.vision.*` alongside `import scalacv.*`. Every one is built on the
 same internal `paint` that the `Image` draw verbs use --- so each consumes its receiver and hands
 back a fresh `Image`, exactly like `drawRect`.
 

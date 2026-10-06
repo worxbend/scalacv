@@ -99,6 +99,7 @@ final class scalacv.vision.CameraMotion
   def productPrefix(): java.lang.String
   def rotation(): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
   def toString(): java.lang.String
+  def transform(): scalacv.RigidTransform
   def translation(): scala.collection.immutable.Seq<java.lang.Object>
 final class scalacv.vision.CameraPose
   extends java.lang.Object
@@ -119,6 +120,7 @@ final class scalacv.vision.CameraPose
   def productPrefix(): java.lang.String
   def rotation(): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
   def toString(): java.lang.String
+  def transform(): scalacv.RigidTransform
   def translation(): scala.collection.immutable.Seq<java.lang.Object>
 final class scalacv.vision.ChessboardPattern
   extends java.lang.Object
@@ -600,10 +602,9 @@ final class scalacv.vision.Pose3D
   def productElementName(int): java.lang.String
   def productPrefix(): java.lang.String
   def rvec(): scala.collection.immutable.Seq<java.lang.Object>
-  def rvecMat(): org.opencv.core.Mat
   def toString(): java.lang.String
+  def transform(): scalacv.RigidTransform
   def tvec(): scala.collection.immutable.Seq<java.lang.Object>
-  def tvecMat(): org.opencv.core.Mat
 final class scalacv.vision.PoseTopology
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -699,6 +700,7 @@ object scalacv.vision.Ar
   def cubeCorners(double): scala.collection.immutable.Seq<scalacv.Point3>
   def cubeEdges(): scala.collection.immutable.Seq<scala.Tuple2<java.lang.Object, java.lang.Object>>
   def estimatePose(scalacv.vision.ArucoMarker, double, scalacv.Intrinsics): scala.Option<scalacv.vision.Pose3D>
+  def project(scala.collection.immutable.Seq<scalacv.Point3>, scalacv.RigidTransform, scalacv.Intrinsics): scala.collection.immutable.Seq<scalacv.Point>
   def project(scala.collection.immutable.Seq<scalacv.Point3>, scalacv.vision.Pose3D, scalacv.Intrinsics): scala.collection.immutable.Seq<scalacv.Point>
 object scalacv.vision.Ar.package
   extends java.lang.Object
@@ -798,7 +800,7 @@ object scalacv.vision.CameraPose
   implements java.io.Serializable, scala.deriving.Mirror$Product
   def apply(scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>, scala.collection.immutable.Seq<java.lang.Object>): scalacv.vision.CameraPose
   def fromProduct(scala.Product): scalacv.vision.CameraPose
-  def toString(): java.lang.String
+  def fromTransform(scalacv.RigidTransform): scalacv.vision.CameraPose
   def unapply(scalacv.vision.CameraPose): scalacv.vision.CameraPose
 object scalacv.vision.CascadeName
   extends java.lang.Object
@@ -1158,7 +1160,7 @@ object scalacv.vision.Pose3D
   implements java.io.Serializable, scala.deriving.Mirror$Product
   def apply(scala.collection.immutable.Seq<java.lang.Object>, scala.collection.immutable.Seq<java.lang.Object>): scalacv.vision.Pose3D
   def fromProduct(scala.Product): scalacv.vision.Pose3D
-  def toString(): java.lang.String
+  def fromTransform(scalacv.RigidTransform): scalacv.vision.Pose3D
   def unapply(scalacv.vision.Pose3D): scalacv.vision.Pose3D
 object scalacv.vision.PoseEstimator
   extends java.lang.Object

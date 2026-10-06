@@ -33,6 +33,14 @@ class GeometryTest extends munit.FunSuite:
     val e = intercept[IllegalArgumentException](Size(-1, 10))
     assert(e.getMessage.contains("negative"), e.getMessage)
 
+  test("Size rejects non-finite extents while retaining fractional geometry"):
+    for invalid <- Seq(Double.PositiveInfinity, Double.NaN) do
+      intercept[IllegalArgumentException](Size(invalid, 10))
+      intercept[IllegalArgumentException](Size(10, invalid))
+    val fractional = Size(1.25, 2.75)
+    assertEquals(Size.from(fractional.toCv), fractional)
+    assertEquals(Size(0, 0), Size.from(Size(0, 0).toCv))
+
   test("Rect round-trips, computes area, and rejects a negative extent"):
     val r = Rect(10, 20, 40, 30)
     assertEquals(Rect.from(r.toCv), r)

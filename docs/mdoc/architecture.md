@@ -1,7 +1,7 @@
 # Architecture & mental model
 
 A quick tour of how scalacv is put together, so the rest of the docs read as one system rather than a
-pile of methods. Four ideas carry the whole library: **two API tiers**, **three published modules**,
+pile of methods. Four ideas carry the whole library: **two API tiers**, **four published modules**,
 **one ownership primitive**, and **one error policy**. Learn these once and every other page — from
 [filters](/filters) to [SLAM navigation](/navigation) — is a variation on them.
 
@@ -76,15 +76,16 @@ val back: Image = Image.wrap(handle)                      // Managed[Mat] → Im
 back.close()
 ```
 
-## Three modules, split along real lines
+## Four modules, split along real lines {#three-modules-split-along-real-lines}
 
-The published surface is deliberately three artifacts, so you only pull what you use:
+The published surface is deliberately four artifacts, so you only pull what you use:
 
 | Module | Coordinate | Holds |
 |---|---|---|
 | **core** | `com.worxbend::scalacv` | the OpenCV wrapping — `Image`, `Managed`, filters, contours, drawing, Hough, video capture, the camera model |
 | **vision** | `com.worxbend::scalacv-vision` | detectors, DNN inference, pose/tracking/motion, OCR, calibration, the SLAM/navigation front end |
 | **graphs** | `com.worxbend::scalacv-graphs` | the `Picture` scene graph, charts, GIF animation, the RGBA `Color` palette |
+| **zio** | `com.worxbend::scalacv-zio` | optional scoped resources and streams on top of core |
 
 The dependency graph is a shallow star — `vision` and `graphs` each depend only on `core`, and
 `core` depends on neither:
@@ -110,8 +111,60 @@ different module.
 
 Each module brings its own import — `scalacv.*` for core, `scalacv.vision.*` and `scalacv.graphs.*` for
 the layers you have on the classpath (they are deliberately *not* one shared package, so the artifacts
-can coexist on a JPMS module path). The extension methods from whichever modules are present activate
-automatically.
+can coexist on a JPMS module path). The corresponding import activates each module’s extension methods; merely adding its jar does not.
+
+## Geometry and backend boundaries
+
+`RigidTransform` is copied-out core data, not a native matrix owner. It maps column-vector points as
+`x_destination = R * x_source + t`; `a.compose(b)` applies `b` first, then `a`. Rotation must be a
+finite proper orthonormal 3×3 matrix, and translation contains three finite values. Construction and
+`copy` validate these requirements. Composition and inversion re-orthonormalize computed rotations
+so accepted input rounding does not accumulate beyond the validation tolerance. The inverse reverses
+the mapping, and Rodrigues conversion uses
+radians without loading OpenCV:
+
+```scala mdoc:silent
+val objectToCamera = RigidTransform.fromRotationVector(Vector(0.0, 0.0, 0.0), Vector(0.0, 0.0, 2.0))
+val cameraPoint = objectToCamera.transformPoint(Point3(1, 0, 0))
+assert(objectToCamera.inverse.transformPoint(cameraPoint) == Point3(1, 0, 0))
+```
+
+The vision views label their frames: `Pose3D.transform` is object → camera, `CameraPose.transform`
+is world → camera, and `CameraMotion.transform` is first camera → second camera. Monocular motion's
+translation is a unit direction, not metres. Recover a common scale before composing it with metric
+poses or projecting metric landmarks; sharing the type does not make the units agree.
+
+`Picture` is an immutable scene value. `Renderer` receives transformed primitives in painter's order
+and resolved `PictureStyle` values. `PictureLayout` uses a supplied `TextMeasurer`; shape-only bounds
+need neither text metrics nor native loading. `OpenCvRenderer` is the raster adapter and preserves
+`Image` consumption. See [graphics](/graphics) for an independent command-renderer example.
+
+`Size` retains finite, non-negative `Double` extents because geometry and text measurement can be
+fractional. Allocating an image is an integer-pixel operation, but changing this shared type to `Int`
+would also truncate valid layout measurements. Raster boundaries keep their documented policies:
+absolute `resize(Size(...))` truncates, while `scaled` uses OpenCV's half-to-even rounding. Zero is
+an empty geometric extent, not a valid allocation target. Non-finite extents are rejected at construction.
+
+### Why these artifact and package boundaries stay
+
+An optional IO artifact is deferred. Capture, codecs and image processing use the same classifier-less
+OpenCV API dependency; moving the wrappers does not remove that Maven dependency or the native runtime
+payload. `Image.read`/`write`, `Camera`, `Recorder`, and the scoped video bindings also share core ownership
+and errors. Splitting them now would require moving APIs or introducing dependency cycles without the
+dependency reduction that normally justifies an optional artifact.
+
+The public `scalacv.vision` package stays intact. Its domains are already separate source responsibilities:
+
+| Domain | Entry points | Guide |
+|---|---|---|
+| Detection and recognition | `FaceDetect`, `FaceRecognizer`, `Cascades`, `Dnn` | [Object detection](/object-detection) |
+| Pose and marker geometry | `Pose3D`, `Ar`, `HeadPose` | [Marker AR](/marker-ar) |
+| Motion and tracking | `OpticalFlow`, `Tracker`, `ObjectTracker` | [Tracking](/tracking) |
+| Mapping and navigation | `CameraPose`, `Localizer`, `VisualOdometry`, `Odometry`, `OccupancyGrid`, `Navigator` | [Navigation](/navigation) |
+
+Relocating these public types into subpackages would break imports, published names and API links without
+changing their dependency graph. Prefer focused files and guide entry points; reconsider packages or
+artifacts only when a concrete optional dependency or domain boundary requires them.
 
 ## One ownership primitive
 
@@ -179,6 +232,7 @@ scalacv draws a deliberate line between the two kinds of failure:
 | `CvError.DecodeFailed` | image bytes / file could not be decoded |
 | `CvError.EncodeFailed` | image could not be written |
 | `CvError.LoadFailed` | a model, cascade, network, or video source could not be resolved |
+| `CvError.EndOfStream` | an opened capture did not deliver the requested snapshot; stream traversal ends normally |
 | `CvError.CalibrationFailed` | camera calibration did not converge |
 | `CvError.NativesMissing` | the platform native jars are absent (carries the fix) |
 | `CvError.NativeCall` | OpenCV threw mid-operation; wraps its message, names the op |
@@ -190,7 +244,9 @@ what `Image.reading` does for you):
 ```scala mdoc:silent
 val safe: Either[CvError, Int] =
   Cv.attempt("measure") {
-    Image.blank(32, 32).gray.canny(50, 150).mat.rows
+    val measured = Image.blank(32, 32).gray.canny(50, 150)
+    try measured.height
+    finally measured.close()
   }
 ```
 

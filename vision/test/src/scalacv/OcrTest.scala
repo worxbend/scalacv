@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 /** OCR preprocessing (the part scalacv owns) and the engine SPI. */

@@ -6,8 +6,9 @@ package scalacv
   * Every value here is **generated from `build.mill`'s `Deps` block** rather than typed out a second time —
   * see `core.generatedSources`. That is not tidiness: a version written down in two places is a version that
   * eventually disagrees with itself, and the failure is silent. A dependency bump used to move the build and
-  * leave this object (and the "add these lines" help text in [[OpenCv]] and [[Cascades]]) quoting the
-  * previous release, which is precisely the number a bug report or a broken classpath depends on being right.
+  * leave this object (and the "add these lines" help text in [[OpenCv]] and `scalacv.vision.Cascades`)
+  * quoting the previous release, which is precisely the number a bug report or a broken classpath depends on
+  * being right.
   */
 object Build:
 

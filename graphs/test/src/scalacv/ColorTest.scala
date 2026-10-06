@@ -1,7 +1,6 @@
 package scalacv
 
 import scalacv.graphs.*
-import scalacv.vision.*
 
 /** Unit tests for the RGBA [[Color]] palette. Pure value arithmetic — no OpenCV natives — so it needs no
   * `OpenCv.load()`. Covers construction and bounds, the BGR channel-order bridge to [[Scalar]], the alpha and

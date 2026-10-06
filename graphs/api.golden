@@ -15,6 +15,10 @@ abstract class scalacv.graphs.Picture.Prim
   extends java.lang.Object
   implements scala.Product, scala.reflect.Enum
   def <init>(): void
+abstract class scalacv.graphs.RenderPrimitive
+  extends java.lang.Object
+  implements scala.Product, scala.reflect.Enum
+  def <init>(): void
 final class scalacv.graphs.Affine
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -136,6 +140,12 @@ final class scalacv.graphs.Dash
   def productElementName(int): java.lang.String
   def productPrefix(): java.lang.String
   def toString(): java.lang.String
+final class scalacv.graphs.Graphics.OpenCvDrawing
+  extends java.lang.Object
+  implements scalacv.graphs.Renderer
+  def <init>(org.opencv.core.Mat): void
+  def draw(scalacv.graphs.RenderPrimitive, scalacv.graphs.PictureStyle): void
+  def textMeasurer(): scalacv.graphs.TextMeasurer
 final class scalacv.graphs.Picture.Leaf
   extends java.lang.Object
   implements java.io.Serializable, scala.Product, scalacv.graphs.Picture
@@ -247,17 +257,17 @@ final class scalacv.graphs.Picture.Prim.Text
 final class scalacv.graphs.Picture.Styled
   extends java.lang.Object
   implements java.io.Serializable, scala.Product, scalacv.graphs.Picture
-  def <init>(scalacv.graphs.Picture, scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>): void
+  def <init>(scalacv.graphs.Picture, scalacv.graphs.StylePatch): void
   def _1(): scalacv.graphs.Picture
-  def _2(): scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>
+  def _2(): scalacv.graphs.StylePatch
   def canEqual(java.lang.Object): boolean
   def child(): scalacv.graphs.Picture
   def copy$default$1(): scalacv.graphs.Picture
-  def copy$default$2(): scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>
-  def copy(scalacv.graphs.Picture, scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>): scalacv.graphs.Picture$Styled
+  def copy$default$2(): scalacv.graphs.StylePatch
+  def copy(scalacv.graphs.Picture, scalacv.graphs.StylePatch): scalacv.graphs.Picture$Styled
   def equals(java.lang.Object): boolean
-  def f(): scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>
   def hashCode(): int
+  def patch(): scalacv.graphs.StylePatch
   def productArity(): int
   def productElement(int): java.lang.Object
   def productElementName(int): java.lang.String
@@ -282,7 +292,24 @@ final class scalacv.graphs.Picture.Transformed
   def productElementName(int): java.lang.String
   def productPrefix(): java.lang.String
   def toString(): java.lang.String
-final class scalacv.graphs.Style
+final class scalacv.graphs.PictureLayout
+  extends java.lang.Object
+  def <init>(scalacv.graphs.TextMeasurer): void
+  def above$default$3(): double
+  def above(scalacv.graphs.Picture, scalacv.graphs.Picture, double): scalacv.graphs.Picture
+  def beside$default$3(): double
+  def beside(scalacv.graphs.Picture, scalacv.graphs.Picture, double): scalacv.graphs.Picture
+  def bounds(scalacv.graphs.Picture): scala.Option<scalacv.graphs.Bounds>
+  def grid$default$3(): double
+  def grid(scala.collection.immutable.Seq<scalacv.graphs.Picture>, int, double): scalacv.graphs.Picture
+  def label$default$3(): scalacv.graphs.Color
+  def label$default$4(): scalacv.graphs.Color
+  def label$default$5(): int
+  def label$default$6(): double
+  def label$default$7(): scalacv.Font
+  def label(java.lang.String, scalacv.Point, scalacv.graphs.Color, scalacv.graphs.Color, int, double, scalacv.Font): scalacv.graphs.Picture
+  def textMeasurer(): scalacv.graphs.TextMeasurer
+final class scalacv.graphs.PictureStyle
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
   def <init>(scala.Option<scalacv.graphs.Color>, int, scala.Option<scalacv.graphs.Dash>, scala.Option<scalacv.graphs.Color>, scalacv.Font, double, boolean): void
@@ -302,7 +329,7 @@ final class scalacv.graphs.Style
   def copy$default$5(): scalacv.Font
   def copy$default$6(): double
   def copy$default$7(): boolean
-  def copy(scala.Option<scalacv.graphs.Color>, int, scala.Option<scalacv.graphs.Dash>, scala.Option<scalacv.graphs.Color>, scalacv.Font, double, boolean): scalacv.graphs.Style
+  def copy(scala.Option<scalacv.graphs.Color>, int, scala.Option<scalacv.graphs.Dash>, scala.Option<scalacv.graphs.Color>, scalacv.Font, double, boolean): scalacv.graphs.PictureStyle
   def dash(): scala.Option<scalacv.graphs.Dash>
   def equals(java.lang.Object): boolean
   def fill(): scala.Option<scalacv.graphs.Color>
@@ -315,6 +342,98 @@ final class scalacv.graphs.Style
   def productPrefix(): java.lang.String
   def strokeColor(): scala.Option<scalacv.graphs.Color>
   def strokeWidth(): int
+  def toString(): java.lang.String
+final class scalacv.graphs.RenderPrimitive.Circle
+  extends scalacv.graphs.RenderPrimitive
+  def <init>(scalacv.Point, double): void
+  def _1(): scalacv.Point
+  def _2(): double
+  def canEqual(java.lang.Object): boolean
+  def center(): scalacv.Point
+  def copy$default$1(): scalacv.Point
+  def copy$default$2(): double
+  def copy(scalacv.Point, double): scalacv.graphs.RenderPrimitive$Circle
+  def equals(java.lang.Object): boolean
+  def hashCode(): int
+  def ordinal(): int
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def radius(): double
+  def toString(): java.lang.String
+final class scalacv.graphs.RenderPrimitive.Path
+  extends scalacv.graphs.RenderPrimitive
+  def <init>(scala.collection.immutable.Seq<scalacv.Point>, boolean): void
+  def _1(): scala.collection.immutable.Seq<scalacv.Point>
+  def _2(): boolean
+  def canEqual(java.lang.Object): boolean
+  def closed(): boolean
+  def copy$default$1(): scala.collection.immutable.Seq<scalacv.Point>
+  def copy$default$2(): boolean
+  def copy(scala.collection.immutable.Seq<scalacv.Point>, boolean): scalacv.graphs.RenderPrimitive$Path
+  def equals(java.lang.Object): boolean
+  def hashCode(): int
+  def ordinal(): int
+  def points(): scala.collection.immutable.Seq<scalacv.Point>
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def toString(): java.lang.String
+final class scalacv.graphs.RenderPrimitive.Text
+  extends scalacv.graphs.RenderPrimitive
+  def <init>(java.lang.String, scalacv.Point): void
+  def _1(): java.lang.String
+  def _2(): scalacv.Point
+  def at(): scalacv.Point
+  def canEqual(java.lang.Object): boolean
+  def copy$default$1(): java.lang.String
+  def copy$default$2(): scalacv.Point
+  def copy(java.lang.String, scalacv.Point): scalacv.graphs.RenderPrimitive$Text
+  def equals(java.lang.Object): boolean
+  def hashCode(): int
+  def ordinal(): int
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def text(): java.lang.String
+  def toString(): java.lang.String
+final class scalacv.graphs.StylePatch
+  extends java.lang.Object
+  implements java.io.Serializable, scala.Product
+  def <init>(scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<java.lang.Object>, scala.Option<scala.Option<scalacv.graphs.Dash>>, scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<scalacv.Font>, scala.Option<java.lang.Object>, scala.Option<java.lang.Object>): void
+  def _1(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def _2(): scala.Option<java.lang.Object>
+  def _3(): scala.Option<scala.Option<scalacv.graphs.Dash>>
+  def _4(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def _5(): scala.Option<scalacv.Font>
+  def _6(): scala.Option<java.lang.Object>
+  def _7(): scala.Option<java.lang.Object>
+  def antialias(): scala.Option<java.lang.Object>
+  def apply(scalacv.graphs.PictureStyle): scalacv.graphs.PictureStyle
+  def canEqual(java.lang.Object): boolean
+  def copy$default$1(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def copy$default$2(): scala.Option<java.lang.Object>
+  def copy$default$3(): scala.Option<scala.Option<scalacv.graphs.Dash>>
+  def copy$default$4(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def copy$default$5(): scala.Option<scalacv.Font>
+  def copy$default$6(): scala.Option<java.lang.Object>
+  def copy$default$7(): scala.Option<java.lang.Object>
+  def copy(scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<java.lang.Object>, scala.Option<scala.Option<scalacv.graphs.Dash>>, scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<scalacv.Font>, scala.Option<java.lang.Object>, scala.Option<java.lang.Object>): scalacv.graphs.StylePatch
+  def dash(): scala.Option<scala.Option<scalacv.graphs.Dash>>
+  def equals(java.lang.Object): boolean
+  def fill(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def font(): scala.Option<scalacv.Font>
+  def fontScale(): scala.Option<java.lang.Object>
+  def hashCode(): int
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def strokeColor(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def strokeWidth(): scala.Option<java.lang.Object>
   def toString(): java.lang.String
 object scalacv.graphs.Affine
   extends java.lang.Object
@@ -415,12 +534,20 @@ object scalacv.graphs.Dash
 object scalacv.graphs.Graphics
   extends java.lang.Object
   implements java.io.Serializable
-  def boundsOf(scalacv.graphs.Picture, scalacv.graphs.Affine, scalacv.graphs.Style): scala.Option<scalacv.graphs.Bounds>
   def renderTo(scalacv.graphs.Picture, org.opencv.core.Mat): void
+  def scalacv$graphs$Graphics$$$drawPrim(scalacv.graphs.RenderPrimitive, org.opencv.core.Mat, scalacv.graphs.PictureStyle): void
 object scalacv.graphs.Graphics.package
   extends java.lang.Object
   implements java.io.Serializable
   def draw(scalacv.Image, scalacv.graphs.Picture): scalacv.Image
+object scalacv.graphs.OpenCvRenderer
+  extends java.lang.Object
+  implements java.io.Serializable
+  def layout(): scalacv.graphs.PictureLayout
+  def render$default$4(): scalacv.graphs.Color
+  def render(scalacv.graphs.Picture, int, int, scalacv.graphs.Color): scalacv.Image
+  def renderOn(scalacv.graphs.Picture, scalacv.Image): scalacv.Image
+  def textMeasurer(): scalacv.graphs.TextMeasurer
 object scalacv.graphs.Picture
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -548,7 +675,7 @@ object scalacv.graphs.Picture.Styled
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
   def <init>(): void
-  def apply(scalacv.graphs.Picture, scala.Function1<scalacv.graphs.Style, scalacv.graphs.Style>): scalacv.graphs.Picture$Styled
+  def apply(scalacv.graphs.Picture, scalacv.graphs.StylePatch): scalacv.graphs.Picture$Styled
   def fromProduct(scala.Product): scalacv.graphs.Picture$Styled
   def toString(): java.lang.String
   def unapply(scalacv.graphs.Picture$Styled): scalacv.graphs.Picture$Styled
@@ -560,7 +687,11 @@ object scalacv.graphs.Picture.Transformed
   def fromProduct(scala.Product): scalacv.graphs.Picture$Transformed
   def toString(): java.lang.String
   def unapply(scalacv.graphs.Picture$Transformed): scalacv.graphs.Picture$Transformed
-object scalacv.graphs.Style
+object scalacv.graphs.PictureLayout
+  extends java.lang.Object
+  implements java.io.Serializable
+  def openCv(): scalacv.graphs.PictureLayout
+object scalacv.graphs.PictureStyle
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
   def <init>$default$1(): scala.Option<scalacv.graphs.Color>
@@ -570,10 +701,64 @@ object scalacv.graphs.Style
   def <init>$default$5(): scalacv.Font
   def <init>$default$6(): double
   def <init>$default$7(): boolean
-  def apply(scala.Option<scalacv.graphs.Color>, int, scala.Option<scalacv.graphs.Dash>, scala.Option<scalacv.graphs.Color>, scalacv.Font, double, boolean): scalacv.graphs.Style
-  def fromProduct(scala.Product): scalacv.graphs.Style
+  def apply(scala.Option<scalacv.graphs.Color>, int, scala.Option<scalacv.graphs.Dash>, scala.Option<scalacv.graphs.Color>, scalacv.Font, double, boolean): scalacv.graphs.PictureStyle
+  def fromProduct(scala.Product): scalacv.graphs.PictureStyle
   def toString(): java.lang.String
-  def unapply(scalacv.graphs.Style): scalacv.graphs.Style
+  def unapply(scalacv.graphs.PictureStyle): scalacv.graphs.PictureStyle
+object scalacv.graphs.PictureTraversal
+  extends java.lang.Object
+  implements java.io.Serializable
+  def foreach(scalacv.graphs.Picture, scala.Function2<scalacv.graphs.RenderPrimitive, scalacv.graphs.PictureStyle, scala.runtime.BoxedUnit>): void
+object scalacv.graphs.RenderPrimitive
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Sum
+  def fromOrdinal(int): scalacv.graphs.RenderPrimitive
+  def ordinal(scalacv.graphs.RenderPrimitive): int
+  static val Circle: scalacv.graphs.RenderPrimitive$Circle$
+  static val Path: scalacv.graphs.RenderPrimitive$Path$
+  static val Text: scalacv.graphs.RenderPrimitive$Text$
+object scalacv.graphs.RenderPrimitive.Circle
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def <init>(): void
+  def apply(scalacv.Point, double): scalacv.graphs.RenderPrimitive$Circle
+  def fromProduct(scala.Product): scalacv.graphs.RenderPrimitive$Circle
+  def toString(): java.lang.String
+  def unapply(scalacv.graphs.RenderPrimitive$Circle): scalacv.graphs.RenderPrimitive$Circle
+object scalacv.graphs.RenderPrimitive.Path
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def <init>(): void
+  def apply(scala.collection.immutable.Seq<scalacv.Point>, boolean): scalacv.graphs.RenderPrimitive$Path
+  def fromProduct(scala.Product): scalacv.graphs.RenderPrimitive$Path
+  def toString(): java.lang.String
+  def unapply(scalacv.graphs.RenderPrimitive$Path): scalacv.graphs.RenderPrimitive$Path
+object scalacv.graphs.RenderPrimitive.Text
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def <init>(): void
+  def apply(java.lang.String, scalacv.Point): scalacv.graphs.RenderPrimitive$Text
+  def fromProduct(scala.Product): scalacv.graphs.RenderPrimitive$Text
+  def toString(): java.lang.String
+  def unapply(scalacv.graphs.RenderPrimitive$Text): scalacv.graphs.RenderPrimitive$Text
+object scalacv.graphs.StylePatch
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def <init>$default$1(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def <init>$default$2(): scala.Option<java.lang.Object>
+  def <init>$default$3(): scala.Option<scala.Option<scalacv.graphs.Dash>>
+  def <init>$default$4(): scala.Option<scala.Option<scalacv.graphs.Color>>
+  def <init>$default$5(): scala.Option<scalacv.Font>
+  def <init>$default$6(): scala.Option<java.lang.Object>
+  def <init>$default$7(): scala.Option<java.lang.Object>
+  def apply(scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<java.lang.Object>, scala.Option<scala.Option<scalacv.graphs.Dash>>, scala.Option<scala.Option<scalacv.graphs.Color>>, scala.Option<scalacv.Font>, scala.Option<java.lang.Object>, scala.Option<java.lang.Object>): scalacv.graphs.StylePatch
+  def fromProduct(scala.Product): scalacv.graphs.StylePatch
+  def toString(): java.lang.String
+  def unapply(scalacv.graphs.StylePatch): scalacv.graphs.StylePatch
+object scalacv.graphs.TextMeasurer
+  extends java.lang.Object
+  implements java.io.Serializable
+  def openCv(): scalacv.graphs.TextMeasurer
 trait scalacv.graphs.Picture
   def above$default$2(): double
   def above(scalacv.graphs.Picture, double): scalacv.graphs.Picture
@@ -592,6 +777,7 @@ trait scalacv.graphs.Picture
   def render$default$3(): scalacv.graphs.Color
   def render(int, int, scalacv.graphs.Color): scalacv.Image
   def renderOn(scalacv.Image): scalacv.Image
+  def renderWith(scalacv.graphs.Renderer): void
   def rotate$default$2(): scalacv.Point
   def rotate(double, scalacv.Point): scalacv.graphs.Picture
   def scale$default$2(): scalacv.Point
@@ -606,3 +792,12 @@ trait scalacv.graphs.Picture
   def strokeWidth(int): scalacv.graphs.Picture
   def translate(double, double): scalacv.graphs.Picture
   def under(scalacv.graphs.Picture): scalacv.graphs.Picture
+trait scalacv.graphs.Renderer
+  abstract def draw(scalacv.graphs.RenderPrimitive, scalacv.graphs.PictureStyle): void
+  abstract def textMeasurer(): scalacv.graphs.TextMeasurer
+  def layout(): scalacv.graphs.PictureLayout
+  def render(scalacv.graphs.Picture): void
+  static def layout$(scalacv.graphs.Renderer): scalacv.graphs.PictureLayout
+  static def render$(scalacv.graphs.Renderer, scalacv.graphs.Picture): void
+trait scalacv.graphs.TextMeasurer
+  abstract def measure(java.lang.String, scalacv.Font, double): scalacv.TextMetrics

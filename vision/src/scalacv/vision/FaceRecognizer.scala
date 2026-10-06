@@ -95,8 +95,9 @@ object Gallery:
   *
   * The model is **yours to supply**, exactly as with the [[FaceDetect YuNet detector]]: download the SFace
   * ONNX (`face_recognition_sface_2021dec.onnx`, ~37 MB, from the OpenCV Zoo) and hand [[FaceRecognizer.load]]
-  * its path. Recognition builds on detection: [[embed]] takes a [[Face]] (from `image.faces`) and the image
-  * it came from, aligns and crops the face using its five landmarks, then extracts the embedding.
+  * its path. Recognition builds on detection: [[FaceRecognizer.embed]] takes a [[Face]] (from `image.faces`)
+  * and the image it came from, aligns and crops the face using its five landmarks, then extracts the
+  * embedding.
   *
   * {{{
   * for recognizer <- FaceRecognizer.load("sface.onnx") yield
@@ -145,7 +146,7 @@ object FaceRecognizer:
 
   private given Releasable[FaceRecognizerSF] = Releasable.nativeHandle
 
-  /** The embedding length SFace produces — what [[embed]] asserts the feature row to be. */
+  /** The embedding length SFace produces — what [[FaceRecognizer.embed]] asserts the feature row to be. */
   val EmbeddingSize: Int = 128
 
   /** The file name [[Models.fetch]] writes, and the name every OpenCV Zoo mirror uses. */

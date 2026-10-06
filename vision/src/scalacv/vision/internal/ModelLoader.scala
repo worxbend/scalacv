@@ -26,9 +26,9 @@ private[vision] object ModelLoader:
     *      for `CascadeClassifier` it is the only check at all (a bad path constructs an empty classifier
     *      silently). The unreadable-but-present case is reported separately, because "no such file" and
     *      "permission denied" are fixed differently.
-    *   1. **The native call runs inside [[Cv.attempt]]**, so a throwing importer (a malformed ONNX, an XML
-    *      that is not a cascade) is a `Left` rather than an unhandled `CvException` out of what looks like a
-    *      constructor.
+    *   1. **Creation and validation run inside [[Cv.attempt]]**, so a throwing importer or native validator
+    *      is a `Left` rather than an unhandled `CvException`. A validation exception still releases the newly
+    *      created handle; programmer errors propagate unchanged and cleanup failures are suppressed on them.
     *   1. **The result is vetted before it is handed out.** A `null` return — the quiet failure mode of the
     *      generated factory methods — or a handle `validate` rejects (e.g. `classifier.empty()`) is a `Left`,
     *      with the handle released first: the handle is real even when the model is not, and leaking it on
@@ -60,20 +60,30 @@ private[vision] object ModelLoader:
     if !file.isFile then Left(CvError.LoadFailed(path, missingDetails))
     else if !file.canRead then Left(CvError.LoadFailed(path, "the file exists but is not readable"))
     else
-      Cv.attempt(describe)(create)
-        .flatMap: a =>
-          if a == null then
-            Left(
-              CvError.LoadFailed(
-                path,
-                s"$describe returned null — OpenCV's factory reports this failure by returning " +
-                  "nothing rather than throwing, so scalacv reports it here instead"
-              )
+      val result = Cv.attempt[Either[CvError, A]](describe):
+        val a = create
+        if a == null then
+          Left(
+            CvError.LoadFailed(
+              path,
+              s"$describe returned null — OpenCV's factory reports this failure by returning " +
+                "nothing rather than throwing, so scalacv reports it here instead"
             )
-          else
-            validate(a) match
-              case Some(reason) =>
-                // The handle is real even though the model is not, so it still has to be freed.
-                releasable.release(a)
-                Left(CvError.LoadFailed(path, reason))
-              case None => Right(a)
+          )
+        else
+          val validation =
+            try validate(a)
+            catch
+              case error: Throwable =>
+                try releasable.release(a)
+                catch
+                  case releaseError: Throwable =>
+                    if releaseError ne error then error.addSuppressed(releaseError)
+                throw error
+          validation match
+            case Some(reason) =>
+              // The handle is real even though the model is not, so it still has to be freed.
+              releasable.release(a)
+              Left(CvError.LoadFailed(path, reason))
+            case None => Right(a)
+      result.flatMap(identity)

@@ -264,7 +264,7 @@ Camera.usingFile("http://esp32-cam.local:81/stream") { cam =>
 
 ## The `Motion` result
 
-A [`Motion`](/api/core/scalacv/Motion.html) is plain data, valid long after the frame is freed:
+A [`Motion`](/api/core/scalacv/vision/Motion.html) is plain data, valid long after the frame is freed:
 
 | Field / method | Type | Meaning |
 |---|---|---|

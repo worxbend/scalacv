@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 /** Unit tests for [[OccupancyGrid]] — the log-odds mapping and the Bresenham ray integration, which are pure

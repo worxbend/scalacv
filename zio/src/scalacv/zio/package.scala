@@ -161,11 +161,13 @@ private def requireOpen(capture: VideoCapture): ZStream[Any, CvError, Nothing] =
   * This inherits the borrowing contract of the synchronous `Video.frames` rather than ZIO's usual value
   * semantics, and the difference matters: every element is a [[BorrowedMat]], a liveness-checked view over
   * the single decode buffer the stream reuses. The view is spent the moment the stream pulls again or ends,
-  * and every access then throws `IllegalStateException` — so combinators that retain elements (`runCollect`,
-  * `broadcast`, `buffer`, `zipWithNext`) now fail loudly on access instead of silently seeing N aliases of
-  * one buffer with the newest content. Map each frame to something owned (encode it, copy the pixels,
-  * `_.clone()` it, reduce it) inside the stream. There is no memoization, so the stream stays flat in memory
-  * over an arbitrarily long video; that is the whole point.
+  * and access to an already-spent view throws `IllegalStateException`. This is a single-consumer contract,
+  * not a concurrent lifetime lock: no access may overlap the next pull or source close, and the raw `.mat`
+  * result is checked only at extraction. Retaining/prefetching combinators (`runCollect`, `broadcast`,
+  * `buffer`, `zipWithNext`) therefore remain invalid for borrowed frames; fan-out can race before a view is
+  * marked spent. Map each frame to something owned (encode it, copy the pixels, `_.clone()` it, reduce it)
+  * before a retaining or parallel stage. There is no memoization, so the stream stays flat in memory over an
+  * arbitrarily long video; that is the whole point.
   *
   * The read step is the core library's `Video.FrameSource` — the same exception-mode save/restore and the
   * same `attemptsPerFrame` retry loop the synchronous `Video.frames` uses, so a dropped frame is ridden out

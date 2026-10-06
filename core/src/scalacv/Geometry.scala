@@ -37,16 +37,17 @@ final case class Point(x: Double, y: Double):
     */
   def distanceTo(other: Point): Double = math.hypot(x - other.x, y - other.y)
 
-/** A point in 3D space — a model coordinate for [[Ar]] pose work, in the same units you give a marker's side
-  * length (metres is the usual choice). `z` points out of the marker plane toward the camera.
+/** A point in 3D space — a model coordinate for `scalacv.vision.Ar` pose work, in the same units you give a
+  * marker's side length (metres is the usual choice). `z` points out of the marker plane toward the camera.
   */
 final case class Point3(x: Double, y: Double, z: Double):
   private[scalacv] def toCv: cv.Point3 = cv.Point3(x, y, z)
 
-/** A width/height extent in pixels. Neither side may be negative — a zero extent is allowed (an empty size),
-  * a negative one throws.
+/** A finite, non-negative width/height extent in pixels. Fractional extents are retained for geometry and
+  * text measurement; integer raster operations document their own rounding rule. Zero is an empty extent.
   */
 final case class Size(width: Double, height: Double):
+  require(width.isFinite && height.isFinite, s"a Size must be finite: ${width}x$height")
   require(width >= 0 && height >= 0, s"a Size cannot be negative: ${width}x$height")
   private[scalacv] def toCv: cv.Size = cv.Size(width, height)
 

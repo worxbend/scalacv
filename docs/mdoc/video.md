@@ -9,7 +9,7 @@ that, and this page leads with the one to reach for first.
   terms as any other `Image`, with the lifetime handled for you. This is where almost all video work
   should start.
 - [`Video`](#the-low-level-videoframes) is the **zero-copy** floor underneath it: one reused,
-  borrowed `Mat` for the whole traversal, no per-frame allocation. Drop to it only when the copy
+  borrowed `Mat` for the whole traversal, no per-frame native-buffer allocation. Drop to it only when the copy
   `Camera` makes per frame is the thing that matters.
 
 The whole surface is headless: it decodes and computes, and never draws to a window (see
@@ -597,7 +597,7 @@ never retain or release the raw handle), so the whole
 `Managed[Mat]` — it never aliases the frame buffer — so running them inside the loop is correct and
 leak-free.
 
-### The borrowing contract, enforced
+### The borrowing contract, enforced {#the-borrowing-contract}
 
 This is the one place in scalacv where the `Mat` you are handed is **not yours**. A `BorrowedMat`
 is valid from the `next()` that produced it until the iterator advances or the `frames` block
@@ -605,6 +605,10 @@ returns — and that validity is *enforced*, the same way `Managed` enforces rel
 spent frame and it throws `IllegalStateException` on the Scala side, before anything crosses JNI.
 Reading a frame the stream has moved past is not a wrong answer; it is freed native memory, and the
 exception is what stands between you and a SIGSEGV.
+
+The check is not a concurrent lifetime lock. Use one consumer, and never overlap view access with
+an iterator advance or source close on another thread/fiber. Clone while the source is paused before
+handing pixels to parallel work; a raw `frame.mat` reference has no checks after extraction.
 
 So you still **reduce each frame to something owned inside the loop** — a count, a scalar, encoded
 bytes, an owned `Managed[Mat]` from an `Ops` op. Writing each frame out as you go is fine, because

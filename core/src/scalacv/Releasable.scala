@@ -10,8 +10,9 @@ import org.opencv.videoio.{VideoCapture, VideoWriter}
   *
   * There are two regimes, and which one applies is not a style choice — it is dictated by what the generated
   * Java binding exposes. Of the 188 `org.opencv.*` types that hold a native pointer, exactly **three** have a
-  * public `release()`: `Mat`, [[VideoCapture]] and [[VideoWriter]]. The other 185 — including every detector
-  * this library wraps — expose only a `private static native void delete(long)` plus a `finalize()`.
+  * public `release()`: `Mat`, `org.opencv.videoio.VideoCapture` and `org.opencv.videoio.VideoWriter`. The
+  * other 185 — including every detector this library wraps — expose only a
+  * `private static native void delete(long)` plus a `finalize()`.
   *
   * Relying on that `finalize()` is not viable. It is not disabled (a common myth), but it only runs when the
   * collector runs, and the collector sees ~40 bytes of Java header per multi- megabyte native buffer.

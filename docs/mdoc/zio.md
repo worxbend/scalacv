@@ -167,10 +167,11 @@ val readGrey: _root_.zio.IO[CvError, Image] =
 
 `frameStream` inherits the borrowing contract of the synchronous [`Video.frames`](/video), enforced
 the same way: each emitted `BorrowedMat` is **one buffer** decoded into in place, spent the moment the
-stream advances or ends. Reduce each frame to something owned **inside** the stream — retaining an
-view throws `IllegalStateException` on access rather than silently showing you the newest frame.
-The raw `frame.mat` escape hatch is checked only at extraction: retaining it is still unsafe, and
-concurrent access while the source advances is not supported:
+stream advances or ends. Reduce each frame to something owned **inside** the stream — accessing an
+already-spent view throws `IllegalStateException` rather than silently showing the newest frame.
+The raw `frame.mat` escape hatch is checked only at extraction: retaining it is still unsafe.
+The liveness flag is not a concurrent lifetime lock. Never overlap view access with the next pull
+or source close; clone while the source is paused before sending pixels to parallel work:
 
 ```scala mdoc:silent
 def brightnessOverTime(source: String): _root_.zio.ZIO[Any, Throwable, _root_.zio.Chunk[Double]] =
@@ -196,8 +197,9 @@ the stream the capture's exception mode is forced off and restored afterwards, s
 *completes* the stream instead of failing it.
 
 :::danger[These combinators break on `frameStream`]
-Anything that retains elements collects N *spent* views — the first access to any of them throws
-`IllegalStateException`, exactly like a released `Managed`. On `frameStream`, avoid:
+Retaining elements can hand out *spent* views; sequential access to them throws
+`IllegalStateException`. Prefetching and fan-out are worse: consumers can race a decode or close
+before the liveness check detects it. On `frameStream`, avoid:
 
 | Combinator | Why it fails |
 | --- | --- |

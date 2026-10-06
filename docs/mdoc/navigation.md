@@ -66,7 +66,7 @@ moving, and which way":
 
 `track(a, b)` is the one-call form: it seeds Shi–Tomasi corners on `a` for you. When you want to control
 the seeds — reuse last frame's points, mask a region, cap the count — call
-[`goodFeatures`](/api/core/scalacv/OpticalFlow$.html) yourself and pass them to the three-argument
+[`goodFeatures`](/api/core/scalacv/vision/OpticalFlow$.html) yourself and pass them to the three-argument
 `track`:
 
 ```scala mdoc:silent
@@ -184,7 +184,7 @@ From a rectified stereo pair, `StereoDepth.disparity` produces a map where **bri
 }
 ```
 
-Each [`Obstacle`](/api/core/scalacv/Obstacle.html) is a bounding `region` plus a mean `nearness` in
+Each [`Obstacle`](/api/core/scalacv/vision/Obstacle.html) is a bounding `region` plus a mean `nearness` in
 `0…1`; the list comes back **largest first**. The two knobs:
 
 | `fromDisparity` knob | Meaning | Default |
@@ -220,7 +220,7 @@ camera two units to the side of the world origin:
 }
 ```
 
-`locate` needs at least **4** 3D↔2D pairs and returns a [`CameraPose`](/api/core/scalacv/CameraPose.html),
+`locate` needs at least **4** 3D↔2D pairs and returns a [`CameraPose`](/api/core/scalacv/vision/CameraPose.html),
 whose `position` gives the camera's location in *world* coordinates (`-Rᵀ·t`, computed for you). In
 practice the pairs come from matching this frame's [`Features`](#features--matching) to the map; the
 recovered pose then anchors the drifting odometry.
@@ -247,7 +247,7 @@ the view into thirds, and pick a `Steering` toward the clearest — obstacle avo
 }
 ```
 
-The returned [`Guidance`](/api/core/scalacv/Guidance.html) has a `steering` and the per-third nearness it
+The returned [`Guidance`](/api/core/scalacv/vision/Guidance.html) has a `steering` and the per-third nearness it
 decided from. `steer` reads the disparity centre and picks one of four moves:
 
 | `Steering` | When | 
@@ -271,7 +271,7 @@ finally odometry.close()
 ```
 
 `update` returns `None` on the very first frame (it becomes the reference) and whenever too few points
-survive to estimate a motion; otherwise a [`CameraMotion`](/api/core/scalacv/CameraMotion.html) for that
+survive to estimate a motion; otherwise a [`CameraMotion`](/api/core/scalacv/vision/CameraMotion.html) for that
 step. `framesProcessed` tells you how many frames it has consumed. The pipeline retains a frame's worth
 of native memory between calls — that is why it is `AutoCloseable`, and why it is **not** thread-safe:
 feed one frame at a time.

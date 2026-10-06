@@ -57,7 +57,7 @@ object ModelSpec:
     new ModelSpec(fileName, urls, None, None)
 
 /** A small registry and downloader for the model files scalacv's detectors need. It is *the* downloader:
-  * [[FaceDetect.downloadModel]] is a one-line alias for `fetch(FaceDetect.modelSpec, into)`.
+  * `scalacv.vision.FaceDetect.downloadModel` is a one-line alias for `fetch(FaceDetect.modelSpec, into)`.
   *
   * [[fetch]] downloads to a temp file beside the target and moves it into place only after it verifies, so an
   * interrupted run never leaves a truncated model for the next load to trip over. It is idempotent: a target
@@ -65,8 +65,8 @@ object ModelSpec:
   * network. URLs may be `http(s)://` or `file://`, so a model you already have on disk is just another
   * source.
   *
-  * The detector model specs live next to their detectors ([[FaceDetect.modelSpec]] and
-  * [[FaceRecognizer.modelSpec]]); supply your own [[ModelSpec]] for anything else.
+  * The detector model specs live next to their detectors (`scalacv.vision.FaceDetect.modelSpec` and
+  * `scalacv.vision.FaceRecognizer.modelSpec`); supply your own [[ModelSpec]] for anything else.
   */
 object Models:
 

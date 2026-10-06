@@ -24,8 +24,35 @@ and then the runner is killed by the kernel's OOM reaper on an unrelated job twe
 with no stack trace. Every ordinary assertion is blind to it, because the leak is off-heap and the
 heap is fine. If you want a leak to fail a build, you have to go and measure the leak.
 
-What this repository does about all three is 494 test cases across 48 suites in `core.test`, three
-more in a module that exists only to watch resident memory, and zero bytes of committed pixels.
+The repository answers all three with generated fixtures, tolerance-based assertions, and native
+RSS canaries. Unit suites belong to `core.test`, `vision.test`, or `graphs.test`; cross-module
+integration, ownership/property tests, and the API/POM gates stay in `core.test`. The leak workloads
+run separately in `leaks.test`, and no image assets are committed.
+
+#sect("Run the module that owns the suite")
+
+The complete local test command names every module. Run it from the repository root:
+
+#example("A sequential full run, including native RSS canaries.")[
+```bash
+./mill --no-server -j 1 core.test + vision.test + graphs.test + zio.test + examples.test + leaks.test
+```
+]
+
+The `+` separators are not decoration: `test` is a Mill command, so space-separated targets can
+become test-name filters rather than separate module runs. `-j 1` keeps the full native/RSS run
+sequential; `--no-server` avoids sharing a long-lived Mill worker with another build.
+
+#example("Select a suite through its owning module, not its package name.")[
+```bash
+./mill --no-server -j 1 core.test.testOnly scalacv.FrameSourceSafetyTest
+./mill --no-server -j 1 vision.test.testOnly scalacv.vision.RigidPoseInteropTest
+./mill --no-server -j 1 graphs.test.testOnly scalacv.RendererContractTest
+```
+]
+
+A suite in package `scalacv` may live in the vision or graphics module. Package names were preserved
+when those suites moved; running only `core.test` no longer runs their unit tests.
 
 #sect("Draw the fixture, do not ship it")
 
@@ -163,7 +190,7 @@ equality, and pin the OpenCV version --- which this build does in one place, `De
 
 Example-based tests check the cases you thought of; the regressions that happen live at the edges
 you did not, an odd width or a fourth channel. `PropertyTest` extends `munit.ScalaCheckSuite`
-(`org.scalameta::munit-scalacheck:1.3.0`, added to `core.test` on top of the `munit:1.3.4` every
+(`org.scalameta::munit-scalacheck:1.3.1`, added to `core.test` on top of the `munit:1.3.6` every
 test module already carries) and states laws instead.
 
 #example("An identity law over generated sizes and channel counts.")[
@@ -304,13 +331,14 @@ before both readings. And the bound is a ceiling rather than zero, because RSS n
 to baseline: arenas do not shrink and the code cache only grows. A per-iteration leak of even a
 modest `Mat` clears 48 MB long before 300 iterations; a leak-free workload stays flat.
 
-#figure-table("What the three leak tests drive, and what a regression would cost per call.")[
+#figure-table("What the four leak tests drive, and what a regression would cost per call.")[
 #tbl(
   columns: (1.4fr, 1.6fr),
   [Workload], [What a regression leaks],
   [`blank → gray → blur(2) → canny(80, 160) → bytes(".png")` at 640×480], [one intermediate per stage; the pipeline should hold exactly one live `Mat`],
   [`blurBackground` with a deliberately size-mismatched mask, 200 iterations], [a 320×240×3 receiver, about 230 KB per failed call --- roughly 46 MB over the run],
   [`undistort` with a fresh `Intrinsics` per call, 300 iterations], [the camera matrix and distortion coefficients, allocated per call],
+  [`ZIO.scoped(acquireRelease(Mat(...)))`, 200 iterations], [a 640×480×3 native buffer per scope if the finalizer stops releasing it],
 )
 ]
 
@@ -319,10 +347,11 @@ was. An error branch that forgets to release is invisible to every functional te
 the exception is thrown, the assertion about the exception passes, and 230 KB goes missing each
 time.
 
-The suite runs with `./mill leaks.test`. It is its own Mill module for one reason: RSS is
-process-global, so a suite that measures it must be the only suite in the JVM --- in `core.test`,
-48 suites share a fork and their allocations would contaminate the reading until the bound meant
-nothing.
+The suite runs with `./mill leaks.test`. RSS is process-global, so its single suite owns a JVM
+and its workloads run sequentially. The functional MUnit suites also receive one fork per suite,
+with the build rejecting empty discovery. Separate forks prevent a native crash from erasing
+another suite's results; they do not prevent concurrent processes from contending for host memory,
+which is why the full local command uses `-j 1`.
 
 CI runs a coarser version of the same idea in its `leak-check` job. After `leaks.test` it compiles a
 plain-Java driver against `examples.runClasspath`, runs
@@ -343,9 +372,9 @@ approaches.
 
 #sect("Isolation: one load, one JVM, one scope")
 
-`OpenCv.load()` is idempotent but not free --- the first call extracts about 196 MB of natives into
-`~/.javacpp` and dlopens them --- so it belongs in `beforeAll`, once per suite, in a JVM that will
-run many. Thirty-nine of the 48 suites in `core.test` do exactly that, and so does `LeakTest`.
+`OpenCv.load()` is idempotent but not free: the first call extracts classifier libraries into the
+JavaCPP cache and loads them into the process. Native suites put it in `beforeAll`, once per suite
+in that suite's forked JVM. Pure geometry and renderer contracts do not need to load natives.
 
 Test modules fork by default in Mill, and `ScalacvTests` sets `forkArgs` to
 `Deps.headlessJvmArgs(jvmMajor())`. That adds `-Djava.awt.headless=true`, which is an assertion
@@ -371,10 +400,10 @@ environment --- the claim the smoke job exists to keep honest.
 #tbl(
   columns: (1fr, 1.9fr),
   [Job], [What it gates],
-  [`build` (JDK 17, 21, 25 on `ubuntu-latest`)], [compile, `core.test zio.test examples.test`, `docs.mdocCheck`, and the headless natives smoke],
+  [`build` (JDK 17, 21, 25 on `ubuntu-latest`)], [compile, `core.test + vision.test + graphs.test + zio.test + examples.test`, `docs.mdocCheck`, and the headless natives smoke],
   [`leak-check`], [`leaks.test`, then a 2000-iteration external stress driver gated on RSS growth],
   [`style`], [`scalafmt` `checkFormatAll` and `scalafix --check` on every published module plus `examples`],
-  [`natives` (`macos-26`)], [the same smoke and `core.test zio.test` on Apple-silicon arm64],
+  [`natives` (`macos-26`)], [the same smoke and `core.test + vision.test + graphs.test + zio.test + examples.test` on Apple-silicon arm64],
   [`publish-shape`], [that exactly `core graphs vision zio` are publishable, and `PublishedPomTest`],
   [`consumer-smoke`], [a from-nothing resolve of the four published coordinates on a clean cache],
 )

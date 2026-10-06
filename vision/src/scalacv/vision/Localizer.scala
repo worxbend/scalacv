@@ -1,8 +1,5 @@
 package scalacv.vision
 
-import org.opencv.calib3d.Calib3d
-import org.opencv.core.Mat
-
 import scalacv.*
 
 /** A camera's absolute pose: the 3×3 rotation and 3-vector translation that map world points into the camera
@@ -10,9 +7,17 @@ import scalacv.*
   */
 final case class CameraPose(rotation: Seq[Seq[Double]], translation: Seq[Double]):
 
+  /** The validated world-to-camera mapping, in the map's units. No native resources are retained. */
+  val transform: RigidTransform = RigidTransform(rotation, translation)
+
   /** The camera's position in world coordinates, `-Rᵀ·t`. */
-  def position: Seq[Double] =
-    (0 until 3).map(i => -(0 until 3).map(j => rotation(j)(i) * translation(j)).sum)
+  def position: Seq[Double] = transform.inverse.translation
+
+object CameraPose:
+
+  /** Wraps a world-to-camera transform in the map's units. */
+  def fromTransform(transform: RigidTransform): CameraPose =
+    CameraPose(transform.rotation, transform.translation)
 
 /** Absolute localization — where the camera is, given a map of known 3D points and their matches in the
   * current frame.
@@ -64,9 +69,10 @@ object Localizer:
           imagePoints,
           intrinsics,
           PnpSolver.Iterative
-        ) { (own, rvec, tvec) =>
-          val rotation = own(Mat())
-          Calib3d.Rodrigues(rvec, rotation)
-          CameraPose(Mats.readMatrix(rotation, 3, 3), Mats.readColumn(tvec, 3))
+        ) { (_, rvec, tvec) =>
+          // Copy solver outputs before the Pnp scope closes; SO(3) conversion is shared pure geometry.
+          CameraPose.fromTransform(
+            RigidTransform.fromRotationVector(Mats.readColumn(rvec, 3), Mats.readColumn(tvec, 3))
+          )
         }
         .getOrElse(None)

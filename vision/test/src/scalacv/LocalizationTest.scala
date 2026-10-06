@@ -1,6 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
 import scalacv.vision.*
 
 /** The higher-level navigation components: absolute localization (solvePnP), reactive steering, and the

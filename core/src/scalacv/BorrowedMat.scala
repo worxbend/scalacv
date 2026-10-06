@@ -11,10 +11,15 @@ import org.opencv.core.Mat
   * retained reference pointed at freed native memory. Reading it was not an exception, it was a SIGSEGV — the
   * exact crash [[Managed]] exists to prevent everywhere else in the library.
   *
-  * `BorrowedMat` closes that hole. It wraps the shared buffer and flips a liveness flag the moment the frame
-  * source advances or closes; **every** access — including the [[mat]] escape hatch — checks the flag first
-  * and throws `IllegalStateException` instead of crossing JNI. A retained reference therefore fails loudly,
-  * in Scala, with the same spent-handle spirit as [[Managed]]'s use-after-release error.
+  * `BorrowedMat` detects sequential use after the frame source advances or closes. Every forwarded access —
+  * including the [[mat]] escape hatch — checks a liveness flag first and rejects an already-spent view with
+  * `IllegalStateException` before crossing JNI. The raw Mat returned by [[mat]] is checked only at
+  * extraction; it must not be retained or released.
+  *
+  * This is a single-consumer borrow, not a concurrent lifetime lock. The check and native access are not
+  * atomic with advancing or closing the source: do not use a view concurrently with either operation. Clone
+  * while the source is paused if another thread/fiber needs the pixels. Serialized consumers may hop threads,
+  * but a volatile flag alone cannot make overlapping access safe.
   *
   * Only the read-only surface a frame consumer needs is forwarded — geometry, pixel reads, `dataAddr` for
   * identity checks, and [[clone]] for "I need to keep this one". Mutation is not forwarded on purpose: the
@@ -33,10 +38,9 @@ import org.opencv.core.Mat
   */
 final class BorrowedMat private[scalacv] (private val delegate: Mat):
 
-  /** Volatile because a zio stream can invalidate a view on a blocking-pool fiber while a consumer on another
-    * fiber is mid-access; the flag flip has to be visible across that boundary for the check to mean
-    * anything. The flag only ever moves live -> spent, so a single volatile boolean is the whole protocol —
-    * no lock, and no cost on the happy path beyond one read.
+  /** Volatile so a serialized consumer hopping between ZIO fibers/threads sees that a previous pull spent the
+    * view. This is visibility, not mutual exclusion: a consumer must not race a pull or close, because
+    * checking the flag does not reserve the native buffer for the duration of the access.
     */
   @volatile private var live = true
 

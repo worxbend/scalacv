@@ -29,8 +29,8 @@ The whole process is three calls, and this page walks each one:
 | Step | Call | What you get |
 |---|---|---|
 | 1. Describe the board | `ChessboardPattern(columns, rows, squareSize)` | the target's known geometry |
-| 2. (optional) Check one frame | [`Calibration.findCorners`](/api/core/scalacv/Calibration$.html) | `Some(corners)` if the board is fully visible |
-| 3. Solve | [`Calibration.fromChessboard`](/api/core/scalacv/Calibration$.html) | a [`Calibration`](/api/core/scalacv/Calibration.html): intrinsics + error |
+| 2. (optional) Check one frame | [`Calibration.findCorners`](/api/core/scalacv/vision/Calibration$.html) | `Some(corners)` if the board is fully visible |
+| 3. Solve | [`Calibration.fromChessboard`](/api/core/scalacv/vision/Calibration$.html) | a [`Calibration`](/api/core/scalacv/vision/Calibration.html): intrinsics + error |
 
 ## The target
 
@@ -67,7 +67,7 @@ single unambiguous orientation in every view.
 
 ## Finding the board
 
-[`findCorners`](/api/core/scalacv/Calibration$.html) locates and sub-pixel-refines the whole inner
+[`findCorners`](/api/core/scalacv/vision/Calibration$.html) locates and sub-pixel-refines the whole inner
 grid in one image, returning the corners in pixel coordinates (or `None` if the full board is not
 visible — the detector is all-or-nothing):
 
@@ -120,7 +120,7 @@ failure, that returns an `Either`.
 ## Recovering the camera
 
 Hand several views of the board — from a *range of angles*, which is what makes the problem
-well-posed — to [`fromChessboard`](/api/core/scalacv/Calibration$.html). It finds the board in each,
+well-posed — to [`fromChessboard`](/api/core/scalacv/vision/Calibration$.html). It finds the board in each,
 drops the frames where it is not fully visible, and runs OpenCV's calibration to recover the camera:
 
 ```scala mdoc:compile-only
@@ -149,7 +149,7 @@ folder. Only if *fewer than `minViews`* survive does it fail.
 
 ### Reading the result
 
-A [`Calibration`](/api/core/scalacv/Calibration.html) carries three things:
+A [`Calibration`](/api/core/scalacv/vision/Calibration.html) carries three things:
 
 | Field | Type | What it is |
 |---|---|---|
