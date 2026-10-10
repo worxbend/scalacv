@@ -1,7 +1,5 @@
 package scalacv.vision
 
-import scala.collection.mutable.ArrayBuffer
-
 import scalacv.*
 
 /** A detected loop closure: the earlier keyframe this frame revisits, how many features matched, and a score
@@ -25,10 +23,10 @@ final case class LoopClosure(keyframe: Int, matches: Int, score: Double)
   *
   * Each keyframe owns a native ORB descriptor Mat, so an unbounded run accumulates native memory. Pass
   * `maxKeyframes` to cap the number kept **live**: once exceeded, the oldest keyframes are evicted and their
-  * descriptors freed. Eviction leaves a tombstone in place of the evicted slot rather than renumbering the
-  * survivors, so a [[LoopClosure.keyframe]] index handed out earlier stays valid — it just refers to a slot
-  * that may since have been evicted (matching against it is skipped). The default is unbounded, preserving
-  * the original behaviour; a bounded detector trades old-place recall for a fixed memory ceiling.
+  * descriptors freed. A bounded deque stores (stable ID, descriptors), without permanent tombstones. A
+  * [[LoopClosure.keyframe]] ID is never reassigned during a run; evicted IDs are no longer searchable. The
+  * default is unbounded, preserving the original behaviour; a bounded detector trades old-place recall for a
+  * fixed memory ceiling.
   */
 final class LoopDetector private (
     maxFeatures: Int,
@@ -37,95 +35,73 @@ final class LoopDetector private (
     maxKeyframes: Int
 ) extends AutoCloseable:
 
-  // Nullable slots, not a compacting buffer: a returned LoopClosure.keyframe is an absolute append index
-  // and must stay meaningful, so an evicted keyframe becomes a tombstone (null) instead of shifting the
-  // indices of everything after it. `live` tracks the non-tombstone count for keyframeCount and the cap.
-  private val keyframes = ArrayBuffer.empty[Descriptors | Null]
-  private var live = 0
+  private val keyframes = scala.collection.mutable.ArrayDeque.empty[(Int, Descriptors)]
+  private var nextId = 0
 
-  /** The lowest index that may still hold a live keyframe — everything below it is a tombstone.
-    *
-    * Eviction always takes the oldest, so the boundary only moves forward and can be remembered instead of
-    * rediscovered. Without it `evictIfNeeded` rescanned from index 0 on every `addKeyframe`, past every
-    * tombstone it had already made. Tombstones are never removed (the whole point is that an index handed out
-    * in a `LoopClosure` stays valid), so that prefix grows with the total number of frames ever added, not
-    * with the number kept: a detector capped at 100 keyframes and fed 100k frames did ~5·10⁹ null checks
-    * purely to find the front of the buffer. The cap exists for long runs, so its cost should not grow with
-    * how long the run is.
-    */
-  private var firstLive = 0
-
-  /** Stores `image` as a keyframe and returns its (stable) index. Evicts the oldest keyframes if this pushes
-    * the live count past `maxKeyframes`.
+  /** Stores a keyframe with a stable monotonic ID. Eviction does not renumber surviving IDs. After close,
+    * this reusable store starts again at ID zero, as before.
     */
   def addKeyframe(image: Image): Int =
-    keyframes += Features.detect(image, maxFeatures)
-    live += 1
-    evictIfNeeded()
-    keyframes.length - 1
+    checkId()
+    store(Features.detect(image, maxFeatures))
 
-  /** Frees the oldest live keyframes until the live count is within `maxKeyframes`. */
-  private def evictIfNeeded(): Unit =
-    while live > maxKeyframes && firstLive < keyframes.length do
-      keyframes(firstLive) match
-        case d: Descriptors =>
-          d.close() // release the evicted keyframe's native descriptor Mat
-          keyframes(firstLive) = null
-          live -= 1
-        case null => ()
-      firstLive += 1
+  private def checkId(): Unit =
+    require(nextId < Int.MaxValue, "keyframe IDs exhausted; close/reset the detector")
 
-  /** Looks for a loop: matches `image` against every keyframe except the most recent `recentExclusion` (which
-    * are trivially similar to the current position), and returns the best match if it clears `minMatches`.
-    * Does **not** store `image`.
-    */
+  private def store(current: Descriptors): Int =
+    val id = nextId
+    try keyframes.append((id, current))
+    catch
+      case e: Throwable =>
+        current.close()
+        throw e
+    nextId += 1
+    while keyframes.size > maxKeyframes do keyframes.removeHead()._2.close()
+    id
+
+  /** Matches without storing the image, ignoring the most recent `recentExclusion` IDs. */
   def detect(image: Image): Option[LoopClosure] =
     val current = Features.detect(image, maxFeatures)
-    try
-      val searchable = keyframes.length - recentExclusion
-      if searchable <= 0 || current.isEmpty then None
-      else
-        var bestIndex = -1
-        var bestMatches = 0
-        // From `firstLive`, not 0: everything below it is a tombstone, so starting at 0 would walk a
-        // prefix that grows with the total number of frames ever added. The `null` case below still has
-        // to stay — a slot above `firstLive` can be a tombstone too once `close` or a future eviction
-        // policy touches one out of order.
-        var i = firstLive
-        while i < searchable do
-          keyframes(i) match
-            case kf: Descriptors =>
-              val count = Features.matches(current, kf).size
-              if count > bestMatches then
-                bestMatches = count
-                bestIndex = i
-            case null => () // an evicted keyframe — skip it
-          i += 1
-        if bestMatches >= minMatches then
-          Some(LoopClosure(bestIndex, bestMatches, bestMatches.toDouble / math.max(1, current.size)))
-        else None
+    try score(current)
     finally current.close()
 
-  /** [[detect]] then [[addKeyframe]] — the usual per-keyframe step: check for a loop, then record where we
-    * are.
-    */
+  private def score(current: Descriptors): Option[LoopClosure] =
+    if current.isEmpty then None
+    else
+      var bestIndex = -1
+      var bestMatches = 0
+      keyframes.iterator
+        .takeWhile(_._1 < nextId - recentExclusion)
+        .foreach: (id, kf) =>
+          val count = Features.matches(current, kf).size
+          if count > bestMatches then
+            bestMatches = count
+            bestIndex = id
+      Option.when(bestMatches >= minMatches)(
+        LoopClosure(bestIndex, bestMatches, bestMatches.toDouble / math.max(1, current.size))
+      )
+
+  /** Detects then records a keyframe, extracting its owned descriptors only once. */
   def process(image: Image): Option[LoopClosure] =
-    val loop = detect(image)
-    addKeyframe(image): Unit
+    checkId()
+    val current = Features.detect(image, maxFeatures)
+    val loop = try score(current)
+    catch
+      case e: Throwable =>
+        current.close()
+        throw e
+    store(current): Unit
     loop
 
-  /** How many keyframes are currently stored **live** (evicted ones do not count). */
-  def keyframeCount: Int = live
+  /** Number of live keyframes; both descriptor and heap-entry storage are bounded by the cap. */
+  def keyframeCount: Int = keyframes.size
 
-  /** Releases every live keyframe's descriptors. Idempotent. */
+  /** Releases the store and resets IDs. Idempotent; the detector remains reusable. */
   def close(): Unit =
-    keyframes.foreach {
-      case d: Descriptors => d.close()
-      case null => ()
-    }
-    keyframes.clear()
-    live = 0
-    firstLive = 0
+    try keyframes.foreach(_._2.close())
+    finally
+      keyframes.clear()
+      nextId = 0
 
 object LoopDetector:
 

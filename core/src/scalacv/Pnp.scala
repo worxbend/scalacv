@@ -70,6 +70,14 @@ private[scalacv] object Pnp:
       intrinsics: Intrinsics,
       solver: PnpSolver = PnpSolver.Iterative
   )(decode: (Managed.Scope, Mat, Mat) => A): Either[CvError, Option[A]] =
+    require(objectPoints.size == imagePoints.size, "need one image point per object point")
+    val world = objectPoints.map(p => Vector(p.x, p.y, p.z))
+    val pixels = imagePoints.map(p => Vector(p.x, p.y, 0.0))
+    val minimum = if solver == PnpSolver.SQPnP then 3 else 4
+    if world.distinct.size < minimum || pixels.distinct.size < minimum || !hasPlane(world) || !hasPlane(
+        pixels
+      )
+    then return Right(None)
     Managed.scope: own =>
       val obj = own(MatOfPoint3f(objectPoints.map(_.toCv)*))
       val img = own(MatOfPoint2f(imagePoints.map(_.toCv)*))
@@ -79,4 +87,50 @@ private[scalacv] object Pnp:
       val tvec = own(Mat())
       Cv.attempt(s"solvePnP($solver)"):
         val ok = Calib3d.solvePnP(obj, img, camera, distortion, rvec, tvec, false, solver.cvValue)
-        Option.when(ok)(decode(own, rvec, tvec))
+        val accepted = ok && Mats.readColumn(rvec, 3).forall(_.isFinite) &&
+          Mats.readColumn(tvec, 3).forall(_.isFinite) &&
+          acceptable(own, obj, imagePoints, camera, distortion, rvec, tvec)
+        Option.when(accepted)(decode(own, rvec, tvec))
+
+  // Require rank >= 2, not rank 3: planar markers are a supported and important case.
+  private def hasPlane(points: Seq[Vector[Double]]): Boolean =
+    if points.size < 3 || !points.flatten.forall(_.isFinite) then false
+    else
+      val origin = points.head
+      val offsets = points.map(p => p.zip(origin).map(_ - _))
+      val scale = offsets.flatten.map(math.abs).max
+      if !scale.isFinite || scale == 0 then false
+      else
+        val normalized = offsets.map(_.map(_ / scale))
+        val axis = normalized.maxBy(v => v.map(x => x * x).sum)
+        normalized.exists: v =>
+          val cross = Vector(
+            axis(1) * v(2) - axis(2) * v(1),
+            axis(2) * v(0) - axis(0) * v(2),
+            axis(0) * v(1) - axis(1) * v(0)
+          )
+          cross.map(x => x * x).sum > 1e-12
+
+  private def acceptable(
+      own: Managed.Scope,
+      obj: MatOfPoint3f,
+      pixels: Seq[Point],
+      camera: Mat,
+      distortion: org.opencv.core.MatOfDouble,
+      rvec: Mat,
+      tvec: Mat
+  ): Boolean =
+    val rotation = own(Mat())
+    Calib3d.Rodrigues(rvec, rotation)
+    val r = Mats.readMatrix(rotation, 3, 3)
+    val t = Mats.readColumn(tvec, 3)
+    val inFront = obj.toArray.forall(p => r(2)(0) * p.x + r(2)(1) * p.y + r(2)(2) * p.z + t(2) > 1e-9)
+    val projected = own(MatOfPoint2f())
+    Calib3d.projectPoints(obj, rvec, tvec, camera, distortion, projected)
+    val errors = projected.toArray.toSeq.zip(pixels).map((a, b) => math.hypot(a.x - b.x, a.y - b.y))
+    // A generous generic sanity gate, not a metrology confidence interval. Callers needing tighter
+    // accuracy must evaluate residuals under their own sensor/noise model.
+    val span =
+      math.hypot(pixels.map(_.x).max - pixels.map(_.x).min, pixels.map(_.y).max - pixels.map(_.y).min)
+    inFront && errors.forall(_.isFinite) && math
+      .sqrt(errors.map(e => e * e).sum / errors.size) <= math.max(8.0, span * 0.05)

@@ -36,7 +36,7 @@ object Screen:
     findAll(image, template, minScore, maxMatches = 1).headOption
 
   /** Finds up to `maxMatches` non-overlapping occurrences of `template`, best first, each at or above
-    * `minScore`. After each hit its footprint is suppressed so the same spot is not reported twice.
+    * `minScore`. After each hit all overlapping top-left positions are excluded.
     */
   def findAll(
       image: Image,
@@ -52,36 +52,28 @@ object Screen:
     )
     require(maxMatches >= 1, s"maxMatches must be at least 1, got $maxMatches")
     val (tw, th) = (tmpl.cols, tmpl.rows)
-    Managed.use(Mat()): result =>
+    require(minScore >= -1 && minScore <= 1, "minScore must be in [-1, 1]")
+    Managed.scope: own =>
+      val result = own(Mat())
       Cv.orThrow("matchTemplate")(Imgproc.matchTemplate(img, tmpl, result, Imgproc.TM_CCOEFF_NORMED))
+      val eligible = own(Mat(result.rows, result.cols, CvType.CV_8UC1, org.opencv.core.Scalar(255)))
       val hits = List.newBuilder[TemplateMatch]
       var found = 0
       var searching = true
-      while searching && found < maxMatches do
-        val mm = Core.minMaxLoc(result)
-        if mm.maxVal >= minScore then
-          val loc = mm.maxLoc
-          hits += TemplateMatch(Rect(loc.x.toInt, loc.y.toInt, tw, th), mm.maxVal)
+      while searching && found < maxMatches && Core.countNonZero(eligible) > 0 do
+        val mm = Core.minMaxLoc(result, eligible)
+        if mm.maxVal.isFinite && mm.maxVal >= minScore then
+          val x = mm.maxLoc.x.toInt
+          val y = mm.maxLoc.y.toInt
+          hits += TemplateMatch(Rect(x, y, tw, th), mm.maxVal)
           found += 1
-          // Suppress this peak's footprint so the next iteration finds a different match.
-          val x0 = math.max(0, loc.x.toInt - tw / 2)
-          val y0 = math.max(0, loc.y.toInt - th / 2)
-          val x1 = math.min(result.cols, loc.x.toInt + tw / 2 + 1)
-          val y1 = math.min(result.rows, loc.y.toInt + th / 2 + 1)
-          // Painted straight onto the score map with the raw OpenCV call rather than through `drawRect`:
-          // `result` is the CV_32F correlation surface, not an image, and the fill value is -1.0 — below
-          // TM_CCOEFF_NORMED's floor, so the suppressed footprint can never win a later `minMaxLoc`. The
-          // scalacv `Rect`/`Scalar` types would be a poor fit for both. `Thickness.Filled` is named because
-          // OpenCV's `-1` sentinel here means "solid", not "one pixel wide going the other way".
-          Cv.orThrow("rectangle")(
-            Imgproc.rectangle(
-              result,
-              org.opencv.core.Point(x0, y0),
-              org.opencv.core.Point(x1, y1),
-              org.opencv.core.Scalar(-1.0),
-              Thickness.Filled.cvValue
-            )
-          )
+          // Exclude every top-left position whose rectangle overlaps this hit. The mask, not a
+          // correlation-domain sentinel, represents exhaustion (including minScore == -1).
+          val x0 = math.max(0, x - tw + 1)
+          val y0 = math.max(0, y - th + 1)
+          val x1 = math.min(result.cols.toLong, x.toLong + tw).toInt
+          val y1 = math.min(result.rows.toLong, y.toLong + th).toInt
+          Managed.use(eligible.submat(y0, y1, x0, x1))(patch => patch.setTo(org.opencv.core.Scalar(0)): Unit)
         else searching = false
       hits.result()
 

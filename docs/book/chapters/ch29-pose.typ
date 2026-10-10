@@ -29,7 +29,7 @@ hand, smooths the jitter out of the landmarks, and fires an event once when a ge
 
 Everything new here --- `Pose`, `PoseTopology`, `PoseEstimator`, `HeadPose`, `GestureRecognizer` and
 the two `Image` extensions --- lives in `scalacv-vision`, next to the `Dnn` and `FaceDetect` of the
-last chapters, so `com.worxbend::scalacv-vision:0.1.0` has to be on the classpath. `Image`, `Camera`,
+last chapters, so `com.worxbend::scalacv-vision:0.4.1` has to be on the classpath. `Image`, `Camera`,
 `Point` and `Intrinsics` are core.
 
 #sect("A skeleton is a graph with names")

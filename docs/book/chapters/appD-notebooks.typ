@@ -50,7 +50,7 @@ it for the pair --- `linux-x86_64`, `linux-arm64`, `macosx-arm64`, `macosx-x86_6
 
 #example("The first cell of any scalacv notebook.")[
 ```scala
-import $ivy.`com.worxbend::scalacv:0.1.0`
+import $ivy.`com.worxbend::scalacv:0.4.1`
 import $ivy.`org.bytedeco:opencv-platform:4.13.0-1.5.13`
 
 import scalacv.*
@@ -58,9 +58,9 @@ OpenCv.load()
 ```
 ]
 
-Add `com.worxbend::scalacv-vision:0.1.0` for the detectors, DNN, pose, tracking, OCR and calibration
+Add `com.worxbend::scalacv-vision:0.4.1` for the detectors, DNN, pose, tracking, OCR and calibration
 --- which is what the ArUco, chessboard and OCR generators later in this appendix need --- or
-`com.worxbend::scalacv-graphs:0.1.0` for `Picture`, charts and GIF. Both depend only on the core, so
+`com.worxbend::scalacv-graphs:0.4.1` for `Picture`, charts and GIF. Both depend only on the core, so
 adding one does not drag in the other.
 
 `OpenCv.load()` is idempotent and safe to call from several threads, so putting it in the first cell
@@ -196,7 +196,7 @@ declarations live in `using` directives at the top of the file, so the file is t
 #example("A complete scratch script, run with scala-cli run edges.scala.")[
 ```scala
 //> using scala 3.3.8
-//> using dep com.worxbend::scalacv:0.1.0
+//> using dep com.worxbend::scalacv:0.4.1
 //> using dep org.bytedeco:opencv:4.13.0-1.5.13,classifier=linux-x86_64
 //> using dep org.bytedeco:openblas:0.3.31-1.5.13,classifier=linux-x86_64
 

@@ -26,8 +26,8 @@ none of them at first and all four by the end.
 
 One piece of setup. The face-detection lines below --- `Cascades`, `CascadeName` and the `detect` /
 `detectHaar` verbs --- live in `scalacv-vision`, not in the core artifact, so add
-`com.worxbend::scalacv-vision:0.1.0` beside the core dependency of Chapter 2. The package does not
-change, so `import scalacv.*` still covers everything. The rest of the chapter is core only.
+`com.worxbend::scalacv-vision:0.4.1` beside the core dependency of Chapter 2, and add
+`import scalacv.vision.*` beside `import scalacv.*`. The rest of the chapter is core only.
 
 #sect("Opening a source")
 

@@ -14,7 +14,8 @@
 // class literals forces javac to resolve those jars and the runtime to load the classes. scalacv-zio_3 is
 // deliberately not referenced here: its public surface is a package object (scalacv.zio) whose synthetic
 // holder class (`package$package`) cannot be named from Java source, so its resolution is exercised by
-// `cs fetch` listing the coordinate rather than by a symbol reference.
+// `cs fetch` listing the coordinate rather than by a symbol reference. The companion
+// ScalaConsumerSmoke.scala additionally compiles and executes all four APIs at the Scala/JDK floor.
 public class ConsumerSmoke {
   public static void main(String[] args) {
     scalacv.OpenCv.load();

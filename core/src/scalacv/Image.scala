@@ -31,8 +31,8 @@ import org.opencv.core.{CvType, Mat}
   * A **query** ([[width]], `faces`, `qrCodes`, [[contours]]) only reads, so it leaves the image alive. A
   * **terminal** ([[write]], [[bytes]], [[close]]) consumes it and releases the Mat. If a value escapes the
   * chain without ever reaching a terminal it leaks, exactly as a stray [[Managed]] would — so prefer
-  * [[Image.reading]], which closes for you even when the body already consumed the image (release is
-  * idempotent).
+  * [[Image.reading]], which owns live successors and copy branches until its callback returns. `managed`
+  * preserves that scope; only an explicit [[detach]] transfers a branch out of it.
   *
   * ==Not a wall==
   *
@@ -114,7 +114,7 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
     require(radius >= 0, s"blur radius cannot be negative, got $radius")
     // radius 0 is the identity, but it must still spend the receiver like every other branch: move the Mat
     // out of this handle into a fresh Image (no pixel copy) so the source is left spent, not aliased alive.
-    if radius == 0 then Image(Managed(handle.take()))
+    if radius == 0 then Image(handle.move())
     else
       val side = radius * 2 + 1
       transform(_.gaussianBlur(Size(side.toDouble, side.toDouble)))
@@ -248,10 +248,10 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   def invert: Image = transform(_.bitwiseNot())
 
   /** Brightness/contrast in one step: `contrast` scales (1.0 = unchanged), `brightness` shifts (0 =
-    * unchanged).
+    * unchanged). Produces 8-bit pixels saturated into `[0, 255]`, not absolute values.
     */
   def adjust(brightness: Double = 0, contrast: Double = 1.0): Image =
-    transform(_.convertScaleAbs(contrast, brightness))
+    transform(src => Mats.produce("adjust")(dst => src.convertTo(dst, CvType.CV_8U, contrast, brightness)))
 
   /** Converts BGR → HSV — the space to threshold in for colour segmentation (see [[inRange]]). */
   def toHsv: Image = convert(ColorConversion.BgrToHsv)
@@ -392,24 +392,30 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
 
   /** Writes to `path`, choosing the encoder from its extension, then releases. */
   def write(path: String): Either[CvError, Unit] =
-    try Images.write(path, handle.get)
-    finally close()
+    handle.use(Images.write(path, _))
 
   /** Encodes to an in-memory image file (`".png"`, `".jpg"`, …), then releases. */
   def bytes(format: String = ".png"): Either[CvError, Array[Byte]] =
-    try Images.encode(handle.get, format)
-    finally close()
+    handle.use(Images.encode(_, format))
 
   /** Hands the underlying [[Managed]] over and spends this `Image` — for when you want to keep managing the
-    * Mat directly. Ownership transfers to the returned `Managed`.
+    * Mat directly. Ownership and the release strategy transfer to the returned `Managed`. In a scoped
+    * callback it remains scope-owned, including through `pipe`; use [[detach]] first to escape explicitly.
     */
-  def managed: Managed[Mat] = Managed(handle.take())
+  def managed: Managed[Mat] = handle.move()
+
+  /** Spends this wrapper and explicitly removes its successor from automatic scope cleanup. The caller must
+    * close the returned image. Copies and other branches remain in their original scope.
+    */
+  def detach: Image = Image(handle.detached())
 
   /** Releases the native memory. Idempotent, and called for you by [[Image.reading]] and `Using`. */
   def close(): Unit = handle.release()
 
-  /** An independent deep copy, so the original can be used again (move semantics otherwise forbid it). */
-  def copy: Image = Image(Managed(handle.get.clone()))
+  /** An independent deep copy, so the original can be used again (move semantics otherwise forbid it). Inside
+    * a scoped callback both branches remain scope-owned; [[detach]] is the explicit escape hatch.
+    */
+  def copy: Image = Image(handle.alongside(Managed(handle.get.clone())))
 
   override def toString: String =
     if handle.isReleased then "Image(<closed>)" else s"Image(${width}x$height, ${channels}ch)"
@@ -420,27 +426,35 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
     * release the source. Identical to [[Ops.pipe]]; a failure in `op` still releases the source and `op`'s
     * own half-built Mat, so nothing leaks.
     */
-  private def transform(op: Mat => Managed[Mat]): Image =
-    try Image(op(handle.get))
-    finally handle.release()
+  private[scalacv] def transform(op: Mat => Managed[Mat]): Image =
+    Image(handle.replacing(op))
 
   /** An in-place draw: take the Mat (spending this handle without freeing), mutate it, rewrap it. No copy.
     * `private[scalacv]` rather than `private` so a domain's drawing verbs can live as extension methods in
     * their own file (e.g. `drawSkeleton` in `Pose.scala`) instead of swelling this class.
     */
   private[scalacv] def paint(draw: Mat => Unit): Image =
-    val m = handle.take()
+    val moved = handle.move()
     try
-      draw(m)
-      Image(Managed(m))
-    catch
-      case e: Throwable =>
-        m.release()
-        throw e
+      draw(moved.get)
+      Image(moved)
+    catch case error: Throwable => scala.util.Using.resource(moved)(_ => throw error)
 
 object Image:
 
   private[scalacv] def apply(handle: Managed[Mat]): Image = new Image(handle)
+
+  /** Owns live descendants independently of whether the initially acquired wrapper was consumed. */
+  private[scalacv] final class Scope extends AutoCloseable:
+    private val region = new NativeScope
+    def own(image: Image): Image =
+      val _ = region.own(image.handle)
+      image
+    def activeCount: Int = region.size
+    override def close(): Unit = region.close()
+
+  private[scalacv] def scoped[A](image: Image)(use: Image => A): A =
+    scala.util.Using.resource(new Scope)(scope => use(scope.own(image)))
 
   /** Reads an image from the filesystem. `Left` if the path is missing, is a directory, is empty, or does not
     * decode — four cases the error message tells apart, because the read goes through the JVM's own file I/O
@@ -489,4 +503,4 @@ object Image:
     * use-after-move) still throw, as everywhere else.
     */
   def reading[A](path: String, flags: ImreadFlags = ImreadFlags.Color)(use: Image => A): Either[CvError, A] =
-    Scoped.using(read(path, flags), "reading")(use)
+    read(path, flags).flatMap(image => Cv.attempt("reading")(scoped(image)(use)))

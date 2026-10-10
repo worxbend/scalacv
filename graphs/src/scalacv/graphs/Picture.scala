@@ -48,7 +48,10 @@ object Dash:
 
 /** A 2×3 affine, mapping `(x, y)` → `(a·x + b·y + c, d·x + e·y + f)`. */
 private[scalacv] final case class Affine(a: Double, b: Double, c: Double, d: Double, e: Double, f: Double):
-  def apply(p: Point): Point = Point(a * p.x + b * p.y + c, d * p.x + e * p.y + f)
+  def apply(p: Point): Point =
+    val result = Point(a * p.x + b * p.y + c, d * p.x + e * p.y + f)
+    require(result.x.isFinite && result.y.isFinite, "transformed coordinates must be finite")
+    result
 
   /** This transform applied after `inner`: `p ↦ this(inner(p))`. */
   def compose(inner: Affine): Affine =
@@ -62,7 +65,10 @@ private[scalacv] final case class Affine(a: Double, b: Double, c: Double, d: Dou
     )
 
   /** The uniform scale this transform applies — used to scale circle radii and text. */
-  def scaleFactor: Double = math.sqrt(math.abs(a * e - b * d))
+  def scaleFactor: Double =
+    val result = math.hypot(a, d)
+    require(result.isFinite, "transform scale must be finite")
+    result
 
 private[scalacv] object Affine:
   val identity: Affine = Affine(1, 0, 0, 0, 1, 0)
@@ -201,10 +207,15 @@ object Picture:
   /** The empty picture — the identity for [[Picture.on]]. */
   val empty: Picture = Empty
 
-  def circle(center: Point, radius: Double): Picture = Leaf(Prim.Circle(center, radius))
+  def circle(center: Point, radius: Double): Picture =
+    require(radius.isFinite && radius >= 0, "radius must be finite and non-negative")
+    require(center.x.isFinite && center.y.isFinite, "circle center must be finite")
+    Leaf(Prim.Circle(center, radius))
   def rectangle(rect: Rect): Picture = Leaf(Prim.Quad(rect))
-  def line(from: Point, to: Point): Picture = Leaf(Prim.Path(Seq(from, to), closed = false))
-  def polyline(points: Seq[Point], closed: Boolean = false): Picture = Leaf(Prim.Path(points, closed))
+  def line(from: Point, to: Point): Picture = polyline(Seq(from, to))
+  def polyline(points: Seq[Point], closed: Boolean = false): Picture =
+    require(points.forall(p => p.x.isFinite && p.y.isFinite), "path coordinates must be finite")
+    Leaf(Prim.Path(points, closed))
   def polygon(points: Seq[Point]): Picture = polyline(points, closed = true)
   def text(text: String, at: Point): Picture = Leaf(Prim.Text(text, at))
 
@@ -240,6 +251,7 @@ object Picture:
 
   /** A rectangle with rounded corners of the given `radius` (clamped to half the shorter side). */
   def roundedRectangle(rect: Rect, radius: Double): Picture =
+    require(radius.isFinite && radius >= 0, "radius must be finite and non-negative")
     val r = math.min(radius, math.min(rect.width, rect.height) / 2.0)
     val l = rect.x.toDouble
     val t = rect.y.toDouble
@@ -255,6 +267,7 @@ object Picture:
 
   /** A cubic Bézier curve through the two endpoints, pulled toward the two control points. */
   def curve(p0: Point, c0: Point, c1: Point, p1: Point, segments: Int = 32): Picture =
+    require(segments > 0, "segments must be positive")
     polyline((0 to segments).map { i =>
       val t = i.toDouble / segments
       val u = 1 - t
@@ -266,6 +279,7 @@ object Picture:
 
   /** A quadratic Bézier curve from `p0` to `p1`, bent toward `control`. */
   def quadraticCurve(p0: Point, control: Point, p1: Point, segments: Int = 24): Picture =
+    require(segments > 0, "segments must be positive")
     polyline((0 to segments).map { i =>
       val t = i.toDouble / segments
       val u = 1 - t
@@ -298,6 +312,9 @@ object Picture:
       endDegrees: Double,
       segments: Int
   ): Seq[Point] =
+    require(segments > 0, "segments must be positive")
+    require(rx.isFinite && ry.isFinite && rx >= 0 && ry >= 0, "radii must be finite and non-negative")
+    require(rotation.isFinite && startDegrees.isFinite && endDegrees.isFinite, "angles must be finite")
     val rot = math.toRadians(rotation)
     val cos = math.cos(rot)
     val sin = math.sin(rot)
@@ -332,6 +349,7 @@ object Picture:
 
   /** A regular `sides`-gon inscribed in a circle of `radius`, `rotation` degrees turned. */
   def regularPolygon(center: Point, sides: Int, radius: Double, rotation: Double = 0): Picture =
+    require(radius.isFinite && radius >= 0 && rotation.isFinite, "invalid polygon geometry")
     require(sides >= 3, s"a polygon needs at least 3 sides, got $sides")
     polygon((0 until sides).map { i =>
       val a = math.toRadians(rotation) + 2 * math.Pi * i / sides
@@ -340,6 +358,11 @@ object Picture:
 
   /** A star with `points` points between `outer` and `inner` radii. */
   def star(center: Point, points: Int, outer: Double, inner: Double, rotation: Double = 0): Picture =
+    require(
+      outer.isFinite && inner.isFinite && outer >= 0 && inner >= 0 && rotation.isFinite,
+      "invalid star geometry"
+    )
+    require(points <= Int.MaxValue / 2, "too many star points")
     require(points >= 2, s"a star needs at least 2 points, got $points")
     polygon((0 until points * 2).map { i =>
       val r = if i % 2 == 0 then outer else inner

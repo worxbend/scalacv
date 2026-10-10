@@ -46,10 +46,10 @@ Chapter 2:
 #example("The dependency. `zio` and `zio-streams` come in transitively; the natives are still yours to choose.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
-  mvn"com.worxbend::scalacv-zio:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
+  mvn"com.worxbend::scalacv-zio:0.4.1",
   // The detector examples later in this chapter need Cascades, which lives here.
-  mvn"com.worxbend::scalacv-vision:0.1.0",
+  mvn"com.worxbend::scalacv-vision:0.4.1",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
 )
@@ -267,18 +267,21 @@ from a video with no frames in it.
   `CvError.LoadFailed`, not a stream that completes with zero frames.
 ]
 
-`framesCopied` is the counterpart for when you genuinely need to keep frames: it is
-`frameStream(capture).map(frame => Managed(frame.clone()))`, so every element is an owned clone and
-the ordinary combinators behave. You pay one full-frame copy per frame for that.
+`framesCopied` emits caller-owned clones, not automatically released stream elements. Filtering,
+dropping, abandoned queues and interruption before adoption can leak them. For effectful work,
+the unreleased `processFrames(capture)(mat => ZIO.attemptBlocking(process(mat)))` API brackets
+clone acquisition and the entire callback before emitting reduced results. Keep raw Mats, native
+views and lazy work inside that callback, and join child work before it returns. The capture
+remains scoped separately. This path is sequential; parallelize reduced data, not owned frames.
 
 #memory[
-  Ownership of each clone transfers to the consumer, which means the consuming stage must release it,
-  on the same fiber, promptly. Map straight into a releasing stage --- `.mapZIO(m => ZIO.succeed(m.use(process)))`
-  --- rather than buffering the `Managed`s across an interruptible boundary with `.buffer`,
-  `.grouped`, or a `runCollect` that has not released first. A clone produced but dropped because the
-  fiber was interrupted before a downstream `use` took it over leaks exactly as a dropped `Managed`
-  does in synchronous code: the stream can no longer see it. When you want the *stream* to own each
-  frame, reduce inside `frameStream` instead --- its single buffer is tied to the stream's scope.
+  `Managed.use` is synchronous. Returning `ZIO.succeed(mat.rows())` from its callback closes the
+  Mat before that effect runs. Wrap synchronous processing as `ZIO.attemptBlocking(m.use(process))`;
+  use `m.useZIO` for effectful work after adoption, or `useManaged(acquire)(process)` to bracket
+  acquisition too. Neither downstream form protects an earlier caller-owned stream handoff.
+  Prefer `processFrames`, or reduce a sequential `frameStream` borrow before the next pull.
+  Blocking finalizers are offloaded and uninterruptible, but JNI reads still cannot be forcibly
+  cancelled by fiber interruption.
 ]
 
 #sect("Backpressure you can actually have")

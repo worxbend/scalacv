@@ -202,7 +202,7 @@ one family passes silently into another. scalacv replaces every one of those wit
 `ColorConversion.BgrToGray`, whose single job is to carry `Imgproc.COLOR_BGR2GRAY` in its `cvValue`,
 so that you never type the number and never hand one family's constant to another.
 
-#subsect("Resource-safe by construction")
+#subsect("Explicit resource ownership")
 
 `Managed[A]` is the ownership primitive, and it makes two guarantees, both of which exist because
 getting them wrong is a JVM crash rather than an exception. Release is a compare-and-set, so a second

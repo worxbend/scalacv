@@ -69,10 +69,12 @@ object Releasable:
   /** The release sequence both forms share, once the address is in hand. */
   private def free[A <: AnyRef](a: A, addr: Long): Unit =
     if addr != 0L then
-      // Disarm BEFORE deleting, never after: between the two there is a window in which the
-      // finalizer could run against a pointer we have already freed.
+      // Resolve both bridges before destroying the only recoverable address. Unsupported subclasses
+      // must fail with their pointer intact. Still disarm BEFORE the actual native delete.
+      val _ = NativeFinalizer.address(a)
+      val delete = NativeDelete.of(a.getClass)
       NativeFinalizer.disarm(a)
-      NativeDelete.of(a.getClass).invokeExact(addr): Unit
+      delete.invokeExact(addr): Unit
 
 /** The `--add-opens` line that would let reflection reach `cls`, computed from the class's own module and
   * package rather than guessed. A class in the unnamed module — OpenCV on the classpath, the normal case —

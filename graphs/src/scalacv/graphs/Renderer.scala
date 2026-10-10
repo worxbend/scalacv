@@ -27,30 +27,37 @@ trait Renderer:
 
 private[scalacv] object PictureTraversal:
   def foreach(picture: Picture)(draw: (RenderPrimitive, PictureStyle) => Unit): Unit =
-    visit(picture, Affine.identity, PictureStyle())(draw)
+    var pending = List((picture, Affine.identity, PictureStyle()))
+    while pending.nonEmpty do
+      val (current, tf, style) = pending.head
+      pending = pending.tail
+      current match
+        case Picture.Empty => ()
+        case Picture.Over(top, bottom) =>
+          pending = (bottom, tf, style) :: (top, tf, style) :: pending
+        case Picture.Styled(child, patch) => pending = (child, tf, patch(style)) :: pending
+        case Picture.Transformed(child, affine) => pending = (child, tf.compose(affine), style) :: pending
+        case Picture.Leaf(prim) => resolve(prim, tf, style)(draw)
 
-  private def visit(picture: Picture, tf: Affine, style: PictureStyle)(
+  private def resolve(prim: Picture.Prim, tf: Affine, style: PictureStyle)(
       draw: (RenderPrimitive, PictureStyle) => Unit
-  ): Unit = picture match
-    case Picture.Empty => ()
-    case Picture.Over(top, bottom) =>
-      visit(bottom, tf, style)(draw)
-      visit(top, tf, style)(draw)
-    case Picture.Styled(child, patch) => visit(child, tf, patch(style))(draw)
-    case Picture.Transformed(child, affine) => visit(child, tf.compose(affine), style)(draw)
-    case Picture.Leaf(prim) =>
-      import Picture.Prim.*
-      prim match
-        case Circle(center, radius) =>
-          draw(RenderPrimitive.Circle(tf(center), radius * tf.scaleFactor), style)
-        case Quad(rect) =>
-          val corners = Seq(
-            Point(rect.x.toDouble, rect.y.toDouble),
-            Point(rect.x.toDouble + rect.width, rect.y.toDouble),
-            Point(rect.x.toDouble + rect.width, rect.y.toDouble + rect.height),
-            Point(rect.x.toDouble, rect.y.toDouble + rect.height)
-          ).map(tf.apply)
-          draw(RenderPrimitive.Path(corners, closed = true), style)
-        case Path(points, closed) => draw(RenderPrimitive.Path(points.map(tf.apply), closed), style)
-        case Text(text, at) =>
-          draw(RenderPrimitive.Text(text, tf(at)), style.copy(fontScale = style.fontScale * tf.scaleFactor))
+  ): Unit =
+    import Picture.Prim.*
+    prim match
+      case Circle(center, radius) =>
+        val r = radius * tf.scaleFactor
+        require(r.isFinite, "transformed radius must be finite")
+        draw(RenderPrimitive.Circle(tf(center), r), style)
+      case Quad(rect) =>
+        val corners = Seq(
+          Point(rect.x.toDouble, rect.y.toDouble),
+          Point(rect.x.toDouble + rect.width, rect.y.toDouble),
+          Point(rect.x.toDouble + rect.width, rect.y.toDouble + rect.height),
+          Point(rect.x.toDouble, rect.y.toDouble + rect.height)
+        ).map(tf.apply)
+        draw(RenderPrimitive.Path(corners, closed = true), style)
+      case Path(points, closed) => draw(RenderPrimitive.Path(points.map(tf.apply), closed), style)
+      case Text(text, at) =>
+        val scale = style.fontScale * tf.scaleFactor
+        require(scale.isFinite && scale >= 0, "text scale must be finite and non-negative")
+        draw(RenderPrimitive.Text(text, tf(at)), style.copy(fontScale = scale))

@@ -410,7 +410,7 @@ Two of this library's messages are not diagnostics so much as instructions, and 
 seeing before you meet them at three in the morning.
 
 The first is the one every new user hits. scalacv depends on the classifier-less OpenCV Java API,
-because no build tool can put a per-platform classifier into a published POM --- so the natives are
+because this project keeps POMs platform-neutral and its pinned Mill publisher cannot encode dependency classifiers --- so the natives are
 a line you add yourself, and forgetting it is the expected state, not an exotic misconfiguration.
 `OpenCv.load()` therefore does not fail with a link error. It detects the platform you are actually
 on and prints the lines for it, with the versions read from `Build.openCvArtifactVersion` and

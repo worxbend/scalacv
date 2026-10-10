@@ -479,7 +479,7 @@ assume(cascadesShipped, "this platform ships no Haar cascades")
 ]
 
 The camera gate protects developers as much as CI: an unguarded `Video.open(0)` on a laptop opens
-whatever webcam is attached, which is a surprising thing for `./mill __.test` to do. Note the
+whatever webcam is attached, which is a surprising thing for the headless CI test command to do. Note the
 second `assume` inside that test, on the `Left` branch of `Video.open(0)` --- opting in does not
 guarantee a device is there, so a missing camera skips rather than fails even then.
 

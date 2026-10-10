@@ -25,7 +25,15 @@ object scalacv.zio.package.package
   def imageScoped$default$2(): scalacv.ImreadFlags
   def imageScoped(java.lang.String, scalacv.ImreadFlags): zio.ZIO<zio.Scope, scalacv.CvError, scalacv.Image>
   def loadNatives(): zio.ZIO<java.lang.Object, java.lang.Throwable, scala.runtime.BoxedUnit>
+  def managedScoped<R, E, A>(zio.ZIO<R, E, scalacv.Managed<A>>): zio.ZIO<R, E, A>
+  def nativeFinalizer(scala.Function0<scala.runtime.BoxedUnit>): zio.ZIO<java.lang.Object, scala.runtime.Nothing$, scala.runtime.BoxedUnit>
+  def processFrames$default$2(): int
+  def processFrames<R, E, B>(org.opencv.videoio.VideoCapture, int, scala.Function1<org.opencv.core.Mat, zio.ZIO<R, E, B>>, scalacv.Releasable<org.opencv.core.Mat>): zio.stream.ZStream<R, E, B>
+  def processFramesWith<R, E, B>(org.opencv.videoio.VideoCapture, int, scala.Function1<scalacv.BorrowedMat, scalacv.Managed<org.opencv.core.Mat>>, scala.Function1<org.opencv.core.Mat, zio.ZIO<R, E, B>>): zio.stream.ZStream<R, E, B>
   def readImage$default$2(): scalacv.ImreadFlags
   def readImage(java.lang.String, scalacv.ImreadFlags): zio.ZIO<java.lang.Object, scalacv.CvError, scalacv.Image>
   def requireOpen(org.opencv.videoio.VideoCapture): zio.stream.ZStream<java.lang.Object, scalacv.CvError, scala.runtime.Nothing$>
   def scoped(org.opencv.core.Mat, scalacv.Releasable<org.opencv.core.Mat>): zio.ZIO<zio.Scope, java.lang.Throwable, org.opencv.core.Mat>
+  def scopedZIO<A>(scalacv.Managed<A>): zio.ZIO<zio.Scope, scala.runtime.Nothing$, A>
+  def useManaged<R, E, A, B>(zio.ZIO<R, E, scalacv.Managed<A>>, scala.Function1<A, zio.ZIO<R, E, B>>): zio.ZIO<R, E, B>
+  def useZIO<A>(scalacv.Managed<A>): zio.ZIO

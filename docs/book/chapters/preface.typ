@@ -164,7 +164,7 @@ You add two kinds of dependency line: the library, and the natives for your plat
 #example("The minimum, in Mill: the core library plus natives for one platform.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
 )

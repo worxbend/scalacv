@@ -200,15 +200,15 @@ Detection cost scales with pixels. Halving each side quarters the pixel count, a
 whose cost is dominated by the image it scans, that often approaches a 4× speed-up — at the cost of
 missing the smallest objects, which now occupy a quarter of the pixels they did. A
 transform *consumes* the `Image` it is called on ([move semantics](/mat-lifecycle)), so the scaled
-frame is a new `Image` that you own and must close — the one `foreach` handed you is closed for you
-either way:
+frame is a new `Image`. The current callback scope follows that successor, so explicitly closing
+it early is optional (and idempotent). On the older 0.4.1 tag, close the successor yourself:
 
 ```scala mdoc:compile-only
 def analyseHalfSize(cam: Camera): Unit =
   cam.foreach(3) { frame =>
     val small = frame.scale(0.5) // consumes `frame`; a quarter of the pixels to detect on
     // ... run the detector on `small`, then scale any boxes back up by 2 ...
-    small.close() // `small` is yours; the original was closed by `foreach`
+    small.close() // early release; current `foreach` also tracks this successor
   }
 ```
 

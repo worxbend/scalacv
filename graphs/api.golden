@@ -596,12 +596,12 @@ object scalacv.graphs.Picture
   def star$default$5(): double
   def star(scalacv.Point, int, double, double, double): scalacv.graphs.Picture
   def text(java.lang.String, scalacv.Point): scalacv.graphs.Picture
-  static val Empty: scalacv.graphs.Picture$Empty$
-  static val Leaf: scalacv.graphs.Picture$Leaf$
-  static val Over: scalacv.graphs.Picture$Over$
-  static val Prim: scalacv.graphs.Picture$Prim$
-  static val Styled: scalacv.graphs.Picture$Styled$
-  static val Transformed: scalacv.graphs.Picture$Transformed$
+  static final val Empty: scalacv.graphs.Picture$Empty$
+  static final val Leaf: scalacv.graphs.Picture$Leaf$
+  static final val Over: scalacv.graphs.Picture$Over$
+  static final val Prim: scalacv.graphs.Picture$Prim$
+  static final val Styled: scalacv.graphs.Picture$Styled$
+  static final val Transformed: scalacv.graphs.Picture$Transformed$
 object scalacv.graphs.Picture.Empty
   extends java.lang.Object
   implements java.io.Serializable, scala.Product, scala.deriving.Mirror$Singleton, scalacv.graphs.Picture
@@ -635,10 +635,10 @@ object scalacv.graphs.Picture.Prim
   def <init>(): void
   def fromOrdinal(int): scalacv.graphs.Picture$Prim
   def ordinal(scalacv.graphs.Picture$Prim): int
-  static val Circle: scalacv.graphs.Picture$Prim$Circle$
-  static val Path: scalacv.graphs.Picture$Prim$Path$
-  static val Quad: scalacv.graphs.Picture$Prim$Quad$
-  static val Text: scalacv.graphs.Picture$Prim$Text$
+  static final val Circle: scalacv.graphs.Picture$Prim$Circle$
+  static final val Path: scalacv.graphs.Picture$Prim$Path$
+  static final val Quad: scalacv.graphs.Picture$Prim$Quad$
+  static final val Text: scalacv.graphs.Picture$Prim$Text$
 object scalacv.graphs.Picture.Prim.Circle
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -714,9 +714,9 @@ object scalacv.graphs.RenderPrimitive
   implements java.io.Serializable, scala.deriving.Mirror$Sum
   def fromOrdinal(int): scalacv.graphs.RenderPrimitive
   def ordinal(scalacv.graphs.RenderPrimitive): int
-  static val Circle: scalacv.graphs.RenderPrimitive$Circle$
-  static val Path: scalacv.graphs.RenderPrimitive$Path$
-  static val Text: scalacv.graphs.RenderPrimitive$Text$
+  static final val Circle: scalacv.graphs.RenderPrimitive$Circle$
+  static final val Path: scalacv.graphs.RenderPrimitive$Path$
+  static final val Text: scalacv.graphs.RenderPrimitive$Text$
 object scalacv.graphs.RenderPrimitive.Circle
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product

@@ -90,6 +90,8 @@ object Models:
 
   /** Fetches `spec` into the directory `into` (created if absent), returning the verified file's path or a
     * `Left` describing which stage failed — the directory, every URL tried, the size, or the checksum.
+    * Cancellation is not a mirror failure: `InterruptedException` propagates with the interrupt flag
+    * restored.
     */
   def fetch(spec: ModelSpec, into: Path): Either[CvError, Path] =
     val target = into.resolve(spec.fileName)
@@ -180,23 +182,28 @@ object Models:
     * Creating the temp file sits inside the `try`, not ahead of it: a destination that is read-only, full, or
     * without permission to create files makes `createTempFile` throw, and that is as much a reason this
     * mirror did not work as a refused connection is. Caught here it joins the per-mirror list [[fetchFirst]]
-    * builds; escaping instead, it would surface from [[fetch]] under an unrelated message. The inner
-    * `try`/`finally` still deletes the temp file whatever happens — it is nested only so that `tmp` is bound
-    * inside the region the outer `catch` guards.
+    * builds; escaping instead, it would surface from [[fetch]] under an unrelated message. The inner bracket
+    * deletes the temp file on every path and suppresses cleanup failure on a primary error. Interruption
+    * propagates instead of advancing to another mirror.
     */
   private def fetchOne(spec: ModelSpec, url: String, target: Path): Either[CvError, Path] =
     try
       val tmp = Files.createTempFile(target.getParent, ".model-", ".part")
-      try
+      val cleanup = new AutoCloseable:
+        def close(): Unit =
+          Files.deleteIfExists(tmp): Unit
+      Using.resource(cleanup): _ =>
         download(url, tmp)
         // The mirror, not the temp file, is what the reader has to act on, so `verify`'s message is
         // re-attributed to the URL it came from.
         verify(spec, tmp).left
           .map(e => CvError.LoadFailed(url, describe(e)))
           .map(_ => move(tmp, target))
-      finally
-        val _ = Files.deleteIfExists(tmp)
-    catch case e: Exception => Left(CvError.LoadFailed(url, describe(e)))
+    catch
+      case interrupted: InterruptedException =>
+        Thread.currentThread().interrupt()
+        throw interrupted
+      case e: Exception => Left(CvError.LoadFailed(url, describe(e)))
 
   /** An exception as text a reader can act on. `getMessage` is `null` for several of the exceptions that
     * reach here — a bare `ConnectException` among them — and "could not be downloaded from any source: null"

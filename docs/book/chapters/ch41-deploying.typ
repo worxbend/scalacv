@@ -52,7 +52,7 @@ every registry garbage-collection pass you will ever run.
 #example("The production dependency: one platform, pinned.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
 )

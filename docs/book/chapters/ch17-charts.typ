@@ -31,7 +31,7 @@ so the whole answer travels as a single PNG in a chat message.
 
 `Chart` lives in the `scalacv-graphs` module alongside `Picture`, `Color` and `Animation`; the same
 `import scalacv.*` Chapter 16 already relied on brings it in. The running example needs a second
-optional artifact --- `com.worxbend::scalacv-vision:0.1.0`, for the face detector --- while the
+optional artifact --- `com.worxbend::scalacv-vision:0.4.1`, for the face detector --- while the
 video reader itself is core. Neither has had its own chapter yet: Chapter 19 covers `Video` properly
 and Chapter 24 the detector, and what is used here is the minimum of each.
 

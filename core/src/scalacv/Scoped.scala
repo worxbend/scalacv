@@ -19,7 +19,4 @@ private[scalacv] object Scoped:
       use: R => A
   ): Either[CvError, A] =
     opened.flatMap: resource =>
-      Cv.attempt(operation)(
-        try use(resource)
-        finally resource.close()
-      )
+      Cv.attempt(operation)(scala.util.Using.resource(resource)(use))

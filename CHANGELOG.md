@@ -6,6 +6,17 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+### Build and documentation
+- Added a real historical JVM binary-compatibility gate: checksum-pinned japicmp 0.23.1 compares
+  all four packaged artifacts against locally built, commit-pinned v0.4.0 and v0.4.1 baselines.
+  Positive/negative controls include method finality and an unchanged compiled subclass.
+- Added a packaged Scala 3.3.8/JDK 17 consumer alongside Java, exercising all four module APIs;
+  strengthened exact dependency/version/scope POM assertions and API-golden finality/generic bounds.
+- Aligned install examples with source tag 0.4.1 while explicitly distinguishing local artifacts,
+  unreleased fixes, draft GitHub releases and unverified Central availability. Upload and attestation
+  remain disabled. Corrected synchronous/effectful ownership guidance and stale graphics prose.
+
+
 ## [0.4.1] — 2026-10-07
 
 ### Security
@@ -218,8 +229,8 @@ All notable changes to scalacv are recorded here. The format follows
   (detectors/DNN/pose/tracking/OCR/calibration/SLAM), and `scalacv-graphs` (the `Picture`/chart/GIF
   layer). `vision` and `graphs` depend only on `core`; a consumer who only wants
   `Image.read(…).gray.canny(…)` no longer pulls a SLAM detector or a GIF encoder into their jar. Done
-  before the first tag so MiMa (armed at `0.2.0`) guards a small, stable core rather than the whole
-  surface. The golden API dump now covers the core module only (~1,600 lines, down from ~3,300).
+  before the first tag with MiMa originally planned for `0.2.0` (it was not armed then; the
+  historical bytecode gate is recorded under Unreleased above). The golden API dump now covers the core module only (~1,600 lines, down from ~3,300).
 - Slimmed `Image` to a lean core type. The domain verbs that only *start* from an image — `faces`,
   `detectHaar`, `qrCodes`, `arucoMarkers`, `arMarkers`, `drawSkeleton`, `markFaces`, `drawMarkerAxes`,
   `drawMarkerCube`, `drawTracks`, `forOcr`, `blurBackground`, `replaceBackground`, and `draw(Picture)` —

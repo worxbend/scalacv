@@ -1,10 +1,8 @@
 name: Release
 
-# Tag-driven publish to Maven Central via the Sonatype Central Portal. See RELEASING.md.
-#
-# The signing key and Central credentials are left as repository secrets to be filled in before
-# the first release -- they are intentionally not present yet. Until they are, this workflow can
-# be dispatched manually to dry-run the build and staging up to the point of upload.
+# Tag-driven verification and DRAFT GitHub release only. Central upload and attestation
+# below are disabled; this workflow does not stage, sign or publish registry artifacts.
+# Enabling publication requires a separate reviewed change; see RELEASING.md.
 on:
   push:
     tags: ["v*"]
@@ -27,6 +25,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - name: Historical binary compatibility
+        run: python3 ci/binary-compatibility.py
       - name: Test
         # "master was green" is not a gate: a tag can be pushed on any commit, and VcsVersion
         # versions whatever it sits on, so the release runs the suite itself. `+`-separated,

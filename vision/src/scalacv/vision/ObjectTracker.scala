@@ -165,12 +165,12 @@ object ObjectTracker:
 
   /** Intersection-over-union of two boxes: 0 when disjoint, 1 when identical. */
   private[scalacv] def iou(a: Rect, b: Rect): Double =
-    val x1 = math.max(a.x, b.x)
-    val y1 = math.max(a.y, b.y)
-    val x2 = math.min(a.x + a.width, b.x + b.width)
-    val y2 = math.min(a.y + a.height, b.y + b.height)
-    val inter = math.max(0, x2 - x1).toDouble * math.max(0, y2 - y1)
-    val union = a.area.toDouble + b.area - inter
+    val x1 = math.max(a.x.toLong, b.x.toLong)
+    val y1 = math.max(a.y.toLong, b.y.toLong)
+    val x2 = math.min(a.x.toLong + a.width, b.x.toLong + b.width)
+    val y2 = math.min(a.y.toLong + a.height, b.y.toLong + b.height)
+    val inter = math.max(0L, x2 - x1).toDouble * math.max(0L, y2 - y1)
+    val union = a.width.toDouble * a.height + b.width.toDouble * b.height - inter
     if union <= 0 then 0.0 else inter / union
 
 /** The track overlay on [[Image]] — an extension method so it lives beside the tracker types.

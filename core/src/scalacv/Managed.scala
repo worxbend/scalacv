@@ -28,6 +28,41 @@ final class Managed[A] private (initial: A, releaser: Releasable[A]) extends Aut
 
   private val ref = AtomicReference[A | Null](initial)
 
+  // Region membership is explicit and follows moves; native access remains sequential.
+  private[scalacv] var region: Option[NativeScope] = None
+
+  private def unregister(): Unit =
+    region.foreach(_.forget(this))
+    region = None
+
+  private[scalacv] def move(): Managed[A] =
+    val owner = region
+    val next = new Managed(take(), releaser)
+    owner.foreach(_.own(next))
+    next
+
+  private[scalacv] def detached(): Managed[A] =
+    unregister()
+    move()
+
+  private[scalacv] def alongside[B](next: Managed[B]): Managed[B] =
+    region.foreach(_.own(next))
+    next
+
+  /** Consumes the input, rolling back an output if input cleanup prevents returning it. */
+  private[scalacv] def replacing[B](f: A => Managed[B]): Managed[B] =
+    var output: Option[Managed[B]] = None
+    try
+      use: value =>
+        val next = alongside(f(value))
+        output = Some(next)
+        next
+    catch
+      case error: Throwable =>
+        output match
+          case Some(next) => Using.resource(next)(_ => throw error)
+          case None => throw error
+
   /** The object's class, captured at construction so that [[spentError]] can name the type without this
     * `Managed` holding on to the object itself. Keeping the `initial` parameter alive would defeat the point
     * of nulling `ref` in [[release]]: the released object would stay strongly reachable for as long as the
@@ -92,6 +127,7 @@ final class Managed[A] private (initial: A, releaser: Releasable[A]) extends Aut
       case null => throw spentError("transferring")
       case a =>
         markSpent()
+        unregister()
         a.asInstanceOf[A]
 
   /** Releases the native memory. Idempotent — a second call does nothing. */
@@ -100,16 +136,18 @@ final class Managed[A] private (initial: A, releaser: Releasable[A]) extends Aut
       case null => ()
       case a =>
         markSpent()
+        unregister()
         releaser.release(a.asInstanceOf[A])
 
   override def close(): Unit = release()
 
   def isReleased: Boolean = ref.get == null
 
-  /** Runs `f` and releases afterwards, even on an exception. */
+  /** Runs `f` synchronously and releases afterwards. A lazy effect returned by `f` is not executed here.
+    * Cleanup failures are suppressed on the body failure, subject to `Using`'s fatal-error precedence.
+    */
   def use[B](f: A => B): B =
-    try f(get)
-    finally release()
+    Using.resource(this)(handle => f(handle.get))
 
   override def toString: String =
     // One snapshot: a concurrent release between an isReleased check and a second read could print

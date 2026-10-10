@@ -38,7 +38,43 @@ import scalacv.*
   * }}}
   */
 def acquireRelease[A](make: => A)(using r: Releasable[A]): ZIO[Scope, Throwable, A] =
-  ZIO.acquireRelease(ZIO.attemptBlocking(make))(a => ZIO.succeed(r.release(a)))
+  ZIO.acquireRelease(ZIO.attemptBlocking(make))(a => nativeFinalizer(r.release(a)))
+
+/** Native cleanup is blocking, uninterruptible, and failures remain visible as defects. */
+private[zio] def nativeFinalizer(close: => Unit): UIO[Unit] =
+  // A fresh, joined fiber also makes the executor shift effective when the calling fiber is already
+  // interrupted (ZIO can elide yielding while unwinding that fiber). It cannot be abandoned: joining
+  // and the finalizer itself are masked. Daemon scope avoids inheriting the interrupted parent's scope.
+  ZIO.attemptBlocking(close).orDie.uninterruptible.forkDaemon.flatMap(_.join).uninterruptible
+
+/** Acquires an existing ownership handle and registers its original release strategy atomically with respect
+  * to fiber interruption. Put resource production INSIDE `acquire`; adopting a handle previously emitted by
+  * an interruptible producer cannot repair that earlier ownership gap. Acquisition is masked; a native call
+  * must return before cancellation can finish. The acquired value must not escape its scope.
+  */
+def managedScoped[R, E, A](acquire: ZIO[R, E, Managed[A]]): ZIO[R & Scope, E, A] =
+  ZIO.acquireRelease(acquire)(m => nativeFinalizer(m.release())).map(_.get)
+
+/** Effect-aware bracket: keeps the handle live until the callback effect finishes, fails or is interrupted.
+  * Acquisition and finalization are uninterruptible; callback execution retains caller interruptibility.
+  * Cleanup failures are defects, composed with the callback's failure by ZIO, not silently discarded. Native
+  * acquisition/callback work must explicitly use the blocking executor. Return reduced data, not the resource
+  * or an alias of it, and do not let background fibers outlive the callback.
+  */
+def useManaged[R, E, A, B](acquire: ZIO[R, E, Managed[A]])(use: A => ZIO[R, E, B]): ZIO[R, E, B] =
+  ZIO.acquireReleaseWith(acquire)(m => nativeFinalizer(m.release()))(m => use(m.get))
+
+extension [A](self: Managed[A])
+  /** Adopts this handle when the effect RUNS, not when it is constructed. The caller remains responsible
+    * until then. Prefer [[managedScoped]] with acquisition inside it to protect the producer handoff.
+    */
+  def scopedZIO: ZIO[Scope, Nothing, A] = managedScoped(ZIO.succeed(self))
+
+  /** Unlike synchronous `Managed.use`, this waits for the callback effect before releasing. Adoption only
+    * starts when this effect runs: it does not make caller-owned streams safe under arbitrary combinators.
+    */
+  def useZIO[R, E, B](use: A => ZIO[R, E, B]): ZIO[R, E, B] =
+    useManaged(ZIO.succeed(self))(use)
 
 /** Loads the OpenCV natives as an effect. Idempotent, so it is safe to require from many places; the
   * underlying [[OpenCv.load]] does the work at most once.
@@ -79,7 +115,15 @@ def readImage(path: String, flags: ImreadFlags = ImreadFlags.Color): IO[CvError,
   * }}}
   */
 def imageScoped(path: String, flags: ImreadFlags = ImreadFlags.Color): ZIO[Scope, CvError, Image] =
-  ZIO.acquireRelease(readImage(path, flags))(img => ZIO.succeed(img.close()))
+  ZIO
+    .acquireRelease(
+      readImage(path, flags).map { image =>
+        // Populate before registering: an already closed ZIO scope runs its finalizer immediately.
+        val scope = new Image.Scope
+        (scope, scope.own(image))
+      }
+    ) { case (scope, _) => nativeFinalizer(scope.close()) }
+    .map(_._2)
 
 extension (self: Mat)
   /** Ties an existing Mat to the current scope. Use when a Mat is produced by an operation that already
@@ -92,7 +136,7 @@ extension (self: Mat)
     * and interruption — exactly as [[acquireRelease]] would.
     */
   def scoped(using r: Releasable[Mat]): ZIO[Scope, Throwable, Mat] =
-    ZIO.acquireRelease(ZIO.succeed(self))(m => ZIO.succeed(r.release(m)))
+    ZIO.acquireRelease(ZIO.succeed(self))(m => nativeFinalizer(r.release(m)))
 
 /** Opens a video source into the current `Scope`: opened on acquire, released when the scope ends — on
   * success, on failure, and on interruption. The ZIO face of [[Video.open]], and the way to get a capture to
@@ -126,7 +170,7 @@ def captureScoped(
     options: CaptureOptions = CaptureOptions.Default
 ): ZIO[Scope, CvError, VideoCapture] =
   ZIO
-    .acquireRelease(ZIO.blocking(fromCv(Video.open(source, options))))(m => ZIO.succeed(m.release()))
+    .acquireRelease(ZIO.blocking(fromCv(Video.open(source, options))))(m => nativeFinalizer(m.release()))
     .map(_.get)
 
 /** Fails a stream that would otherwise report a capture which never opened as a video with no frames in it.
@@ -144,13 +188,15 @@ def captureScoped(
   */
 private def requireOpen(capture: VideoCapture): ZStream[Any, CvError, Nothing] =
   ZStream.execute(
-    ZIO.unless(capture.isOpened)(
-      ZIO.fail(
-        CvError.LoadFailed(
-          "capture",
-          "cannot read frames from a capture that is not open — that would be an empty stream that looks " +
-            "like a video with no frames in it. Obtain it with captureScoped, which reports failure as a " +
-            "typed CvError."
+    ZIO.blocking(
+      ZIO.unless(capture.isOpened)(
+        ZIO.fail(
+          CvError.LoadFailed(
+            "capture",
+            "cannot read frames from a capture that is not open — that would be an empty stream that looks " +
+              "like a video with no frames in it. Obtain it with captureScoped, which reports failure as a " +
+              "typed CvError."
+          )
         )
       )
     )
@@ -203,7 +249,7 @@ private def requireOpen(capture: VideoCapture): ZStream[Any, CvError, Nothing] =
 def frameStream(capture: VideoCapture, attemptsPerFrame: Int = 1): ZStream[Any, Throwable, BorrowedMat] =
   requireOpen(capture) ++ ZStream
     .acquireReleaseWith(ZIO.attemptBlocking(Video.FrameSource(capture, attemptsPerFrame)))(s =>
-      ZIO.succeed(s.close())
+      nativeFinalizer(s.close())
     )
     .flatMap: source =>
       ZStream.repeatZIOOption:
@@ -214,29 +260,43 @@ def frameStream(capture: VideoCapture, attemptsPerFrame: Int = 1): ZStream[Any, 
             case Some(view) => ZIO.succeed(view)
             case None => ZIO.fail(None) // None terminates the stream without an error
 
-/** Frames as owned `Managed[Mat]` values, cloned lazily as each is pulled.
+/** Low-level caller-owned clones. Every emitted handle must be released by the caller, including values
+  * discarded by filtering, buffering, failed consumers or interruption before adoption. Arbitrary stream
+  * combinators do NOT release these clones. Even immediate downstream `useZIO` cannot protect the preceding
+  * producer-to-consumer handoff. Prefer [[processFrames]] for effectful processing.
   *
-  * The safe-but-costlier counterpart to [[frameStream]]: every element is a caller-owned copy, so the usual
-  * `ZStream` combinators behave as expected. Each clone must still be released — pair it with
-  * `.mapZIO(m => m.use(...))` or acquire it into a scope.
-  *
-  * ==Consume each clone in the same fiber that pulls it==
-  *
-  * Ownership of a clone transfers to the consumer, so the consuming stage must release it — and it must do so
-  * on the same fiber, promptly. A clone that is produced but then dropped because the fiber is
-  * **interrupted** before a downstream `use`/scope takes it over leaks, exactly as a `Managed` dropped in
-  * synchronous code would: the clone is a caller-owned resource the stream can no longer see. So map straight
-  * into a releasing stage — `.mapZIO(m => m.use(process))` — rather than buffering the `Managed`s (`.buffer`,
-  * `.grouped`, `runCollect` without prior release) across an interruptible boundary. When you want the stream
-  * itself to own and release each frame, reduce it inside the stream on [[frameStream]] instead, whose one
-  * reused buffer is tied to the stream's scope and released when the stream unwinds, interruption included —
-  * though not before any in-flight native `read` has returned, for the reason [[frameStream]]'s scaladoc
-  * gives.
-  *
-  * The open-capture check of [[frameStream]] applies here too: this fails rather than yielding nothing when
-  * `capture` never opened.
+  * `Managed.use` is synchronous: NEVER return a lazy effect from it. `m.useZIO(f)` brackets execution once
+  * adopted; `ZIO.attemptBlocking(m.use(syncFunction))` is the synchronous alternative, with the same handoff
+  * limitation. Cloning runs on the blocking pool. The open-capture check of [[frameStream]] applies here too.
   */
 def framesCopied(capture: VideoCapture, attemptsPerFrame: Int = 1)(using
     Releasable[Mat]
 ): ZStream[Any, Throwable, Managed[Mat]] =
-  frameStream(capture, attemptsPerFrame).map(frame => Managed(frame.clone()))
+  frameStream(capture, attemptsPerFrame).mapZIO(frame => ZIO.attemptBlocking(Managed(frame.clone())))
+
+/** Safe-by-default sequential frame processing. Each clone is acquired INSIDE an effect-aware bracket, kept
+  * live throughout `process`, and released before a result is emitted. Consequently downstream filtering,
+  * buffering, parallel processing of results, failure and cancellation cannot abandon clones. There is no
+  * queue of caller-owned frames and no interruptible ownership handoff between producer and callback. Only
+  * reduced data may escape: never return the Mat, its native views, or a lazy computation referring to it.
+  * Join any child work before returning. Additional native resources allocated by the callback remain the
+  * callback's responsibility.
+  *
+  * Reads use the shared [[frameStream]] / `Video.FrameSource` implementation; cloning and finalization run on
+  * the blocking pool. Place blocking callback work there explicitly. Callback execution is interruptible, but
+  * clone acquisition and cleanup are masked; interruption cannot forcibly stop JNI. The capture itself
+  * remains caller-owned. This API deliberately does not provide parallel native-frame processing.
+  */
+def processFrames[R, E >: Throwable, B](capture: VideoCapture, attemptsPerFrame: Int = 1)(
+    process: Mat => ZIO[R, E, B]
+)(using Releasable[Mat]): ZStream[R, E, B] =
+  processFramesWith(capture, attemptsPerFrame)(frame => Managed(frame.clone()))(process)
+
+// Injection seam for acquisition/handoff regression tests; production still uses the shared FrameSource.
+// copy must either return its owned handle or roll back its own partially completed acquisition.
+private[zio] def processFramesWith[R, E >: Throwable, B](capture: VideoCapture, attemptsPerFrame: Int)(
+    copy: BorrowedMat => Managed[Mat]
+)(process: Mat => ZIO[R, E, B]): ZStream[R, E, B] =
+  frameStream(capture, attemptsPerFrame).mapZIO { frame =>
+    useManaged[R, E, Mat, B](ZIO.attemptBlocking(copy(frame)))(process)
+  }

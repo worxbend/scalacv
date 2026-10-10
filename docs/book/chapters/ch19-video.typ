@@ -30,7 +30,7 @@ chapter.
 
 #sect("Opening a source")
 
-Everything in this chapter ships in the core artifact, `com.worxbend::scalacv:0.1.0` --- the same
+Everything in this chapter ships in the core artifact, `com.worxbend::scalacv:0.4.1` --- the same
 single dependency Part II ran on. Video needs no extra module: `Video`, `Camera`, `Recorder` and
 `Codec` all live in the `scalacv` package, and the only other import any listing here needs is
 `org.opencv.videoio`, for the raw `VideoCapture` type and the `CAP_PROP_*` constants.

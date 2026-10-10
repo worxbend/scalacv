@@ -32,7 +32,7 @@ import Paths from '@site/src/components/Paths';
 
 <Hero />
 
-<Section eyebrow="the shape of it" title="One chain, from file to result" lede={<>Every operation returns a new <code>Image</code> and releases the one it consumed. There is no <code>release()</code> to forget, because there is nothing left holding a handle by the time the next call runs.</>}>
+<Section eyebrow="the shape of it" title="One chain, from file to result" lede={<>Consuming transforms transfer ownership to their result. Finish manually owned chains with a consuming terminal or close, and keep borrows inside the owner’s lifetime.</>}>
 
 This runs headless, with no image file and no display server — which is also how it is tested:
 
@@ -52,7 +52,7 @@ val edges: Either[CvError, Array[Byte]] =
 ```
 
 `Image.reading` scopes a file to a block and releases it on success, on failure, and on exception —
-it is the entry point that cannot leak, so start there unless you have a reason not to:
+prefer it for synchronous work, without escaping borrowed handles or lazy effects:
 
 ```scala mdoc:compile-only
 Image.reading("photo.jpg") { img => img.gray.blur(2).canny(80, 160).write("edges.png") }

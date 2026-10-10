@@ -401,6 +401,7 @@ final class scalacv.Image
   def crop(scalacv.Rect): scalacv.Image
   def deskew$default$1(): double
   def deskew(double): scalacv.Image
+  def detach(): scalacv.Image
   def dilate$default$1(): int
   def dilate$default$2(): scalacv.MorphShape
   def dilate(int, scalacv.MorphShape): scalacv.Image
@@ -465,6 +466,7 @@ final class scalacv.Image
   def rotate(double, double): scalacv.Image
   def rotate(scalacv.Rotation): scalacv.Image
   def saturate(double): scalacv.Image
+  def scalacv$Image$$handle(): scalacv.Managed<org.opencv.core.Mat>
   def scale$default$2(): scalacv.Interpolation
   def scale(double, scalacv.Interpolation): scalacv.Image
   def seamlessCloneInto(scalacv.Image, scalacv.Image, scalacv.Point): scalacv.Image
@@ -486,9 +488,17 @@ final class scalacv.Image
   def toBufferedImage(): java.awt.image.BufferedImage
   def toHsv(): scalacv.Image
   def toString(): java.lang.String
+  def transform(scala.Function1<org.opencv.core.Mat, scalacv.Managed<org.opencv.core.Mat>>): scalacv.Image
   def undistort(scalacv.Intrinsics): scalacv.Image
   def width(): int
   def write(java.lang.String): scala.util.Either<scalacv.CvError, scala.runtime.BoxedUnit>
+final class scalacv.Image.Scope
+  extends java.lang.Object
+  implements java.lang.AutoCloseable
+  def <init>(): void
+  def activeCount(): int
+  def close(): void
+  def own(scalacv.Image): scalacv.Image
 final class scalacv.ImreadFlags
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -551,10 +561,16 @@ final class scalacv.Managed<A>
   extends java.lang.Object
   implements java.lang.AutoCloseable
   def <init>(A, scalacv.Releasable<A>): void
+  def alongside<B>(scalacv.Managed<B>): scalacv.Managed<B>
   def close(): void
+  def detached(): scalacv.Managed<A>
   def get(): A
   def isReleased(): boolean
+  def move(): scalacv.Managed<A>
+  def region(): scala.Option<scalacv.NativeScope>
+  def region_$eq(scala.Option<scalacv.NativeScope>): void
   def release(): void
+  def replacing<B>(scala.Function1<A, scalacv.Managed<B>>): scalacv.Managed<B>
   def take(): A
   def toString(): java.lang.String
   def use<B>(scala.Function1<A, B>): B
@@ -578,6 +594,15 @@ final class scalacv.ModelSpec
   def sizeBytes(): scala.Option<java.lang.Object>
   def toString(): java.lang.String
   def urls(): scala.collection.immutable.Seq<java.lang.String>
+final class scalacv.NativeScope
+  extends java.lang.Object
+  implements java.lang.AutoCloseable
+  def <init>(): void
+  def close(): void
+  def detachAll(): void
+  def forget(scalacv.Managed<?>): void
+  def own<A>(scalacv.Managed<A>): scalacv.Managed<A>
+  def size(): int
 final class scalacv.PencilSketchPair
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -937,8 +962,8 @@ object scalacv.AdaptiveMethod
   def ordinal(scalacv.AdaptiveMethod): int
   def valueOf(java.lang.String): scalacv.AdaptiveMethod
   def values(): scalacv.AdaptiveMethod[]
-  static val Gaussian: scalacv.AdaptiveMethod
-  static val Mean: scalacv.AdaptiveMethod
+  static final val Gaussian: scalacv.AdaptiveMethod
+  static final val Mean: scalacv.AdaptiveMethod
 object scalacv.BorderType
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -947,11 +972,11 @@ object scalacv.BorderType
   def requireFilterSupport(java.lang.String, scalacv.BorderType): void
   def valueOf(java.lang.String): scalacv.BorderType
   def values(): scalacv.BorderType[]
-  static val Constant: scalacv.BorderType
-  static val Reflect101: scalacv.BorderType
-  static val Reflect: scalacv.BorderType
-  static val Replicate: scalacv.BorderType
-  static val Wrap: scalacv.BorderType
+  static final val Constant: scalacv.BorderType
+  static final val Reflect101: scalacv.BorderType
+  static final val Reflect: scalacv.BorderType
+  static final val Replicate: scalacv.BorderType
+  static final val Wrap: scalacv.BorderType
 object scalacv.Build
   extends java.lang.Object
   implements java.io.Serializable
@@ -984,15 +1009,15 @@ object scalacv.CaptureBackend
   def ordinal(scalacv.CaptureBackend): int
   def valueOf(java.lang.String): scalacv.CaptureBackend
   def values(): scalacv.CaptureBackend[]
-  static val AVFoundation: scalacv.CaptureBackend
-  static val Any: scalacv.CaptureBackend
-  static val BuiltinMjpeg: scalacv.CaptureBackend
-  static val DirectShow: scalacv.CaptureBackend
-  static val FFmpeg: scalacv.CaptureBackend
-  static val GStreamer: scalacv.CaptureBackend
-  static val ImageSequence: scalacv.CaptureBackend
-  static val MediaFoundation: scalacv.CaptureBackend
-  static val V4L2: scalacv.CaptureBackend
+  static final val AVFoundation: scalacv.CaptureBackend
+  static final val Any: scalacv.CaptureBackend
+  static final val BuiltinMjpeg: scalacv.CaptureBackend
+  static final val DirectShow: scalacv.CaptureBackend
+  static final val FFmpeg: scalacv.CaptureBackend
+  static final val GStreamer: scalacv.CaptureBackend
+  static final val ImageSequence: scalacv.CaptureBackend
+  static final val MediaFoundation: scalacv.CaptureBackend
+  static final val V4L2: scalacv.CaptureBackend
 object scalacv.CaptureInfo
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1021,10 +1046,10 @@ object scalacv.Codec
   def scalacv$Codec$$$of(char, char, char, char): int
   def valueOf(java.lang.String): scalacv.Codec
   def values(): scalacv.Codec[]
-  static val Avc1: scalacv.Codec
-  static val Mjpg: scalacv.Codec
-  static val Mp4v: scalacv.Codec
-  static val Xvid: scalacv.Codec
+  static final val Avc1: scalacv.Codec
+  static final val Mjpg: scalacv.Codec
+  static final val Mp4v: scalacv.Codec
+  static final val Xvid: scalacv.Codec
 object scalacv.ColorConversion
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1032,16 +1057,16 @@ object scalacv.ColorConversion
   def ordinal(scalacv.ColorConversion): int
   def valueOf(java.lang.String): scalacv.ColorConversion
   def values(): scalacv.ColorConversion[]
-  static val BgrToBgra: scalacv.ColorConversion
-  static val BgrToGray: scalacv.ColorConversion
-  static val BgrToHsv: scalacv.ColorConversion
-  static val BgrToLab: scalacv.ColorConversion
-  static val BgrToRgb: scalacv.ColorConversion
-  static val BgraToBgr: scalacv.ColorConversion
-  static val GrayToBgr: scalacv.ColorConversion
-  static val HsvToBgr: scalacv.ColorConversion
-  static val LabToBgr: scalacv.ColorConversion
-  static val RgbToBgr: scalacv.ColorConversion
+  static final val BgrToBgra: scalacv.ColorConversion
+  static final val BgrToGray: scalacv.ColorConversion
+  static final val BgrToHsv: scalacv.ColorConversion
+  static final val BgrToLab: scalacv.ColorConversion
+  static final val BgrToRgb: scalacv.ColorConversion
+  static final val BgraToBgr: scalacv.ColorConversion
+  static final val GrayToBgr: scalacv.ColorConversion
+  static final val HsvToBgr: scalacv.ColorConversion
+  static final val LabToBgr: scalacv.ColorConversion
+  static final val RgbToBgr: scalacv.ColorConversion
 object scalacv.Colormap
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1049,16 +1074,16 @@ object scalacv.Colormap
   def ordinal(scalacv.Colormap): int
   def valueOf(java.lang.String): scalacv.Colormap
   def values(): scalacv.Colormap[]
-  static val Autumn: scalacv.Colormap
-  static val Bone: scalacv.Colormap
-  static val Hot: scalacv.Colormap
-  static val Inferno: scalacv.Colormap
-  static val Jet: scalacv.Colormap
-  static val Magma: scalacv.Colormap
-  static val Ocean: scalacv.Colormap
-  static val Plasma: scalacv.Colormap
-  static val Turbo: scalacv.Colormap
-  static val Viridis: scalacv.Colormap
+  static final val Autumn: scalacv.Colormap
+  static final val Bone: scalacv.Colormap
+  static final val Hot: scalacv.Colormap
+  static final val Inferno: scalacv.Colormap
+  static final val Jet: scalacv.Colormap
+  static final val Magma: scalacv.Colormap
+  static final val Ocean: scalacv.Colormap
+  static final val Plasma: scalacv.Colormap
+  static final val Turbo: scalacv.Colormap
+  static final val Viridis: scalacv.Colormap
 object scalacv.Contour
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1073,10 +1098,10 @@ object scalacv.ContourApproximation
   def ordinal(scalacv.ContourApproximation): int
   def valueOf(java.lang.String): scalacv.ContourApproximation
   def values(): scalacv.ContourApproximation[]
-  static val None: scalacv.ContourApproximation
-  static val Simple: scalacv.ContourApproximation
-  static val Tc89Kcos: scalacv.ContourApproximation
-  static val Tc89L1: scalacv.ContourApproximation
+  static final val None: scalacv.ContourApproximation
+  static final val Simple: scalacv.ContourApproximation
+  static final val Tc89Kcos: scalacv.ContourApproximation
+  static final val Tc89L1: scalacv.ContourApproximation
 object scalacv.ContourRetrieval
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1084,10 +1109,10 @@ object scalacv.ContourRetrieval
   def ordinal(scalacv.ContourRetrieval): int
   def valueOf(java.lang.String): scalacv.ContourRetrieval
   def values(): scalacv.ContourRetrieval[]
-  static val CComp: scalacv.ContourRetrieval
-  static val External: scalacv.ContourRetrieval
-  static val List: scalacv.ContourRetrieval
-  static val Tree: scalacv.ContourRetrieval
+  static final val CComp: scalacv.ContourRetrieval
+  static final val External: scalacv.ContourRetrieval
+  static final val List: scalacv.ContourRetrieval
+  static final val Tree: scalacv.ContourRetrieval
 object scalacv.Contours.package
   extends java.lang.Object
   implements java.io.Serializable
@@ -1103,13 +1128,13 @@ object scalacv.CvError
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
   def ordinal(scalacv.CvError): int
-  static val CalibrationFailed: scalacv.CvError$CalibrationFailed$
-  static val DecodeFailed: scalacv.CvError$DecodeFailed$
-  static val EncodeFailed: scalacv.CvError$EncodeFailed$
-  static val EndOfStream: scalacv.CvError$EndOfStream$
-  static val LoadFailed: scalacv.CvError$LoadFailed$
-  static val NativeCall: scalacv.CvError$NativeCall$
-  static val NativesMissing: scalacv.CvError$NativesMissing$
+  static final val CalibrationFailed: scalacv.CvError$CalibrationFailed$
+  static final val DecodeFailed: scalacv.CvError$DecodeFailed$
+  static final val EncodeFailed: scalacv.CvError$EncodeFailed$
+  static final val EndOfStream: scalacv.CvError$EndOfStream$
+  static final val LoadFailed: scalacv.CvError$LoadFailed$
+  static final val NativeCall: scalacv.CvError$NativeCall$
+  static final val NativesMissing: scalacv.CvError$NativesMissing$
 object scalacv.CvError.CalibrationFailed
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1282,9 +1307,9 @@ object scalacv.Flip
   def ordinal(scalacv.Flip): int
   def valueOf(java.lang.String): scalacv.Flip
   def values(): scalacv.Flip[]
-  static val Both: scalacv.Flip
-  static val Horizontal: scalacv.Flip
-  static val Vertical: scalacv.Flip
+  static final val Both: scalacv.Flip
+  static final val Horizontal: scalacv.Flip
+  static final val Vertical: scalacv.Flip
 object scalacv.Font
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1292,12 +1317,12 @@ object scalacv.Font
   def ordinal(scalacv.Font): int
   def valueOf(java.lang.String): scalacv.Font
   def values(): scalacv.Font[]
-  static val Complex: scalacv.Font
-  static val Duplex: scalacv.Font
-  static val Plain: scalacv.Font
-  static val Script: scalacv.Font
-  static val Simplex: scalacv.Font
-  static val Triplex: scalacv.Font
+  static final val Complex: scalacv.Font
+  static final val Duplex: scalacv.Font
+  static final val Plain: scalacv.Font
+  static final val Script: scalacv.Font
+  static final val Simplex: scalacv.Font
+  static final val Triplex: scalacv.Font
 object scalacv.Hough
   extends java.lang.Object
   implements java.io.Serializable
@@ -1339,6 +1364,7 @@ object scalacv.Image
   def read(java.lang.String, scalacv.ImreadFlags): scala.util.Either<scalacv.CvError, scalacv.Image>
   def reading$default$2<A>(): scalacv.ImreadFlags
   def reading<A>(java.lang.String, scalacv.ImreadFlags, scala.Function1<scalacv.Image, A>): scala.util.Either<scalacv.CvError, A>
+  def scoped<A>(scalacv.Image, scala.Function1<scalacv.Image, A>): A
   def wrap(scalacv.Managed<org.opencv.core.Mat>): scalacv.Image
 object scalacv.Images
   extends java.lang.Object
@@ -1357,11 +1383,11 @@ object scalacv.ImreadColor
   def ordinal(scalacv.ImreadColor): int
   def valueOf(java.lang.String): scalacv.ImreadColor
   def values(): scalacv.ImreadColor[]
-  static val AnyDepth: scalacv.ImreadColor
-  static val Color: scalacv.ImreadColor
-  static val ColorRgb: scalacv.ImreadColor
-  static val Grayscale: scalacv.ImreadColor
-  static val Unchanged: scalacv.ImreadColor
+  static final val AnyDepth: scalacv.ImreadColor
+  static final val Color: scalacv.ImreadColor
+  static final val ColorRgb: scalacv.ImreadColor
+  static final val Grayscale: scalacv.ImreadColor
+  static final val Unchanged: scalacv.ImreadColor
 object scalacv.ImreadFlags
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1380,10 +1406,10 @@ object scalacv.ImreadScale
   def ordinal(scalacv.ImreadScale): int
   def valueOf(java.lang.String): scalacv.ImreadScale
   def values(): scalacv.ImreadScale[]
-  static val Eighth: scalacv.ImreadScale
-  static val Full: scalacv.ImreadScale
-  static val Half: scalacv.ImreadScale
-  static val Quarter: scalacv.ImreadScale
+  static final val Eighth: scalacv.ImreadScale
+  static final val Full: scalacv.ImreadScale
+  static final val Half: scalacv.ImreadScale
+  static final val Quarter: scalacv.ImreadScale
 object scalacv.Interop
   extends java.lang.Object
   implements java.io.Serializable
@@ -1396,11 +1422,11 @@ object scalacv.Interpolation
   def ordinal(scalacv.Interpolation): int
   def valueOf(java.lang.String): scalacv.Interpolation
   def values(): scalacv.Interpolation[]
-  static val Area: scalacv.Interpolation
-  static val Cubic: scalacv.Interpolation
-  static val Lanczos4: scalacv.Interpolation
-  static val Linear: scalacv.Interpolation
-  static val Nearest: scalacv.Interpolation
+  static final val Area: scalacv.Interpolation
+  static final val Cubic: scalacv.Interpolation
+  static final val Lanczos4: scalacv.Interpolation
+  static final val Linear: scalacv.Interpolation
+  static final val Nearest: scalacv.Interpolation
 object scalacv.Intrinsics
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1418,16 +1444,16 @@ object scalacv.LineType
   def ordinal(scalacv.LineType): int
   def valueOf(java.lang.String): scalacv.LineType
   def values(): scalacv.LineType[]
-  static val AntiAliased: scalacv.LineType
-  static val Connected4: scalacv.LineType
-  static val Connected8: scalacv.LineType
+  static final val AntiAliased: scalacv.LineType
+  static final val Connected4: scalacv.LineType
+  static final val Connected8: scalacv.LineType
 object scalacv.Managed
   extends java.lang.Object
   implements java.io.Serializable
   def apply<A>(A, scalacv.Releasable<A>): scalacv.Managed<A>
   def scope<B>(scala.Function1<scalacv.Managed$Scope, B>): B
   def use<A, B>(scala.Function0<A>, scala.Function1<A, B>, scalacv.Releasable<A>): B
-  static val scalacv$Managed$$$TrackOwnership: boolean
+  static final val scalacv$Managed$$$TrackOwnership: boolean
 object scalacv.Mats
   extends java.lang.Object
   implements java.io.Serializable
@@ -1459,11 +1485,11 @@ object scalacv.MorphOp
   def ordinal(scalacv.MorphOp): int
   def valueOf(java.lang.String): scalacv.MorphOp
   def values(): scalacv.MorphOp[]
-  static val BlackHat: scalacv.MorphOp
-  static val Close: scalacv.MorphOp
-  static val Gradient: scalacv.MorphOp
-  static val Open: scalacv.MorphOp
-  static val TopHat: scalacv.MorphOp
+  static final val BlackHat: scalacv.MorphOp
+  static final val Close: scalacv.MorphOp
+  static final val Gradient: scalacv.MorphOp
+  static final val Open: scalacv.MorphOp
+  static final val TopHat: scalacv.MorphOp
 object scalacv.MorphShape
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1471,9 +1497,9 @@ object scalacv.MorphShape
   def ordinal(scalacv.MorphShape): int
   def valueOf(java.lang.String): scalacv.MorphShape
   def values(): scalacv.MorphShape[]
-  static val Cross: scalacv.MorphShape
-  static val Ellipse: scalacv.MorphShape
-  static val Rect: scalacv.MorphShape
+  static final val Cross: scalacv.MorphShape
+  static final val Ellipse: scalacv.MorphShape
+  static final val Rect: scalacv.MorphShape
 object scalacv.NativeDelete
   extends java.lang.Object
   implements java.io.Serializable
@@ -1588,11 +1614,11 @@ object scalacv.OutputDepth
   def ordinal(scalacv.OutputDepth): int
   def valueOf(java.lang.String): scalacv.OutputDepth
   def values(): scalacv.OutputDepth[]
-  static val Float32: scalacv.OutputDepth
-  static val Float64: scalacv.OutputDepth
-  static val SameAsSource: scalacv.OutputDepth
-  static val Signed16: scalacv.OutputDepth
-  static val Unsigned8: scalacv.OutputDepth
+  static final val Float32: scalacv.OutputDepth
+  static final val Float64: scalacv.OutputDepth
+  static final val SameAsSource: scalacv.OutputDepth
+  static final val Signed16: scalacv.OutputDepth
+  static final val Unsigned8: scalacv.OutputDepth
 object scalacv.PencilSketchPair
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1612,13 +1638,13 @@ object scalacv.PnpSolver
   def ordinal(scalacv.PnpSolver): int
   def valueOf(java.lang.String): scalacv.PnpSolver
   def values(): scalacv.PnpSolver[]
-  static val DLS: scalacv.PnpSolver
-  static val EPnP: scalacv.PnpSolver
-  static val IPPE: scalacv.PnpSolver
-  static val IppeSquare: scalacv.PnpSolver
-  static val Iterative: scalacv.PnpSolver
-  static val SQPnP: scalacv.PnpSolver
-  static val UPnP: scalacv.PnpSolver
+  static final val DLS: scalacv.PnpSolver
+  static final val EPnP: scalacv.PnpSolver
+  static final val IPPE: scalacv.PnpSolver
+  static final val IppeSquare: scalacv.PnpSolver
+  static final val Iterative: scalacv.PnpSolver
+  static final val SQPnP: scalacv.PnpSolver
+  static final val UPnP: scalacv.PnpSolver
 object scalacv.Point
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1673,11 +1699,11 @@ object scalacv.Rect
 object scalacv.Releasable
   extends java.lang.Object
   implements java.io.Serializable
-  def given_Releasable_Mat(): scalacv.Releasable<org.opencv.core.Mat>
-  def given_Releasable_VideoCapture(): scalacv.Releasable<org.opencv.videoio.VideoCapture>
-  def given_Releasable_VideoWriter(): scalacv.Releasable<org.opencv.videoio.VideoWriter>
   def handle<A>(scala.Function1<A, java.lang.Object>): scalacv.Releasable<A>
   def nativeHandle<A>(): scalacv.Releasable<A>
+  final def given_Releasable_Mat(): scalacv.Releasable<org.opencv.core.Mat>
+  final def given_Releasable_VideoCapture(): scalacv.Releasable<org.opencv.videoio.VideoCapture>
+  final def given_Releasable_VideoWriter(): scalacv.Releasable<org.opencv.videoio.VideoWriter>
 object scalacv.Releasable.package
   extends java.lang.Object
   implements java.io.Serializable
@@ -1699,9 +1725,9 @@ object scalacv.Rotation
   def ordinal(scalacv.Rotation): int
   def valueOf(java.lang.String): scalacv.Rotation
   def values(): scalacv.Rotation[]
-  static val Clockwise: scalacv.Rotation
-  static val CounterClockwise: scalacv.Rotation
-  static val Half: scalacv.Rotation
+  static final val Clockwise: scalacv.Rotation
+  static final val CounterClockwise: scalacv.Rotation
+  static final val Half: scalacv.Rotation
 object scalacv.Scalar
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1720,7 +1746,7 @@ object scalacv.Scalar
 object scalacv.Scoped
   extends java.lang.Object
   implements java.io.Serializable
-  def using<A, R>(scala.util.Either<scalacv.CvError, R>, java.lang.String, scala.Function1<R, A>): scala.util.Either<scalacv.CvError, A>
+  def using<A, R extends java.lang.AutoCloseable>(scala.util.Either<scalacv.CvError, R>, java.lang.String, scala.Function1<R, A>): scala.util.Either<scalacv.CvError, A>
 object scalacv.Segment
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1747,8 +1773,8 @@ object scalacv.Thickness
   implements java.io.Serializable, scala.deriving.Mirror$Sum
   def Default(): scalacv.Thickness$Stroke
   def ordinal(scalacv.Thickness): int
-  static val Filled: scalacv.Thickness$Filled$
-  static val Stroke: scalacv.Thickness$Stroke$
+  static final val Filled: scalacv.Thickness$Filled$
+  static final val Stroke: scalacv.Thickness$Stroke$
 object scalacv.Thickness.Filled
   extends java.lang.Object
   implements java.io.Serializable, scala.Product, scala.deriving.Mirror$Singleton, scalacv.Thickness
@@ -1781,8 +1807,8 @@ object scalacv.Threshold
   def triangle$default$1(): scalacv.Threshold$Mode
   def triangle(scalacv.Threshold$Mode): scalacv.Threshold
   def unapply(scalacv.Threshold): scalacv.Threshold
-  static val Auto: scalacv.Threshold$Auto$
-  static val Mode: scalacv.Threshold$Mode$
+  static final val Auto: scalacv.Threshold$Auto$
+  static final val Mode: scalacv.Threshold$Mode$
 object scalacv.Threshold.Auto
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1791,8 +1817,8 @@ object scalacv.Threshold.Auto
   def ordinal(scalacv.Threshold$Auto): int
   def valueOf(java.lang.String): scalacv.Threshold$Auto
   def values(): scalacv.Threshold$Auto[]
-  static val Otsu: scalacv.Threshold$Auto
-  static val Triangle: scalacv.Threshold$Auto
+  static final val Otsu: scalacv.Threshold$Auto
+  static final val Triangle: scalacv.Threshold$Auto
 object scalacv.Threshold.Mode
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1801,11 +1827,11 @@ object scalacv.Threshold.Mode
   def ordinal(scalacv.Threshold$Mode): int
   def valueOf(java.lang.String): scalacv.Threshold$Mode
   def values(): scalacv.Threshold$Mode[]
-  static val Binary: scalacv.Threshold$Mode
-  static val BinaryInv: scalacv.Threshold$Mode
-  static val ToZero: scalacv.Threshold$Mode
-  static val ToZeroInv: scalacv.Threshold$Mode
-  static val Truncate: scalacv.Threshold$Mode
+  static final val Binary: scalacv.Threshold$Mode
+  static final val BinaryInv: scalacv.Threshold$Mode
+  static final val ToZero: scalacv.Threshold$Mode
+  static final val ToZeroInv: scalacv.Threshold$Mode
+  static final val Truncate: scalacv.Threshold$Mode
 object scalacv.ThresholdResult
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1832,7 +1858,7 @@ object scalacv.Video
   def open(int, scalacv.CaptureOptions): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.videoio.VideoCapture>>
   def open(java.lang.String): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.videoio.VideoCapture>>
   def open(java.lang.String, scalacv.CaptureOptions): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.videoio.VideoCapture>>
-  static val FrameSource: scalacv.Video$FrameSource$
+  static final val FrameSource: scalacv.Video$FrameSource$
 object scalacv.Video.FrameSource
   extends java.lang.Object
   implements java.io.Serializable

@@ -5,11 +5,12 @@ import org.opencv.core.{Mat, MatOfDouble}
 /** A pinhole camera's intrinsics — what turns a pixel measurement into a metric one.
   *
   * `fx`/`fy` are the focal length in pixels, `cx`/`cy` the principal point (usually near the image centre).
-  * `distortion` is OpenCV's radial/tangential coefficients (`k1, k2, p1, p2[, k3 …]`); leave it empty for an
-  * ideal lens. Only the counts OpenCV itself accepts are allowed — see [[Intrinsics.ValidDistortionSizes]]. A
-  * real camera's numbers come from a chessboard calibration; when you have not calibrated,
-  * [[Intrinsics.approx]] gives a serviceable guess from the image size and a field-of-view estimate — good
-  * enough to *see* an augmented overlay track, not good enough to *measure* with.
+  * All calibration values must be finite; focal lengths must be positive. `distortion` is OpenCV's
+  * radial/tangential coefficients (`k1, k2, p1, p2[, k3 …]`); leave it empty for an ideal lens. Only the
+  * counts OpenCV itself accepts are allowed — see [[Intrinsics.ValidDistortionSizes]]. A real camera's
+  * numbers come from a chessboard calibration; when you have not calibrated, [[Intrinsics.approx]] gives a
+  * serviceable guess from the image size and a field-of-view estimate — good enough to *see* an augmented
+  * overlay track, not good enough to *measure* with.
   *
   * This is the core camera model the vision layer builds on: `scalacv.vision.Ar`, `HeadPose` and `Localizer`
   * all take an `Intrinsics`, `scalacv.vision.Calibration` produces one, and `Image.undistort` consumes one.
@@ -21,6 +22,7 @@ final case class Intrinsics(
     cy: Double,
     distortion: Seq[Double] = Seq.empty
 ):
+  require((Seq(fx, fy, cx, cy) ++ distortion).forall(_.isFinite), "camera calibration must be finite")
   require(fx > 0 && fy > 0, s"focal lengths must be positive, got fx=$fx fy=$fy")
   require(
     Intrinsics.ValidDistortionSizes.contains(distortion.size),

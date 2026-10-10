@@ -36,7 +36,8 @@ private[scalacv] object Graphics:
     prim match
       case Circle(center, radius) =>
         val c = center
-        val r = math.max(0, radius.round.toInt)
+        require(radius <= Int.MaxValue, "circle radius exceeds raster range")
+        val r = radius.round.toInt
         val roi = roiOf(Seq(Point(c.x - r, c.y - r), Point(c.x + r, c.y + r)), style.strokeWidth, mat)
         style.fill.foreach(col =>
           alpha(mat, col.alpha, roi)(m => Imgproc.circle(m, c.toCv, r, col.toBgr.toCv, -1, lineType(style)))
@@ -149,33 +150,75 @@ private[scalacv] object Graphics:
             segments.foreach((s, e) =>
               Imgproc.line(m, s.toCv, e.toCv, col.toBgr.toCv, style.strokeWidth, lineType(style))
             )
-          case Some(dash) => segments.foreach((s, e) => dashSegment(m, s, e, col, style, dash))
+          case Some(dash) =>
+            var phase = 0.0
+            segments.foreach { (s, e) =>
+              phase = dashSegment(m, s, e, col, style, dash, phase)
+            }
 
+  /** Clip work to the canvas, but advance phase over the entire (even invisible) edge. */
   private def dashSegment(
       mat: Mat,
       from: Point,
       to: Point,
       col: Color,
       style: PictureStyle,
-      dash: Dash
-  ): Unit =
-    val length = from.distanceTo(to)
+      dash: Dash,
+      phase: Double
+  ): Double =
+    val dx = to.x - from.x
+    val dy = to.y - from.y
+    val length = math.hypot(dx, dy)
+    require(length.isFinite, "dash segment length must be finite")
+    val period = dash.on.toDouble + dash.off.toDouble
     if length > 0 then
-      val ux = (to.x - from.x) / length
-      val uy = (to.y - from.y) / length
-      val period = dash.on + dash.off
-      var pos = 0.0
-      while pos < length do
-        val on = math.min(pos + dash.on, length)
-        Imgproc.line(
-          mat,
-          Point(from.x + ux * pos, from.y + uy * pos).toCv,
-          Point(from.x + ux * on, from.y + uy * on).toCv,
-          col.toBgr.toCv,
-          style.strokeWidth,
-          lineType(style)
-        )
-        pos += period
+      val ux = dx / length
+      val uy = dy / length
+      val margin = style.strokeWidth.toDouble + 3
+      var start = 0.0
+      var end = length
+      def clip(origin: Double, direction: Double, low: Double, high: Double): Unit =
+        if direction == 0 then
+          if origin < low || origin > high then end = -1
+        else
+          val a = (low - origin) / direction
+          val b = (high - origin) / direction
+          start = math.max(start, math.min(a, b))
+          end = math.min(end, math.max(a, b))
+      clip(from.x, ux, -margin, mat.cols.toDouble + margin)
+      clip(from.y, uy, -margin, mat.rows.toDouble + margin)
+      // Check even a collapsed interval: at astronomical distances both clip boundaries can round
+      // to the same Double, silently hiding an intersecting edge. Require quarter-pixel distance
+      // resolution for potentially visible edges, in either direction; proven offscreen edges still
+      // skip raster work and advance phase. Checking length also protects phase on following edges.
+      if end >= start then
+        require(math.ulp(length) <= 0.25, "dash clipping exceeds floating-point resolution")
+      if end > start then
+        val anchor = Point(from.x + ux * start, from.y + uy * start)
+        val visible = end - start
+        // A widened interval must not schedule unbounded work either.
+        val maxVisible = math.hypot(mat.cols.toDouble + 2 * margin, mat.rows.toDouble + 2 * margin)
+        require(visible <= maxVisible * 1.01, "dash clipping exceeds floating-point resolution")
+        require(anchor.x.isFinite && anchor.y.isFinite, "dash clipping must produce finite coordinates")
+        var pos = 0.0
+        var localPhase = (phase + start % period) % period
+        while pos < visible do
+          val on = localPhase < dash.on
+          val remaining = if on then dash.on - localPhase else period - localPhase
+          val next = math.min(visible, pos + remaining)
+          require(next > pos, "dash geometry exceeds floating-point resolution")
+          if on then
+            Imgproc.line(
+              mat,
+              Point(anchor.x + ux * pos, anchor.y + uy * pos).toCv,
+              Point(anchor.x + ux * next, anchor.y + uy * next).toCv,
+              col.toBgr.toCv,
+              style.strokeWidth,
+              lineType(style)
+            )
+          pos = next
+          localPhase = if on then dash.on.toDouble else 0.0
+    (phase + length % period) % period
 
   private def circlePolygon(center: Point, radius: Int): Seq[Point] =
     (0 until 48).map { i =>

@@ -32,7 +32,7 @@ This part of the book opens the `scalacv-vision` module, and the split matters h
 `ModelSpec` are in the *core* `scalacv` artifact: fetching a file and proving it intact needs nothing
 else on the classpath. Everything the fetch is *for* --- `FaceDetect`, `FaceRecognizer`, `Dnn`,
 `PoseEstimator`, `Segmenter`, `Cascades` --- lives in `scalacv-vision`. Add
-`mvn"com.worxbend::scalacv-vision:0.1.0"` beside the core line and your platform's natives; Chapter 2
+`mvn"com.worxbend::scalacv-vision:0.4.1"` beside the core line and your platform's natives; Chapter 2
 has the sbt and scala-cli spellings.
 ]
 

@@ -19,12 +19,12 @@ That chain is the *front end* of a visual-SLAM system, and it is what this chapt
 is what OpenCV provides and therefore what scalacv wraps. Everything on the front-end side is one
 typed call; everything past it is a decision to take a dependency.
 
-Nine files under `vision/src/scalacv/` carry it --- `OpticalFlow`, `Features`, `VisualOdometry`,
+The navigation sources under `vision/src/scalacv/vision/` carry it --- `OpticalFlow`, `Features`, `VisualOdometry`,
 `Odometry`, `Depth`, `Navigator`, `Localizer`, `OccupancyGrid` and `LoopDetector` --- so every type in
 this chapter needs `com.worxbend::scalacv-vision` on the classpath beside `scalacv`, the same module
 as the detectors of Chapters 24 to 29 and the trackers of Chapter 30. The worked example at the end
-also plots, so it adds `scalacv-graphs` for `Chart` and `Color`. Both live in package `scalacv`, so
-one `import scalacv.*` still covers everything.
+also plots, so it adds `scalacv-graphs` for `Chart` and `Color`. Add `import scalacv.vision.*`
+and `import scalacv.graphs.*` alongside core’s `import scalacv.*`.
 
 Most of those nine own native memory the Java bindings will not free: an ORB detector, a brute-force
 matcher, a stereo matcher, a descriptor `Mat` per keyframe, a retained previous frame. Of the 188
@@ -481,6 +481,15 @@ so a 200×200 grid is 320 KB of ordinary heap the collector handles correctly. T
 `toImage`, which hands you an owned `Image` --- and even that is built in the careful order, filling
 a JVM byte array *before* allocating the `Mat`, so an `OutOfMemoryError` on a large grid cannot
 strand a native buffer in the window between construction and ownership.
+]
+
+#warning[
+  Display-normalized disparity is not metric depth. Its brightness changes with unrelated scene
+  extrema; the 0.4.1 whole-band steering could miss narrow obstacles. The current local-mean
+policy avoids whole-band dilution but is still a heuristic. Treat the image-based navigator
+  as a demo heuristic, never a safety controller. Use measurements retaining disparity units and
+  validity with an explicit obstacle policy. Similarly, a native pose solver's success is not
+  sufficient evidence of observable motion or a supported pose.
 ]
 
 #subsect("Loop closure")

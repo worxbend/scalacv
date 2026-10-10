@@ -16,7 +16,12 @@ object TextMeasurer:
   * text remains axis-aligned at its transformed anchor. Bounds describe geometry, not ink.
   */
 final class PictureLayout(val textMeasurer: TextMeasurer):
-  def bounds(picture: Picture): Option[Bounds] = boundsOf(picture, Affine.identity, PictureStyle())
+  def bounds(picture: Picture): Option[Bounds] =
+    var result: Option[Bounds] = None
+    PictureTraversal.foreach(picture) { (prim, style) =>
+      result = union(result, primBounds(prim, style))
+    }
+    result
 
   /** Places `that` to the right of `first`, with centres aligned vertically. */
   def beside(first: Picture, that: Picture, gap: Double = 8): Picture =
@@ -66,15 +71,7 @@ final class PictureLayout(val textMeasurer: TextMeasurer):
       .strokeColor(textColor)
       .fontScale(fontScale)
       .font(font)
-      .under(Picture.rectangle(box).fillColor(background).noStroke)
-
-  /** The bounding box of `picture` under `tf` and `style` (text needs the style's font to be measured). */
-  private def boundsOf(picture: Picture, tf: Affine, style: PictureStyle): Option[Bounds] = picture match
-    case Picture.Empty => None
-    case Picture.Over(top, bottom) => union(boundsOf(top, tf, style), boundsOf(bottom, tf, style))
-    case Picture.Styled(child, patch) => boundsOf(child, tf, patch(style))
-    case Picture.Transformed(child, affn) => boundsOf(child, tf.compose(affn), style)
-    case Picture.Leaf(prim) => primBounds(prim, tf, style)
+      .on(Picture.rectangle(box).fillColor(background).noStroke)
 
   private def union(a: Option[Bounds], b: Option[Bounds]): Option[Bounds] = (a, b) match
     case (Some(x), Some(y)) => Some(x.union(y))
@@ -82,34 +79,20 @@ final class PictureLayout(val textMeasurer: TextMeasurer):
     case (None, some) => some
 
   /** Geometric extent: empty paths have no bounds; stroke and antialiasing padding belongs to the backend. */
-  private def primBounds(prim: Picture.Prim, tf: Affine, style: PictureStyle): Option[Bounds] =
-    import Picture.Prim.*
+  private def primBounds(prim: RenderPrimitive, style: PictureStyle): Option[Bounds] =
+    import RenderPrimitive.*
     prim match
-      case Circle(center, radius) =>
-        // Circles are rotation-invariant: transform the centre and scale the radius, not the bbox corners.
-        val c = tf(center)
-        val r = radius * tf.scaleFactor
+      case Circle(c, r) =>
         extentOf(Seq(Point(c.x - r, c.y - r), Point(c.x + r, c.y + r)))
-      case Quad(rect) =>
-        // Rotation can put either of the other two corners outside the transformed diagonal.
-        extentOf(
-          Seq(
-            Point(rect.x.toDouble, rect.y.toDouble),
-            Point(rect.x.toDouble + rect.width, rect.y.toDouble),
-            Point(rect.x.toDouble + rect.width, rect.y.toDouble + rect.height),
-            Point(rect.x.toDouble, rect.y.toDouble + rect.height)
-          ).map(tf.apply)
-        )
-      case Path(points, _) => extentOf(points.map(tf.apply))
-      case Text(txt, at) =>
-        // Text stays axis-aligned at the transformed baseline anchor, including under rotation.
-        val p = tf(at)
-        val m = textMeasurer.measure(txt, style.font, style.fontScale * tf.scaleFactor)
+      case Path(points, _) => extentOf(points)
+      case Text(txt, p) =>
+        val m = textMeasurer.measure(txt, style.font, style.fontScale)
         extentOf(Seq(Point(p.x, p.y - m.size.height), Point(p.x + m.size.width, p.y + m.baseline)))
 
   private def extentOf(points: Seq[Point]): Option[Bounds] =
     if points.isEmpty then None
     else
+      require(points.forall(p => p.x.isFinite && p.y.isFinite), "bounds must be finite")
       val xs = points.map(_.x)
       val ys = points.map(_.y)
       Some(Bounds(xs.min, ys.min, xs.max, ys.max))

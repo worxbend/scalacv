@@ -133,9 +133,7 @@ object Animation:
     require(count >= 0, s"count cannot be negative, got $count")
     var i = 0
     while i < count do
-      val canvas = frame(i).render(width, height, background)
-      try f(canvas)
-      finally canvas.close()
+      Image.scoped(frame(i).render(width, height, background))(f)
       i += 1
 
   /** Renders `frames` frames and writes them to `path` as an **animated GIF** at `fps` — the shareable format

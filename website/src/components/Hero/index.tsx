@@ -16,7 +16,7 @@ import styles from './styles.module.css';
  *  of these maps to a documented page, which is the point — it is a promise, not a mood board. */
 const TARGETS = ['edges', 'contours', 'faces', 'motion', 'markers', 'gestures', 'depth'];
 
-const INSTALL = 'mvn"com.worxbend::scalacv:0.1.0"';
+const INSTALL = 'mvn"com.worxbend::scalacv:0.4.1"';
 
 function CopyButton({text}: {text: string}): React.ReactElement {
   const [copied, setCopied] = useState(false);
@@ -65,7 +65,7 @@ export default function Hero(): React.ReactElement {
       <div className={styles.inner}>
         <div className={styles.pitch}>
           <p className={styles.eyebrow}>
-            <span className={styles.chip}>OpenCV 4.13</span>
+            <span className={styles.chip}>OpenCV 4.14</span>
             <span className={styles.chip}>Scala 3.3 LTS</span>
             <span className={styles.chip}>JDK 17+</span>
             <span className={styles.chip}>headless</span>
@@ -101,7 +101,7 @@ export default function Hero(): React.ReactElement {
             <CopyButton text={INSTALL} />
           </div>
           <p className={styles.installNote}>
-            Plus one natives line for your platform —{' '}
+            Source tag 0.4.1; Central upload is disabled. Local install plus two native artifacts —{' '}
             <Link to="/getting-started">the install page explains why</Link>.
           </p>
         </div>

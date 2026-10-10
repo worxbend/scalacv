@@ -95,15 +95,19 @@ object Segmenter:
 
   /** Decodes a segmentation output tensor into a binary person mask (`255` = person), scaled to `imageSize`.
     *
-    * Handles the two common shapes: `[1, 1, H, W]` (a single foreground probability plane) and `[1, 2, H, W]`
-    * (background/foreground, whose **last** channel is taken as the person).
+    * Accepts contiguous single-channel CV_32F tensors `[1,C,H,W]` or `[C,H,W]`, with positive extents.
+    * Batching is unsupported. For any positive C the **last** plane is foreground (including the common C=1
+    * foreground-probability and C=2 background/foreground layouts).
     *
     * @param threshold
     *   the probability above which a pixel is the person.
     */
   def decodeMask(output: Mat, imageSize: Size, threshold: Float = 0.5f): Image =
+    val shape = TensorShape.validate(output, imageSize)
+    require(threshold.isFinite && threshold >= 0 && threshold <= 1, "threshold must be in [0,1]")
     val dims = output.dims
     require(dims == 3 || dims == 4, s"expected a [1,C,H,W] or [C,H,W] segmentation tensor, got $dims dims")
+    require(dims != 4 || shape.head == 1, "segmentation batch size must be one")
     val (c, h, w) =
       if dims == 4 then (output.size(1), output.size(2), output.size(3))
       else (output.size(0), output.size(1), output.size(2))
@@ -158,17 +162,10 @@ extension (img: Image)
     * feathering the edge. `mask` is a borrowed `CV_8UC1` foreground mask (from [[Segmenter]] or any keying).
     */
   def blurBackground(mask: Image, strength: Int = 15, feather: Int = 7): Image =
-    // The compositing runs INSIDE the try: it can throw (a size-mismatched mask trips alphaBlend's
-    // require, gaussianBlur can raise a CvException), and like every Image transform this consumes the
-    // receiver, so `img` must be closed on the throw path too — not only on success.
-    try Image(BackgroundEffect.blur(img.mat, mask.mat, strength, feather))
-    finally img.close()
+    img.transform(source => BackgroundEffect.blur(source, mask.mat, strength, feather))
 
   /** Replaces the background (where `mask` is black) with `background`, resized to fit and feathered at the
     * edge — a virtual background. `mask` and `background` are borrowed.
     */
   def replaceBackground(mask: Image, background: Image, feather: Int = 7): Image =
-    // Inside the try for the same reason as blurBackground: the compositing can throw, and the
-    // receiver is consumed either way, so close it on the throw path too.
-    try Image(BackgroundEffect.replace(img.mat, mask.mat, background.mat, feather))
-    finally img.close()
+    img.transform(source => BackgroundEffect.replace(source, mask.mat, background.mat, feather))

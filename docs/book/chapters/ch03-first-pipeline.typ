@@ -44,7 +44,7 @@ method from whichever modules are on the classpath. You write it once per file, 
 feature. `OpenCv.load()` links the native libraries; it is idempotent and thread-safe, so calling it
 again from anywhere costs nothing, but calling anything else before it costs you a link error.
 
-#sect("The entry point that cannot leak")
+#sect("A synchronous scoped entry point")
 
 There are two ways to get an `Image` from a file, and they are not equally forgiving. Start with
 the forgiving one.
@@ -59,10 +59,10 @@ Image.reading("noticeboard.jpg") { img =>
 
 `Image.reading` opens the path, hands the resulting `Image` to your block, and closes it when the
 block returns --- on success, on a `Left`, and on an exception thrown from anywhere inside. It is the
-one entry point that cannot leak the source image, which is why every page of the library's own
-documentation reaches for it first.
+preferred entry point for synchronous work. Do not let raw handles or lazy effects escape its
+callback; manually owned resources still need explicit cleanup.
 
-Two details make the guarantee total rather than nearly total. Release is idempotent, so `reading`
+Two details support this cleanup policy. Release is idempotent, so `reading`
 closing an image the block already consumed --- and the chain above does consume it, at `write` --- is
 a no-op rather than a double free. And the whole body runs inside `Cv.attempt`, so a
 `CvError.NativeCall` thrown by `gray` or `canny` partway down the chain comes back as a `Left`
@@ -410,7 +410,7 @@ escape hatch that keeps the low-level API one method away.
 #sect("Running it")
 
 Two lines of dependency, as ever: scalacv itself, and the OpenCV natives for the platform you are
-actually on. No build tool can put a classifier into a published POM, so the second line is yours to
+actually on. This project keeps POMs platform-neutral, so the native coordinates are yours to
 pick.
 
 #example("A Mill module for the program in this chapter.")[
@@ -422,8 +422,8 @@ import mill.*, scalalib.*
 object scan extends ScalaModule {
   def scalaVersion = "3.3.8"
   def mvnDeps = Seq(
-    mvn"com.worxbend::scalacv:0.1.0",
-    mvn"com.worxbend::scalacv-vision:0.1.0",   // faces, QR, markers
+    mvn"com.worxbend::scalacv:0.4.1",
+    mvn"com.worxbend::scalacv-vision:0.4.1",   // faces, QR, markers
     mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
     mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
   )
@@ -448,8 +448,8 @@ For a single file, scala-cli needs no build definition at all --- the directives
 #example("The same program as one scala-cli script.")[
 ```scala
 //> using scala 3.3.8
-//> using dep com.worxbend::scalacv:0.1.0
-//> using dep com.worxbend::scalacv-vision:0.1.0
+//> using dep com.worxbend::scalacv:0.4.1
+//> using dep com.worxbend::scalacv-vision:0.4.1
 //> using dep org.bytedeco:opencv:4.13.0-1.5.13,classifier=linux-x86_64
 //> using dep org.bytedeco:openblas:0.3.31-1.5.13,classifier=linux-x86_64
 

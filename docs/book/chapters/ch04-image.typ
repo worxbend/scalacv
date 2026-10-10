@@ -276,7 +276,7 @@ the outside world and do not pretend to: `blank` rejects a non-positive size, or
 other than 1, 3 or 4, with `IllegalArgumentException` up front, because that is a bug in your code
 rather than a fact about the world.
 
-`Image.reading` is the one that forgets nothing, and the one to reach for unless you have a reason not
+`Image.reading` is the scoped entry point to reach for unless you have a reason not
 to. It reads the file, runs your block, and closes the image afterwards --- on success, on failure, and
 on an exception thrown from the middle of your chain. It is harmless if the block already consumed the
 image, because release is idempotent.
@@ -361,8 +361,8 @@ release it in a `finally`, or wrap it straight back into an `Image`.
 #sect("Why `faces` is not a member")
 
 `Image` has more than sixty members and none of them mentions a face, a QR code or a skeleton. That is
-not an omission. Detection and its overlays arrive as *extension methods*, brought in by the same
-`import scalacv.*` that brings in everything else, and they read at the call site exactly as members
+not an omission. Detection and its overlays arrive as *extension methods*, brought in by
+`import scalacv.vision.*` beside core’s `import scalacv.*`, and they read at the call site exactly as members
 would:
 
 #example("Extension methods, indistinguishable at the call site.")[

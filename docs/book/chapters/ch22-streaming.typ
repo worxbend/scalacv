@@ -332,9 +332,10 @@ cam.foreach(3) { frame =>
 }
 ```
 
-The `close` is not optional and not defensive. A transform consumes its receiver and returns a new
-`Image` that you own (Chapter 4); the one `foreach` handed you is closed either way, but `small` is
-yours.
+The current callback scope follows this consuming successor, so early `close` is optional and
+idempotent. The older 0.4.1 tag closed only the original wrapper; there the explicit successor
+close is necessary. To retain a branch beyond the current callback, explicitly `detach` it and
+accept the responsibility to close it later.
 
 #subsect("A fixed worker pool")
 

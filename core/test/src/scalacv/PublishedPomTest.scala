@@ -38,6 +38,23 @@ class PublishedPomTest extends munit.FunSuite:
   poms.foreach: pom =>
     val id = pom.artifactId
 
+    test(s"$id: exact dependencies, versions and scopes"):
+      val scala = ("org.scala-lang", "scala3-library_3", "3.3.8", "compile", "false", "jar")
+      val opencv = ("org.bytedeco", "opencv", Build.openCvArtifactVersion, "compile", "false", "jar")
+      val core = ("com.worxbend", "scalacv_3", pom.version, "compile", "false", "jar")
+      val expected = id match
+        case "scalacv_3" => Set(scala, opencv)
+        case "scalacv-vision_3" | "scalacv-graphs_3" => Set(scala, opencv, core)
+        case "scalacv-zio_3" =>
+          Set(
+            scala,
+            core,
+            ("dev.zio", "zio_3", "2.1.26", "compile", "false", "jar"),
+            ("dev.zio", "zio-streams_3", "2.1.26", "compile", "false", "jar")
+          )
+        case other => fail(s"unexpected published artifact: $other")
+      assertEquals(pom.contracts.toSet, expected)
+
     test(s"$id: POM declares no duplicate groupId:artifactId"):
       val keys = pom.deps.map((g, a, _) => s"$g:$a")
       assertEquals(keys.distinct.size, keys.size, s"duplicate dependencies in $id POM: $keys")
@@ -92,7 +109,14 @@ object PublishedPomTest:
     val files = paths.map(java.io.File(_))
     val missing = files.filterNot(_.isFile)
     if missing.nonEmpty then throw AssertionError(s"these POMs were not generated: ${missing.mkString(", ")}")
-    files.map(Pom(_))
+    val parsed = files.map(Pom(_))
+    val expected = Set("scalacv_3", "scalacv-vision_3", "scalacv-graphs_3", "scalacv-zio_3")
+    require(
+      parsed.size == 4 && parsed.map(_.artifactId).toSet == expected,
+      "expected exactly the four library POMs"
+    )
+    require(parsed.map(_.version).distinct.size == 1, "library POM versions differ")
+    parsed
 
   /** One parsed POM: its project artifactId and its declared dependencies. */
   private final class Pom(file: java.io.File):
@@ -113,6 +137,21 @@ object PublishedPomTest:
 
     /** The project's own artifactId (the direct `<artifactId>` child of `<project>`), not a dependency's. */
     val artifactId: String = directChildText(doc.getDocumentElement, "artifactId").getOrElse("<unknown>")
+
+    val version: String = directChildText(doc.getDocumentElement, "version").getOrElse("")
+
+    val contracts: Seq[(String, String, String, String, String, String)] =
+      val ns = doc.getElementsByTagName("dependency")
+      (0 until ns.getLength).map: i =>
+        val e = ns.item(i).asInstanceOf[Element]
+        (
+          childText(e, "groupId").getOrElse(""),
+          childText(e, "artifactId").getOrElse(""),
+          childText(e, "version").getOrElse(""),
+          childText(e, "scope").getOrElse("compile"),
+          childText(e, "optional").getOrElse("false"),
+          childText(e, "type").getOrElse("jar")
+        )
 
     val deps: Seq[(String, String, Option[String])] =
       val ns = doc.getElementsByTagName("dependency")

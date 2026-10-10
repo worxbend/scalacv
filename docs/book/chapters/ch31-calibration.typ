@@ -105,10 +105,10 @@ This chapter straddles two artifacts, and it is worth being exact about which. `
 `Ops.scala`, all under `core/src/scalacv/` --- because `undistort` is the one core operation that
 needs a camera model, and nothing above it should have to be on the classpath to describe a lens.
 `ChessboardPattern`, `Calibration`, `Calibration.findCorners`, `Calibration.fromChessboard` and the
-`undistort(calibration)` extension are all in `vision/src/scalacv/Calibration.scala`, so *producing* a
-calibration needs `com.worxbend::scalacv-vision:0.1.0` on the classpath beside the core dependency of
-Chapter 2 --- the same artifact Chapters 24 through 30 already asked for. The package does not change:
-`scalacv-vision` publishes into `scalacv` too, so `import scalacv.*` reaches all of it.
+`undistort(calibration)` extension are all in `vision/src/scalacv/vision/Calibration.scala`, so *producing* a
+calibration needs `com.worxbend::scalacv-vision:0.4.1` on the classpath beside the core dependency of
+Chapter 2 --- the same artifact Chapters 24 through 30 already asked for. Add
+`import scalacv.vision.*` alongside `import scalacv.*`; the optional module has its own package.
 
 `Intrinsics` itself is a plain case class: four doubles and a sequence.
 

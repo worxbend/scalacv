@@ -41,8 +41,9 @@ import scala.util.{Random, Try, Using}
   * to `ACC_PUBLIC` on the JVM, so `Point.toCv` and `Managed`'s constructor appear below. That is deliberate
   * rather than a limitation being tolerated. Those members really are callable — from Java, from any code
   * that declares itself in package `scalacv`, and from a `ClassLoader` — so they really are part of the
-  * binary compatibility surface MiMa will police from `0.2.0` (D13). A gate that reported the narrower
-  * source-level view would be quietly wrong about exactly the members most likely to break someone.
+  * bytecode surface checked historically by `ci/binary-compatibility.py`. These goldens remain a filtered
+  * human-review aid, not a historical ABI check. A gate that reported the narrower source-level view would be
+  * quietly wrong about exactly the members most likely to break someone.
   *
   * ==Determinism is the whole value==
   *
@@ -215,7 +216,12 @@ object PublicApi:
     else "class"
 
   private def typeParams(ps: Array[? <: java.lang.reflect.TypeVariable[?]]): String =
-    if ps.isEmpty then "" else ps.map(_.getName).mkString("<", ", ", ">")
+    if ps.isEmpty then ""
+    else
+      ps.map { p =>
+        val bounds = p.getBounds.toVector.map(typeName).filterNot(_ == "java.lang.Object")
+        p.getName + (if bounds.isEmpty then "" else bounds.mkString(" extends ", " & ", ""))
+      }.mkString("<", ", ", ">")
 
   /** Erasure-free where the bytecode carries a generic signature, erased where it does not.
     *
@@ -233,6 +239,7 @@ object PublicApi:
     val b = StringBuilder()
     if Modifier.isStatic(mods) then b ++= "static "
     if Modifier.isAbstract(mods) then b ++= "abstract "
+    if Modifier.isFinal(mods) then b ++= "final "
     b.result()
 
   /** `$lessinit$greater$default$1` -> `<init>$default$1`. */
@@ -354,6 +361,9 @@ object PublicApi:
     if added.nonEmpty then b ++= added.map("  + " + _).mkString("new in the API:\n", "\n", "\n")
     b.result()
 
+class ApiRendererFixture[A <: java.lang.Number]:
+  final def value(a: A): A = a
+
 /** The gate: each published module's compiled public surface must equal its committed `<module>/api.golden`.
   *
   * The renderer-invariant tests run against `core` as a representative surface (the renderer is the same for
@@ -361,6 +371,11 @@ object PublicApi:
   * golden.
   */
 class PublicApiTest extends munit.FunSuite:
+
+  test("the renderer retains method finality and generic bounds"):
+    val dump = PublicApi.dump(Seq(classOf[ApiRendererFixture[?]]), "fixture")
+    assert(dump.contains("A extends java.lang.Number"), dump)
+    assert(dump.contains("final def value"), dump)
 
   private val core = PublicApi.coreModule
   private lazy val coreDump: String = PublicApi.currentFor(core)

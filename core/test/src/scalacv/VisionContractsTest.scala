@@ -63,14 +63,13 @@ class VisionContractsTest extends munit.ScalaCheckSuite:
   private val genFlags: Gen[(Boolean, Boolean, Boolean, Boolean, Boolean)] =
     Gen.listOfN(5, Gen.oneOf(true, false)).map(l => (l(0), l(1), l(2), l(3), l(4)))
 
-  /** A distortion vector that throws on any element read. Its length is four, the shortest count `Intrinsics`
-    * accepts, and the constructor checks that count through `length` alone — so the value is built without
-    * incident and detonates only if something actually reads a coefficient.
-    */
+  /** Arm after finite constructor validation to detect any later coefficient read. */
   private final class ExplodingDistortion extends scala.collection.immutable.Seq[Double]:
+    var armed = false
     def length: Int = 4
     override def isEmpty: Boolean = false
-    def apply(i: Int): Double = throw IllegalStateException(s"distortion($i) was read")
+    def apply(i: Int): Double =
+      if !armed then 0.0 else throw IllegalStateException(s"distortion($i) was read")
     def iterator: Iterator[Double] = Iterator.range(0, length).map(i => apply(i))
 
   private val quad = Seq(Point(0, 0), Point(1, 0), Point(1, 1), Point(0, 1))
@@ -141,7 +140,9 @@ class VisionContractsTest extends munit.ScalaCheckSuite:
     assertEqualsDouble(p.y, 85.0, 1e-6)
 
   test("project of an empty point list needs no natives and never reads the intrinsics"):
-    val intr = Intrinsics(100, 200, 50, 60).copy(distortion = ExplodingDistortion())
+    val coefficients = ExplodingDistortion()
+    val intr = Intrinsics(100, 200, 50, 60).copy(distortion = coefficients)
+    coefficients.armed = true
     assertEquals(Ar.project(Seq.empty, Pose3D(Seq(0, 0, 0), Seq(0, 0, 2)), intr), Seq.empty)
 
   test("Pose3D and MarkerPose are 3-vectors with a Euclidean distance, and markerLength must be positive"):

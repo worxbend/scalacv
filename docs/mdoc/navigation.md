@@ -47,6 +47,17 @@ def scene(ox: Int, oy: Int): Image =
     Scalar.White, Thickness.Filled)
 ```
 
+:::warning[Measurements are not display brightness]
+The legacy `StereoDepth.disparity` image is normalized for viewing, not a stable disparity unit:
+changing an unrelated scene extremum can change the same point's brightness. Image-based
+`Obstacles.fromDisparity` and `Navigator.steer` retain their legacy brightness threshold units.
+The 0.4.1 band mean could miss narrow obstacles; the current strongest-local-mean policy avoids
+whole-band dilution but still depends on support size and noise. Treat that path as a demo heuristic, not a calibrated proximity
+measurement or a safety controller. Preserve disparity units and validity separately and choose
+an explicit occupancy/clearance policy. Native solver success alone likewise does not prove
+observable motion or an independently supported pose.
+:::
+
 ## Optical flow
 
 Seed good corners, then follow them into the next frame with pyramidal Lucas–Kanade. Each surviving
@@ -170,6 +181,20 @@ back end's job (loop closure + global optimisation).
 (all points coplanar and the motion pure rotation, say).
 
 ## Stereo depth & obstacles {#stereo-depth-obstacles}
+
+The current `StereoDepth.measure(left, right)` returns an owned `DisparityMeasurement`, with
+positive finite disparities in **pixels** and separate validity. Close it after use; `pixelsCopy`
+and `validityCopy` return independently owned `Managed[Mat]` copies. `at(x, y)` returns `None` for
+unknown correspondence, not evidence of free space. `visualize(maxDisparityPixels)` uses a fixed
+explicit display scale and returns an owned image. Pixel disparity is not metric depth without
+calibrated focal length and stereo baseline. These APIs are newer than the 0.4.1 tag.
+
+`Navigator.steerMeasured(measurement, dangerPixels, blockedPixels)` uses explicit positive ordered
+pixel thresholds, a strongest 5×5 local mean (smaller on tiny bands), and treats invalid pixels as
+blocked. This conservative demonstration policy has no robot footprint, braking-distance or
+uncertainty model; application-specific acceptance tests are still required. The legacy display
+API below is retained without silently converting its thresholds to metres or pixel disparity.
+ {#stereo-depth-obstacles}
 
 From a rectified stereo pair, `StereoDepth.disparity` produces a map where **brighter is nearer**, and
 `Obstacles.fromDisparity` reads the near-field blobs off it — the obstacle detector for a robot or drone:

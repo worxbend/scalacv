@@ -22,7 +22,7 @@
 ## ✨ Features
 
 - **Typed everything.** No raw `int` constants. `ColorConversion.BgrToGray`, not `6`.
-- **Resource-safe by construction.** `Managed[A]` releases exactly once and throws on use-after-release, in Scala, before anything reaches JNI — where the same mistake is a SIGSEGV with no stack trace.
+- **Explicit native ownership.** `Managed[A]` releases at most once and guards access through the owner. Raw handles, escaped values and concurrent JNI calls remain the caller’s responsibility; the wrapper is not a linear type or a concurrency lock.
 - **Genuinely headless.** `OpenCv.load()` needs no GUI toolkit and no `apt-get` on any runner.
 - **Errors as values where they belong.** `Either[CvError, A]` for the failures you can expect; exceptions for the bugs you cannot.
 - **Two levels, one library.** A high-level `Image` pipeline for the common cases, and the full typed `org.opencv.*` surface underneath — never hidden.
@@ -30,15 +30,24 @@
 
 ## 🚀 Quick start
 
+**Publication status:** the latest repository tag is `v0.4.1`; the coordinates below refer to that
+source release, not a verified Central deployment. Central upload and attestation are disabled,
+and the release workflow creates drafts. For a reproducible local install, use a clean `v0.4.1`
+checkout and run `./mill __.publishLocal`; configure your build to resolve local Ivy artifacts
+(e.g. `ivy2Local` in Coursier). sbt uses local Ivy by default; a Maven consumer instead needs
+`./mill __.publishM2Local`. See [RELEASING.md](RELEASING.md) before relying on remote availability.
+Unreleased fixes in this checkout require its actual `./mill show core.publishVersion`, not the
+`0.4.1` coordinates. All four module versions must match.
+
 ```scala
 // build.mill  (or the equivalent for your build tool)
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.2.0",         // the OpenCV wrapping: Image, Managed, filters, contours…
+  mvn"com.worxbend::scalacv:0.4.1",         // the OpenCV wrapping: Image, Managed, filters, contours…
   // Optional layers, each depending only on the core — add the ones you use:
-  //   mvn"com.worxbend::scalacv-vision:0.2.0"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
-  //   mvn"com.worxbend::scalacv-graphs:0.2.0"  // the Picture scene graph, charts, GIF animation
+  //   mvn"com.worxbend::scalacv-vision:0.4.1"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
+  //   mvn"com.worxbend::scalacv-graphs:0.4.1"  // the Picture scene graph, charts, GIF animation
 
-  // Natives for YOUR platform. A build tool cannot express a per-platform classifier in a
+  // Natives for YOUR platform. This project keeps classifiers out of its platform-neutral
   // published POM, so this line is yours to pick — see "Why two lines?" below.
   mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
@@ -46,8 +55,9 @@ def mvnDeps = Seq(
 ```
 
 **High-level — the `Image` pipeline.** `Image.reading` scopes the image for you and is the entry
-point that cannot leak: the block's image is released when it returns — on success, on failure, and
-on exception — so start here unless you have a reason not to.
+point for synchronous scoped work. Keep borrowed handles inside the callback; finish manually owned
+branches with `close` or a consuming terminal. Scope cleanup is not a guarantee for raw handles or
+resources explicitly transferred out.
 
 ```scala
 import scalacv.*
@@ -59,7 +69,7 @@ Image.reading("photo.jpg") { img => img.gray.blur(2).canny(80, 160).write("edges
 ```
 
 The `read`/`flatMap` form is there when you want to thread the `Either` yourself, and each terminal
-(`write`, `bytes`, `close`) still releases — but `reading` is the one that forgets nothing:
+(`write`, `bytes`, `close`) still releases its receiver:
 
 ```scala
 Image.read("photo.jpg").flatMap(_.gray.blur(2).canny(80, 160).write("edges.png"))
@@ -94,7 +104,7 @@ Image.reading("photo.jpg") { img =>
 
 ### Why two lines?
 
-`scalacv` depends on the OpenCV **Java API** jar, which contains no native code. The natives ship in per-platform classifier jars, and no build tool can put a classifier into a published POM — so if we picked one for you, it would be wrong for everyone else.
+`scalacv` depends on the OpenCV **Java API** jar, which contains no native code. The natives ship in per-platform classifier jars, and this project’s Mill publication model does not encode dependency classifiers — so if we picked one for you, it would be wrong for everyone else.
 
 | Your platform | classifier |
 |---|---|
@@ -135,7 +145,7 @@ Full guide, API reference and cookbook: **[w0rxbend.github.io/scalacv](https://w
 
 ## 🤝 Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). Briefly: `./mill __.compile`, `./mill __.test`, and both style gates before you push.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the explicit headless module list, tests, packaged consumers and compatibility gate.
 
 ## ⚖️ License
 

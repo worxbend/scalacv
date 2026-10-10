@@ -156,6 +156,17 @@ final class scalacv.vision.Descriptors
   def isEmpty(): boolean
   def points(): scala.collection.immutable.Seq<scalacv.Point>
   def size(): int
+final class scalacv.vision.DisparityMeasurement
+  extends java.lang.Object
+  implements java.lang.AutoCloseable
+  def <init>(scalacv.Managed<org.opencv.core.Mat>, scalacv.Managed<org.opencv.core.Mat>): void
+  def at(int, int): scala.Option<java.lang.Object>
+  def close(): void
+  def height(): int
+  def pixelsCopy(): scalacv.Managed<org.opencv.core.Mat>
+  def validityCopy(): scalacv.Managed<org.opencv.core.Mat>
+  def visualize(double): scalacv.Image
+  def width(): int
 final class scalacv.vision.Face
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -379,7 +390,6 @@ final class scalacv.vision.MarkerPose
   def copy$default$1(): scalacv.vision.ArucoMarker
   def copy$default$2(): scalacv.vision.Pose3D
   def copy(scalacv.vision.ArucoMarker, scalacv.vision.Pose3D): scalacv.vision.MarkerPose
-  def distance(): double
   def equals(java.lang.Object): boolean
   def hashCode(): int
   def id(): int
@@ -390,6 +400,7 @@ final class scalacv.vision.MarkerPose
   def productElementName(int): java.lang.String
   def productPrefix(): java.lang.String
   def toString(): java.lang.String
+  final def distance(): double
 final class scalacv.vision.Motion
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -727,28 +738,28 @@ object scalacv.vision.ArucoDictionary
   def ordinal(scalacv.vision.ArucoDictionary): int
   def valueOf(java.lang.String): scalacv.vision.ArucoDictionary
   def values(): scalacv.vision.ArucoDictionary[]
-  static val AprilTag16h5: scalacv.vision.ArucoDictionary
-  static val AprilTag25h9: scalacv.vision.ArucoDictionary
-  static val AprilTag36h10: scalacv.vision.ArucoDictionary
-  static val AprilTag36h11: scalacv.vision.ArucoDictionary
-  static val ArucoMip36h12: scalacv.vision.ArucoDictionary
-  static val ArucoOriginal: scalacv.vision.ArucoDictionary
-  static val Dict4x4_1000: scalacv.vision.ArucoDictionary
-  static val Dict4x4_100: scalacv.vision.ArucoDictionary
-  static val Dict4x4_250: scalacv.vision.ArucoDictionary
-  static val Dict4x4_50: scalacv.vision.ArucoDictionary
-  static val Dict5x5_1000: scalacv.vision.ArucoDictionary
-  static val Dict5x5_100: scalacv.vision.ArucoDictionary
-  static val Dict5x5_250: scalacv.vision.ArucoDictionary
-  static val Dict5x5_50: scalacv.vision.ArucoDictionary
-  static val Dict6x6_1000: scalacv.vision.ArucoDictionary
-  static val Dict6x6_100: scalacv.vision.ArucoDictionary
-  static val Dict6x6_250: scalacv.vision.ArucoDictionary
-  static val Dict6x6_50: scalacv.vision.ArucoDictionary
-  static val Dict7x7_1000: scalacv.vision.ArucoDictionary
-  static val Dict7x7_100: scalacv.vision.ArucoDictionary
-  static val Dict7x7_250: scalacv.vision.ArucoDictionary
-  static val Dict7x7_50: scalacv.vision.ArucoDictionary
+  static final val AprilTag16h5: scalacv.vision.ArucoDictionary
+  static final val AprilTag25h9: scalacv.vision.ArucoDictionary
+  static final val AprilTag36h10: scalacv.vision.ArucoDictionary
+  static final val AprilTag36h11: scalacv.vision.ArucoDictionary
+  static final val ArucoMip36h12: scalacv.vision.ArucoDictionary
+  static final val ArucoOriginal: scalacv.vision.ArucoDictionary
+  static final val Dict4x4_1000: scalacv.vision.ArucoDictionary
+  static final val Dict4x4_100: scalacv.vision.ArucoDictionary
+  static final val Dict4x4_250: scalacv.vision.ArucoDictionary
+  static final val Dict4x4_50: scalacv.vision.ArucoDictionary
+  static final val Dict5x5_1000: scalacv.vision.ArucoDictionary
+  static final val Dict5x5_100: scalacv.vision.ArucoDictionary
+  static final val Dict5x5_250: scalacv.vision.ArucoDictionary
+  static final val Dict5x5_50: scalacv.vision.ArucoDictionary
+  static final val Dict6x6_1000: scalacv.vision.ArucoDictionary
+  static final val Dict6x6_100: scalacv.vision.ArucoDictionary
+  static final val Dict6x6_250: scalacv.vision.ArucoDictionary
+  static final val Dict6x6_50: scalacv.vision.ArucoDictionary
+  static final val Dict7x7_1000: scalacv.vision.ArucoDictionary
+  static final val Dict7x7_100: scalacv.vision.ArucoDictionary
+  static final val Dict7x7_250: scalacv.vision.ArucoDictionary
+  static final val Dict7x7_50: scalacv.vision.ArucoDictionary
 object scalacv.vision.ArucoMarker
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -809,26 +820,26 @@ object scalacv.vision.CascadeName
   def ordinal(scalacv.vision.CascadeName): int
   def valueOf(java.lang.String): scalacv.vision.CascadeName
   def values(): scalacv.vision.CascadeName[]
-  static val Eye: scalacv.vision.CascadeName
-  static val EyeTreeEyeglasses: scalacv.vision.CascadeName
-  static val FrontalFaceAlt2: scalacv.vision.CascadeName
-  static val FrontalFaceAlt: scalacv.vision.CascadeName
-  static val FrontalFaceDefault: scalacv.vision.CascadeName
-  static val FullBody: scalacv.vision.CascadeName
-  static val LeftEye2Splits: scalacv.vision.CascadeName
-  static val LowerBody: scalacv.vision.CascadeName
-  static val ProfileFace: scalacv.vision.CascadeName
-  static val RightEye2Splits: scalacv.vision.CascadeName
-  static val RussianPlateNumber: scalacv.vision.CascadeName
-  static val Smile: scalacv.vision.CascadeName
-  static val UpperBody: scalacv.vision.CascadeName
+  static final val Eye: scalacv.vision.CascadeName
+  static final val EyeTreeEyeglasses: scalacv.vision.CascadeName
+  static final val FrontalFaceAlt2: scalacv.vision.CascadeName
+  static final val FrontalFaceAlt: scalacv.vision.CascadeName
+  static final val FrontalFaceDefault: scalacv.vision.CascadeName
+  static final val FullBody: scalacv.vision.CascadeName
+  static final val LeftEye2Splits: scalacv.vision.CascadeName
+  static final val LowerBody: scalacv.vision.CascadeName
+  static final val ProfileFace: scalacv.vision.CascadeName
+  static final val RightEye2Splits: scalacv.vision.CascadeName
+  static final val RussianPlateNumber: scalacv.vision.CascadeName
+  static final val Smile: scalacv.vision.CascadeName
+  static final val UpperBody: scalacv.vision.CascadeName
 object scalacv.vision.Cascades
   extends java.lang.Object
   implements java.io.Serializable
-  def given_Releasable_CascadeClassifier(): scalacv.Releasable<org.opencv.objdetect.CascadeClassifier>
   def load(scalacv.vision.CascadeName): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.objdetect.CascadeClassifier>>
   def loadFrom(java.lang.String): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.objdetect.CascadeClassifier>>
   def resolve(scalacv.vision.CascadeName): scala.util.Either<scalacv.CvError, java.io.File>
+  final def given_Releasable_CascadeClassifier(): scalacv.Releasable<org.opencv.objdetect.CascadeClassifier>
 object scalacv.vision.Cascades.package
   extends java.lang.Object
   implements java.io.Serializable
@@ -859,6 +870,10 @@ object scalacv.vision.Detectors.package
   def arucoMarkers$default$2(scalacv.Image): scalacv.vision.ArucoDictionary
   def arucoMarkers(scalacv.Image, scalacv.vision.ArucoDictionary): scala.collection.immutable.Seq<scalacv.vision.ArucoMarker>
   def qrCodes(scalacv.Image): scala.collection.immutable.Seq<scalacv.vision.QrCode>
+object scalacv.vision.DisparityMeasurement
+  extends java.lang.Object
+  implements java.io.Serializable
+  def fromPixels(org.opencv.core.Mat): scalacv.vision.DisparityMeasurement
 object scalacv.vision.Dnn
   extends java.lang.Object
   implements java.io.Serializable
@@ -871,7 +886,7 @@ object scalacv.vision.Dnn
   def forward$default$3(): scala.Option<java.lang.String>
   def forward(org.opencv.dnn.Net, org.opencv.core.Mat, scala.Option<java.lang.String>): scalacv.Managed<org.opencv.core.Mat>
   def fromOnnx(java.lang.String): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.dnn.Net>>
-  def given_Releasable_Net(): scalacv.Releasable<org.opencv.dnn.Net>
+  final def given_Releasable_Net(): scalacv.Releasable<org.opencv.dnn.Net>
 object scalacv.vision.Face
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -893,8 +908,8 @@ object scalacv.vision.FaceDetect
   def create(java.lang.String, scalacv.Size, float, float): scala.util.Either<scalacv.CvError, scalacv.Managed<org.opencv.objdetect.FaceDetectorYN>>
   def detect(org.opencv.objdetect.FaceDetectorYN, org.opencv.core.Mat): scala.collection.immutable.Seq<scalacv.vision.Face>
   def downloadModel(java.nio.file.Path): scala.util.Either<scalacv.CvError, java.nio.file.Path>
-  def given_Releasable_FaceDetectorYN(): scalacv.Releasable<org.opencv.objdetect.FaceDetectorYN>
   def modelSpec(): scalacv.ModelSpec
+  final def given_Releasable_FaceDetectorYN(): scalacv.Releasable<org.opencv.objdetect.FaceDetectorYN>
 object scalacv.vision.FaceDetect.package
   extends java.lang.Object
   implements java.io.Serializable
@@ -965,12 +980,12 @@ object scalacv.vision.HandGesture
   def ordinal(scalacv.vision.HandGesture): int
   def valueOf(java.lang.String): scalacv.vision.HandGesture
   def values(): scalacv.vision.HandGesture[]
-  static val Fist: scalacv.vision.HandGesture
-  static val OpenPalm: scalacv.vision.HandGesture
-  static val Pointing: scalacv.vision.HandGesture
-  static val ThumbsUp: scalacv.vision.HandGesture
-  static val Unknown: scalacv.vision.HandGesture
-  static val Victory: scalacv.vision.HandGesture
+  static final val Fist: scalacv.vision.HandGesture
+  static final val OpenPalm: scalacv.vision.HandGesture
+  static final val Pointing: scalacv.vision.HandGesture
+  static final val ThumbsUp: scalacv.vision.HandGesture
+  static final val Unknown: scalacv.vision.HandGesture
+  static final val Victory: scalacv.vision.HandGesture
 object scalacv.vision.HeadPose
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -999,8 +1014,8 @@ object scalacv.vision.KeypointLayout
   def ordinal(scalacv.vision.KeypointLayout): int
   def valueOf(java.lang.String): scalacv.vision.KeypointLayout
   def values(): scalacv.vision.KeypointLayout[]
-  static val Heatmap: scalacv.vision.KeypointLayout
-  static val Regression: scalacv.vision.KeypointLayout
+  static final val Heatmap: scalacv.vision.KeypointLayout
+  static final val Regression: scalacv.vision.KeypointLayout
 object scalacv.vision.Localizer
   extends java.lang.Object
   implements java.io.Serializable
@@ -1049,15 +1064,16 @@ object scalacv.vision.MotionDetector
   def frameDifference$default$3(): int
   def frameDifference$default$4(): double
   def frameDifference(int, int, int, double): scalacv.vision.MotionDetector
-  def scalacv$vision$MotionDetector$$$given_Releasable_BackgroundSubtractorMOG2(): scalacv.Releasable<org.opencv.video.BackgroundSubtractorMOG2>
   def scalacv$vision$MotionDetector$$$measure(org.opencv.core.Mat, int, double): scalacv.vision.Motion
   def scalacv$vision$MotionDetector$$$prepare(org.opencv.core.Mat, int): scalacv.Managed<org.opencv.core.Mat>
+  final def scalacv$vision$MotionDetector$$$given_Releasable_BackgroundSubtractorMOG2(): scalacv.Releasable<org.opencv.video.BackgroundSubtractorMOG2>
 object scalacv.vision.Navigator
   extends java.lang.Object
   implements java.io.Serializable
   def steer$default$2(): double
   def steer$default$3(): double
   def steer(scalacv.Image, double, double): scalacv.vision.Guidance
+  def steerMeasured(scalacv.vision.DisparityMeasurement, double, double): scalacv.vision.Guidance
 object scalacv.vision.ObjectTrack
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1098,9 +1114,9 @@ object scalacv.vision.OccupancyGrid
   implements java.io.Serializable
   def apply$default$3(): double
   def apply(int, int, double): scalacv.vision.OccupancyGrid
-  static val scalacv$vision$OccupancyGrid$$$Clamp: double
-  static val scalacv$vision$OccupancyGrid$$$LogHit: double
-  static val scalacv$vision$OccupancyGrid$$$LogMiss: double
+  static final val scalacv$vision$OccupancyGrid$$$Clamp: double
+  static final val scalacv$vision$OccupancyGrid$$$LogHit: double
+  static final val scalacv$vision$OccupancyGrid$$$LogMiss: double
 object scalacv.vision.Ocr
   extends java.lang.Object
   implements java.io.Serializable
@@ -1217,16 +1233,19 @@ object scalacv.vision.Steering
   def ordinal(scalacv.vision.Steering): int
   def valueOf(java.lang.String): scalacv.vision.Steering
   def values(): scalacv.vision.Steering[]
-  static val Left: scalacv.vision.Steering
-  static val Right: scalacv.vision.Steering
-  static val Stop: scalacv.vision.Steering
-  static val Straight: scalacv.vision.Steering
+  static final val Left: scalacv.vision.Steering
+  static final val Right: scalacv.vision.Steering
+  static final val Stop: scalacv.vision.Steering
+  static final val Straight: scalacv.vision.Steering
 object scalacv.vision.StereoDepth
   extends java.lang.Object
   implements java.io.Serializable
   def disparity$default$3(): int
   def disparity$default$4(): int
   def disparity(scalacv.Image, scalacv.Image, int, int): scalacv.Image
+  def measure$default$3(): int
+  def measure$default$4(): int
+  def measure(scalacv.Image, scalacv.Image, int, int): scalacv.vision.DisparityMeasurement
 object scalacv.vision.TemplateMatch
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1234,6 +1253,10 @@ object scalacv.vision.TemplateMatch
   def fromProduct(scala.Product): scalacv.vision.TemplateMatch
   def toString(): java.lang.String
   def unapply(scalacv.vision.TemplateMatch): scalacv.vision.TemplateMatch
+object scalacv.vision.TensorShape
+  extends java.lang.Object
+  implements java.io.Serializable
+  def validate(org.opencv.core.Mat, scalacv.Size): scala.collection.immutable.Vector<java.lang.Object>
 object scalacv.vision.Track
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1252,13 +1275,14 @@ object scalacv.vision.TrackerKind
   def ordinal(scalacv.vision.TrackerKind): int
   def valueOf(java.lang.String): scalacv.vision.TrackerKind
   def values(): scalacv.vision.TrackerKind[]
-  static val Csrt: scalacv.vision.TrackerKind
-  static val Kcf: scalacv.vision.TrackerKind
-  static val Mil: scalacv.vision.TrackerKind
+  static final val Csrt: scalacv.vision.TrackerKind
+  static final val Kcf: scalacv.vision.TrackerKind
+  static final val Mil: scalacv.vision.TrackerKind
 object scalacv.vision.VisualOdometry
   extends java.lang.Object
   implements java.io.Serializable
   def estimate(scala.collection.immutable.Seq<scalacv.Point>, scala.collection.immutable.Seq<scalacv.Point>, scalacv.Intrinsics): scala.Option<scalacv.vision.CameraMotion>
+  def estimateCandidates(scala.collection.immutable.Seq<scalacv.Point>, scala.collection.immutable.Seq<scalacv.Point>, scalacv.Intrinsics): scala.collection.immutable.Seq<scalacv.vision.CameraMotion>
 object scalacv.vision.internal.ModelLoader
   extends java.lang.Object
   implements java.io.Serializable

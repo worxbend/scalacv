@@ -259,10 +259,11 @@ trait ScalacvPublishModule extends ScalacvModule with PublishModule {
   def scalaDocOptions =
     Task(Deps.scaladocOptions(publishVersion(), mill.api.BuildCtx.workspaceRoot.toString))
 
-  // MiMa is deliberately NOT mixed in yet (D13/G7). It is armed from 0.2.0: before a prior
-  // release exists, an empty mimaPreviousVersions fails, and 0.1.x under early-semver is allowed
-  // to break anyway. When 0.2.0 approaches, mix in com.github.lolgab.mill.mima.Mima and set
-  // mimaPreviousVersions := Seq("0.1.0").
+  // Historical JVM compatibility is gated by ci/binary-compatibility.py (japicmp 0.23.1).
+  // It builds pinned local 0.4.x release tags and compares all four jars, including synthetic
+  // bridges/holders, without assuming those coordinates exist on Central. Early-semver permits
+  // a breaking 0.x minor, not a patch: keep every baseline in the current compatibility line.
+  // API goldens remain an independent human-review aid, not a substitute for bytecode analysis.
 }
 
 object core extends ScalacvPublishModule {

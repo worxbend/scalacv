@@ -497,8 +497,7 @@ extension (self: Managed[Mat])
     * which has the same shape and the same guarantee.
     */
   def pipe(f: Mat => Managed[Mat]): Managed[Mat] =
-    try f(self.get)
-    finally self.release()
+    self.replacing(f)
 
 /** The one place a `getRotationMatrix2D` + `warpAffine` rotation about the image centre is assembled — shared
   * by [[rotated]] here and `deskew` in Deskew.scala, which differ only in canvas policy:

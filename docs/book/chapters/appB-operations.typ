@@ -36,7 +36,7 @@ rather than buried in a footnote.
 
 #sect("What each group needs on the classpath")
 
-Every operation in this appendix ships in the core artifact, `com.worxbend::scalacv:0.1.0`, plus the
+Every operation in this appendix ships in the core artifact, `com.worxbend::scalacv:0.4.1`, plus the
 platform natives from Chapter 2. There is exactly one exception, marked in its row: `img.draw(picture)`
 in the Drawing table comes from `com.worxbend::scalacv-graphs`. Nothing here needs
 `scalacv-vision`; the detector verbs that live there --- `faces`, `qrCodes`, `arucoMarkers`,
@@ -44,7 +44,8 @@ in the Drawing table comes from `com.worxbend::scalacv-graphs`. Nothing here nee
 Chapters 24 through 34 rather than repeated here, because their arguments are models and detectors
 rather than pixels.
 
-The one import that turns all of it on is `import scalacv.*`. It cannot conjure a module you have
+Core uses `import scalacv.*`; the graphics extension also needs `import scalacv.graphs.*`.
+An import cannot conjure a module you have
 not declared as a dependency: if a call does not resolve, check the build file before you check the
 spelling.
 
@@ -95,7 +96,7 @@ takes a second image --- a mask, a background, a blend partner --- that second i
 
 The constructors are all on the `Image` companion; the destructors are `close`, the two terminals in
 the I/O table, and `managed`, which is a destructor only in the sense that it ends this `Image`'s
-ownership without freeing anything. Of the six ways in, `reading` is the one that forgets nothing:
+ownership without freeing anything. Of the six ways in, `reading` is the synchronous scoped form:
 it closes on success, on failure and on exception, and it runs the body inside `Cv.attempt`, so a
 transform that throws deep in a chain comes back as a `Left` instead of escaping past a signature
 that promised an `Either`. Prefer it unless you have a reason to thread the ownership yourself.

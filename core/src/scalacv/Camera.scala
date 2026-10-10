@@ -55,22 +55,18 @@ final class Camera private (private val handle: Managed[VideoCapture], sourceLab
     * `Left(CvError.EndOfStream)` when the stream has ended or the device delivered nothing within
     * `attemptsPerFrame` reads — a camera can drop a frame without being dead, so the default retries a few
     * times. The error names this camera's own source (the file path or the device index), not the bare word
-    * "camera".
+    * "camera". Native decoder failures are also returned as `Left`; programmer errors still throw.
     *
     * On a camera this is the *first frame after warm-up*, not the first frame off the device: [[Camera.open]]
     * discards a few frames so the auto-exposure loop has converged, which is what stops a snapshot taken
     * immediately after opening from being black. Tune or disable that with `CaptureOptions.warmupFrames`.
     */
   def snapshot(attemptsPerFrame: Int = 3): Either[CvError, Image] =
-    Video.framesCopied(handle.get, attemptsPerFrame)(_.nextOption()) match
-      case Some(frame) => Right(Image.wrap(frame))
-      case None =>
-        Left(
-          CvError.EndOfStream(
-            sourceLabel,
-            "the stream ended or the device delivered nothing"
-          )
-        )
+    Cv.attempt("snapshot"):
+      Video.framesCopied(handle.get, attemptsPerFrame)(_.nextOption()) match
+        case Some(frame) => Image.wrap(frame)
+        case None =>
+          throw CvError.EndOfStream(sourceLabel, "the stream ended or the device delivered nothing")
 
   /** Runs `f` over every frame, each as an owned [[Image]] that is **closed for you** when `f` returns.
     *
@@ -80,11 +76,8 @@ final class Camera private (private val handle: Managed[VideoCapture], sourceLab
     * without turning a dead camera into an endless loop.
     */
   def foreach(attemptsPerFrame: Int = 3)(f: Image => Unit): Unit =
-    Video.framesCopied(handle.get, attemptsPerFrame): frames =>
-      frames.foreach: frame =>
-        val image = Image.wrap(frame)
-        try f(image)
-        finally image.close()
+    Video.frames(handle.get, attemptsPerFrame): frames =>
+      frames.foreach(frame => Image.scoped(Image.wrap(Managed(frame.clone())))(f))
 
   /** The next `count` frames as owned [[Image]]s — **each is yours to close** (or take them into a
     * `Using.Manager`). Frames beyond the end of the stream are simply absent, so the result may be shorter.
@@ -101,9 +94,10 @@ final class Camera private (private val handle: Managed[VideoCapture], sourceLab
     * frames at once (to compare or composite them) without owning their lifetimes.
     */
   def taking[A](count: Int, attemptsPerFrame: Int = 3)(use: Seq[Image] => A): A =
-    val images = take(count, attemptsPerFrame)
-    try use(images)
-    finally images.foreach(_.close())
+    scala.util.Using.resource(new Image.Scope): scope =>
+      val images = take(count, attemptsPerFrame)
+      images.foreach(scope.own)
+      use(images)
 
   /** Reads every frame, applies `transform`, and writes the results to `path` as a video; returns the number
     * of frames written.

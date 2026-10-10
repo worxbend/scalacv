@@ -491,8 +491,8 @@ applies here unchanged. Dropping to a raw constant changes the argument you pass
 result.
 
 Then open a pull request. A case is a two-line change plus a test, `CONTRIBUTING.md` has the build
-commands (`./mill __.compile` and `./mill __.test`, with `./mill __.fix` for scalafix and
-`./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll` for the formatter before you push), and
+commands (explicit headless modules, `+`-separated test and scalafix commands, and the formatter
+before you push), and
 an enum that grows by the cases people actually reached for is a better enum than one designed in
 advance. A constant that is genuinely dangerous will be argued about rather than merged --- `BORDER_TRANSPARENT`
 and `BORDER_ISOLATED` are both absent on purpose, and the reasoning is in the scaladoc so the

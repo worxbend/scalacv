@@ -43,6 +43,9 @@ object PoseEstimator:
 
   /** Decodes a network's output tensor into a [[Pose]] in image pixels.
     *
+    * Tensors must be contiguous single-channel CV_32F with positive extents and batch size one. Regression
+    * also accepts 2-D `[K,3]` rows.
+    *
     * @param output
     *   the Mat from `Dnn.forward`.
     * @param imageSize
@@ -65,6 +68,7 @@ object PoseEstimator:
   /** `[1, 1, K, 3]` rows of `(y, x, score)`, normalised — MoveNet. */
   private def decodeRegression(output: Mat, imageSize: Size, topology: PoseTopology): Pose =
     val k = topology.size
+    val shape = TensorShape.validate(output, imageSize)
     // Validate before reshape: a model whose output is not K×(y,x,score) makes `reshape` throw a raw
     // CvException about total-size mismatch. Name it instead, the way FaceDetect names a wrong column count.
     val expected = k * 3
@@ -76,6 +80,7 @@ object PoseEstimator:
             "This is not the regression pose model this topology decodes."
         )
       )
+    require(shape == Vector(k, 3) || shape == Vector(1, 1, k, 3), "regression requires [K,3] or [1,1,K,3]")
     Managed.use(output.reshape(1, k)): flat => // k rows x 3 cols (y, x, score)
       val row = Array.ofDim[Float](3)
       val kps = (0 until k).map: i =>
@@ -95,6 +100,8 @@ object PoseEstimator:
             "This is not the heatmap pose model this topology decodes."
         )
       )
+    val shape = TensorShape.validate(output, imageSize)
+    require(shape.head == 1, "heatmap batch size must be one")
     val k = output.size(1)
     val h = output.size(2)
     val w = output.size(3)

@@ -37,8 +37,8 @@ whole dependency list is `core` and the same OpenCV Java bindings `core` already
 
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
-  mvn"com.worxbend::scalacv-graphs:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
+  mvn"com.worxbend::scalacv-graphs:0.4.1",
   // plus the two native lines for your platform, as in Chapter 2
 )
 ```
@@ -46,8 +46,8 @@ def mvnDeps = Seq(
 The split is not ceremony: a service that decodes frames, thresholds them and writes a mask has no
 use for a scene graph. What the extra dependency buys is `Picture` and its supporting types `Color`,
 `Dash` and `Bounds`, plus `Chart`, `Animation`, and the `image.draw(picture)` extension that bridges
-back to `Image` --- all of them in package `scalacv`, through the same `import scalacv.*` you
-already have. The module boundary is a publishing decision, not a namespace.
+back to `Image` --- in `scalacv.graphs`, brought into scope with `import scalacv.graphs.*`
+beside the core `import scalacv.*`. Vision similarly needs `import scalacv.vision.*`.
 
 #sect("The frame you cannot annotate twice")
 
@@ -158,14 +158,10 @@ Picture.label(
 `size.width + 2·padding` by `size.height + baseline + 2·padding` --- that `baseline` term being the
 descender room a `y` or a `g` needs, measured rather than guessed.
 
-#warning[
-  Read `label`'s composition before you ship it. It builds the tag as
-  `text.under(rectangle(box).fillColor(background).noStroke)`, and `under` is
-  `Over(over, this)` --- so the filled box is the *top* layer and the glyphs the bottom one.
-  Rendering draws the bottom first and the top over it, and an opaque `background` therefore paints
-  out the very text it was meant to sit behind. Until that composes with `on` instead, build the tag
-  yourself as `glyphs.on(box)`, exactly as `tag` above does.
-]
+Painter order matters: the intended label is `glyphs.on(box)`, with the background drawn before
+its text. The current implementation fixes the reversed order in the 0.4.1 source release.
+When using that older tag, construct `glyphs.on(box)` yourself; the unreleased fix is covered by
+visible-glyph pixel assertions, not merely nonempty bounds.
 
 #sect("The primitives")
 
@@ -222,8 +218,8 @@ producing a degenerate shape three layers down.
 
 #sect("Styling, and the rule that surprises people")
 
-Styling methods return a new picture wrapping the old one, carrying a function that adjusts the
-style in effect. An unstyled picture is drawn with a white one-pixel outline, no fill, `Font.Simplex`
+Styling methods return a new picture wrapping the old one, carrying an immutable `StylePatch`
+that adjusts the style in effect. An unstyled picture is drawn with a white one-pixel outline, no fill, `Font.Simplex`
 at a font scale of `0.5`, and antialiasing on.
 
 #figure-table("The styling combinators. Each returns a new `Picture`; none mutates.")[
@@ -530,18 +526,10 @@ test("a frame with no detections annotates to nothing"):
 That last one is the assertion an imperative overlay cannot express at all. "Draws nothing" is a
 property of a value; it is not a property of a sequence of calls that happened not to execute.
 
-Structural equality works too, with one caveat worth knowing before it wastes an afternoon. The
-primitives are case classes, so two identically-built unstyled shapes compare equal --- but a styling
-combinator stores a function in the tree (a `Style => Style`, over a `Style` the module keeps to
-itself), and two separately-constructed lambdas are never equal to each other.
-
-#warning[
-  `Picture.circle(c, 10) == Picture.circle(c, 10)` is `true`.
-  `Picture.circle(c, 10).strokeColor(Color.Red) == Picture.circle(c, 10).strokeColor(Color.Red)` is
-  `false`, because each `strokeColor` call captured its own closure. Assert on `bounds`, on the
-  values you fed into the builder, or --- when the question really is about colour --- on rendered
-  pixels. Do not assert on `==` between two styled pictures.
-]
+Styling is immutable data (`StylePatch`), not an opaque closure. Identically constructed shapes
+with identical style patches can be structurally equal. Structural equality is still not visual
+equivalence: different scene trees can paint the same pixels. Assert on bounds for geometry,
+recorded commands for painter order, and rendered pixels for colour and glyph visibility.
 
 When the question genuinely is "what colour is that pixel", render a small canvas and read it back.
 `smooth(false)` makes the answer exact, and the image is yours to close:

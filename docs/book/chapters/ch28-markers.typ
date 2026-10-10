@@ -31,8 +31,8 @@ the tray, and record the result --- and know which of those steps is lying when 
 Everything here that finds a marker lives in `scalacv-vision` --- `Qr`, `Aruco`, `Ar` and the `Image`
 extension methods they carry --- so that module has to be on the classpath beside `scalacv` itself,
 with the coordinates Chapter 2 lists. The camera model, `Intrinsics`, is the exception: it sits in the
-core module, which is why `Image.undistort` takes one without dragging the vision jar in. A single
-`import scalacv.*` brings all of it into scope.
+core module, which is why `Image.undistort` takes one without dragging the vision jar in. Use
+`import scalacv.*` for core and `import scalacv.vision.*` for marker APIs.
 
 #sect("Two printed markers, two different jobs")
 

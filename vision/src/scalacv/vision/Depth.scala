@@ -22,9 +22,24 @@ object StereoDepth:
 
   /** A disparity map from a rectified `left`/`right` pair, as an 8-bit single-channel [[Image]] normalised so
     * **brighter = nearer**. `numDisparities` (the depth range searched) must be positive and a multiple of
-    * 16; `blockSize` is the odd matching window.
+    * 16; `blockSize` is the odd matching window. Display only: per-frame normalization is NOT a stable
+    * proximity scale. For measurement/navigation use [[measure]] instead.
     */
   def disparity(left: Image, right: Image, numDisparities: Int = 64, blockSize: Int = 9): Image =
+    withRaw(left, right, numDisparities, blockSize)(raw => Image.wrap(raw.normalize(0, 255)))
+
+  /** Measures owned pixel disparity and validity. Inputs are borrowed and must already be rectified. Unlike
+    * [[disparity]], values do not change when an unrelated scene extremum changes.
+    */
+  def measure(left: Image, right: Image, numDisparities: Int = 64, blockSize: Int = 9): DisparityMeasurement =
+    withRaw(left, right, numDisparities, blockSize): raw =>
+      Managed.use(Mat()): pixels =>
+        raw.convertTo(pixels, org.opencv.core.CvType.CV_32F, 1.0 / 16)
+        DisparityMeasurement.fromPixels(pixels)
+
+  private def withRaw[A](left: Image, right: Image, numDisparities: Int, blockSize: Int)(
+      decode: Mat => A
+  ): A =
     require(
       numDisparities > 0 && numDisparities % 16 == 0,
       s"numDisparities must be a positive multiple of 16, got $numDisparities"
@@ -56,9 +71,7 @@ object StereoDepth:
             Managed(created).use: sgbm =>
               Managed.use(Mat()): raw => // CV_16S disparity, fixed-point
                 Cv.orThrow("StereoSGBM.compute")(sgbm.compute(l, r, raw))
-                // `normalize` defaults to an 8-bit result, which is exactly what a viewable disparity map
-                // needs: the raw CV_16S fixed-point values mean nothing to a display or to `colorMap`.
-                Image.wrap(raw.normalize(0, 255))
+                decode(raw)
 
 /** Obstacle detection from a depth/disparity map. */
 object Obstacles:

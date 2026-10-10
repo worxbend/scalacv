@@ -14,7 +14,7 @@ Add the **single** native classifier for where the service runs — not `opencv-
 
 ```scala
 // production build: exactly one platform
-mvn"com.worxbend::scalacv:0.2.0",
+mvn"com.worxbend::scalacv:0.4.1",
 mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
 mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
 ```

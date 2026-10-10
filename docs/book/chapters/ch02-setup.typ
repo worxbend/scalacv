@@ -26,7 +26,17 @@ actually on, with the exact two lines to paste. Better still not to arrive there
 
 #sect("The four artifacts")
 
-scalacv publishes under the group id `com.worxbend`, as four separate artifacts. Only the first is
+#warning[
+  The installation coordinates in this book name source tag `v0.4.1`, not a verified Maven Central
+  deployment. Central upload and attestation are disabled; tag workflows create draft releases.
+  Build a clean checkout of that tag with `./mill __.publishLocal` and enable local Ivy resolution
+  (`ivy2Local` in Coursier; sbt includes it by default). Unreleased fixes described in this book
+  need the current checkout's actual `./mill show core.publishVersion` instead. Keep all four
+  artifact versions aligned. Website deployment is not registry publication.
+]
+
+
+scalacv defines publication coordinates under the group id `com.worxbend`, as four separate artifacts. Only the first is
 required. The other three are opt-in, and the split is real rather than cosmetic: `vision` and
 `graphs` depend on `core` and on nothing else, so a service that reads and filters images never
 pulls a SLAM loop-closure detector into its jar.
@@ -107,7 +117,7 @@ write first:
 #example("Wrong: one native line. `OpenCv.load()` will not get through this.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64"
 )
 ```
@@ -121,7 +131,7 @@ absent. Both lines, always, and both with the same classifier:
 #example("Right: the API arrives through scalacv, the natives through two classifier jars.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.1.0",
+  mvn"com.worxbend::scalacv:0.4.1",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
 )
@@ -166,10 +176,10 @@ object app extends ScalaModule {
   def scalaVersion = "3.3.8"
 
   def mvnDeps = Seq(
-    mvn"com.worxbend::scalacv:0.1.0",         // core: images, video, contours, drawing, filters
-    mvn"com.worxbend::scalacv-vision:0.1.0",  // detectors, DNN, pose, tracking, OCR, calibration
-    mvn"com.worxbend::scalacv-graphs:0.1.0",  // the Picture scene graph, charts, animated GIFs
-    mvn"com.worxbend::scalacv-zio:0.1.0",     // only if you use ZIO
+    mvn"com.worxbend::scalacv:0.4.1",         // core: images, video, contours, drawing, filters
+    mvn"com.worxbend::scalacv-vision:0.4.1",  // detectors, DNN, pose, tracking, OCR, calibration
+    mvn"com.worxbend::scalacv-graphs:0.4.1",  // the Picture scene graph, charts, animated GIFs
+    mvn"com.worxbend::scalacv-zio:0.4.1",     // only if you use ZIO
 
     mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
     mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
@@ -187,10 +197,10 @@ Scala suffix:
 #example("The sbt equivalent.")[
 ```scala
 libraryDependencies ++= Seq(
-  "com.worxbend" %% "scalacv"        % "0.1.0",
-  "com.worxbend" %% "scalacv-vision" % "0.1.0",
-  "com.worxbend" %% "scalacv-graphs" % "0.1.0",
-  "com.worxbend" %% "scalacv-zio"    % "0.1.0",
+  "com.worxbend" %% "scalacv"        % "0.4.1",
+  "com.worxbend" %% "scalacv-vision" % "0.4.1",
+  "com.worxbend" %% "scalacv-graphs" % "0.4.1",
+  "com.worxbend" %% "scalacv-zio"    % "0.4.1",
   "org.bytedeco" %  "opencv"         % "4.13.0-1.5.13" classifier "linux-x86_64",
   "org.bytedeco" %  "openblas"       % "0.3.31-1.5.13" classifier "linux-x86_64"
 )
@@ -204,7 +214,7 @@ a comma-separated attribute:
 #example("A self-contained scala-cli header.")[
 ```scala
 //> using scala 3.3.8
-//> using dep com.worxbend::scalacv:0.1.0
+//> using dep com.worxbend::scalacv:0.4.1
 //> using dep org.bytedeco:opencv:4.13.0-1.5.13,classifier=linux-x86_64
 //> using dep org.bytedeco:openblas:0.3.31-1.5.13,classifier=linux-x86_64
 //> using javaOpt -Djava.awt.headless=true

@@ -298,7 +298,7 @@ tell you that the lens has a smear on it. The technique that works is a small, b
 One frame in every 900 at 30 fps is one every thirty seconds, the volume is exactly predictable, and
 a problem reported at 14:32 is bracketed by two frames you can name.
 
-#example("A sampler that costs one JPEG encode every thirty seconds and cannot leak.")[
+#example("A sampler that scopes its image and encodes one JPEG every thirty seconds.")[
 ```scala
 final class FrameSampler(everyN: Long, sink: (Long, Array[Byte]) => Unit):
   require(everyN > 0, s"everyN must be positive, was $everyN")

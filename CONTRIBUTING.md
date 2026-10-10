@@ -9,21 +9,31 @@ You need a JDK — anything from 17 up. Nothing else: `./mill` fetches its own l
 and Mill provisions the build JDK itself.
 
 ```sh
-./mill __.compile
-./mill __.test
+./mill core.compile vision.compile graphs.compile zio.compile examples.compile
+./mill core.test + vision.test + graphs.test + zio.test + examples.test
+./mill leaks.test
 ./mill examples.runMain scalacv.smoke      # proves the natives load
 ```
 
 ## Before you push
 
 ```sh
-./mill __.fix                                          # apply scalafix
+./mill core.fix + vision.fix + graphs.fix + zio.fix + examples.fix  # apply scalafix
 ./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll
-./mill __.test
+./mill core.test + vision.test + graphs.test + zio.test + examples.test
+./mill leaks.test
 ```
 
-CI runs the check forms of those (`__.fix --check`, `checkFormatAll`) and they exit non-zero
+CI runs the check forms of those (each module’s `fix --check`, `checkFormatAll`) and they exit non-zero
 on drift, so running them locally is cheaper than a red build.
+
+Run `python3 ci/binary-compatibility.py` for historical JVM linkage checks (all four artifacts,
+both pinned 0.4.x release tags). It builds isolated temporary baselines and never resolves guessed
+ScalaCV release coordinates from Central. `--self-test` runs only the checker controls, without Mill.
+See [RELEASING.md](RELEASING.md) for early-semver baseline maintenance. API goldens are reviewed
+separately; regeneration is not an ABI waiver. CI also compiles and runs the packaged Java and
+Scala 3.3.8 consumers on JDK 17 from a fresh resolver cache. The GUI examples are deliberately
+excluded from these headless commands.
 
 ## The rules that are not negotiable
 

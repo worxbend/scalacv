@@ -234,12 +234,29 @@ jobs:
       - name: publishLocal
         run: ./mill __.publishLocal
 
+  binary-compatibility:
+    name: Historical JVM binary compatibility (0.4.x)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: python3 ci/binary-compatibility.py
+
   consumer-smoke:
     name: Consumer resolves the published artifact
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # VcsVersion must see the source release tags
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
       - uses: coursier/setup-action@648df969f41ef15fda2baba8b37f9fa3d16390a3 # v3
         with:
@@ -256,21 +273,10 @@ jobs:
         # the "green build, zero natives shipped" failure the old publishLocal-dry-run gate waved through.
         # The smoke program then links a symbol from core, vision and graphs (zio's public surface is a
         # package object whose holder class Java cannot name, so its resolution is exercised by cs fetch
-        # alone). Gate on the CONSUMER-OK line, not the exit code: native teardown at JVM shutdown
+        # alone); the companion Scala consumer exercises all four APIs, including ZIO and extensions.
+        # Gate Java on the CONSUMER-OK line, not the exit code: native teardown at JVM shutdown
         # occasionally exits non-zero after a fully successful run.
         run: |
           set -euo pipefail
           VER=$(./mill show core.publishVersion | tr -d '"')
-          echo "resolving the four com.worxbend scalacv artifacts :$VER from a clean cache"
-          export COURSIER_CACHE=$(mktemp -d)
-          CP=$(cs fetch --classpath -r ivy2Local \
-            "com.worxbend:scalacv_3:$VER" \
-            "com.worxbend:scalacv-vision_3:$VER" \
-            "com.worxbend:scalacv-graphs_3:$VER" \
-            "com.worxbend:scalacv-zio_3:$VER" \
-            "org.bytedeco:opencv:4.14.0-1.5.14,classifier=linux-x86_64" \
-            "org.bytedeco:openblas:0.3.34-1.5.14,classifier=linux-x86_64")
-          javac -cp "$CP" -d /tmp/consumer ci/consumer-smoke/ConsumerSmoke.java
-          out=$(java -cp "/tmp/consumer:$CP" ConsumerSmoke 2>&1) || true
-          echo "$out"
-          echo "$out" | grep -q '^CONSUMER-OK'
+          bash ci/consumer-smoke/run.sh "$VER"

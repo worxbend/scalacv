@@ -1,7 +1,5 @@
 package scalacv.vision
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.opencv.core.{CvType, Mat}
 
 import scalacv.*
@@ -23,9 +21,16 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
 
   private val logOdds = Array.fill(cols * rows)(0.0)
 
-  /** The `(column, row)` cell containing world point `(x, y)`. The grid is centred on the origin. */
+  /** The `(column, row)` cell containing world point `(x, y)`, rounded to nearest (ties toward +infinity).
+    * The grid is centred on the origin. Nonfinite or unrepresentable Int coordinates are rejected.
+    */
   def cellOf(x: Double, y: Double): (Int, Int) =
-    (math.round(x / resolution).toInt + cols / 2, math.round(y / resolution).toInt + rows / 2)
+    def checked(value: Double, offset: Int): Int =
+      require(value.isFinite && (value / resolution).isFinite, "grid coordinates must be finite")
+      val rounded = math.round(value / resolution).toDouble + offset
+      require(rounded >= Int.MinValue && rounded <= Int.MaxValue, "grid coordinate exceeds Int range")
+      rounded.toInt
+    (checked(x, cols / 2), checked(y, rows / 2))
 
   /** Records an obstacle (a "hit") at world `(x, y)`. */
   def hit(x: Double, y: Double): Unit =
@@ -38,14 +43,58 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
     bump(cx, cy, -LogMiss)
 
   /** Integrates one range reading: the cells along the ray from the sensor at `(fromX, fromY)` to the
-    * obstacle at `(obstacleX, obstacleY)` are marked free, and the obstacle cell is marked occupied.
+    * obstacle at `(obstacleX, obstacleY)` are marked free, and an in-grid obstacle cell is occupied. Clips
+    * before incremental traversal, so work is bounded by grid size. An outside obstacle never turns the
+    * clipped boundary into a hit. Nonfinite inputs or division overflow are rejected.
     */
   def observe(fromX: Double, fromY: Double, obstacleX: Double, obstacleY: Double): Unit =
-    val (x0, y0) = cellOf(fromX, fromY)
-    val (x1, y1) = cellOf(obstacleX, obstacleY)
-    val ray = bresenham(x0, y0, x1, y1)
-    ray.dropRight(1).foreach((cx, cy) => bump(cx, cy, -LogMiss))
-    ray.lastOption.foreach((cx, cy) => bump(cx, cy, LogHit))
+    require(Seq(fromX, fromY, obstacleX, obstacleY).forall(_.isFinite), "ray coordinates must be finite")
+    import java.math.{BigDecimal as Decimal, MathContext}
+    def coordinate(value: Double, offset: Int): Decimal =
+      val scaled = value / resolution
+      require(scaled.isFinite, "ray exceeds finite grid coordinate range")
+      val rounded =
+        if scaled >= Long.MinValue.toDouble && scaled < Long.MaxValue.toDouble then
+          Decimal.valueOf(math.round(scaled))
+        else Decimal.valueOf(scaled) // beyond Long range a finite Double has no fractional component
+      rounded.add(Decimal.valueOf(offset.toLong))
+    val x0 = coordinate(fromX, cols / 2)
+    val y0 = coordinate(fromY, rows / 2)
+    val x1 = coordinate(obstacleX, cols / 2)
+    val y1 = coordinate(obstacleY, rows / 2)
+    val dx = x1.subtract(x0)
+    val dy = y1.subtract(y0)
+    // Keep clipping parameters as exact fractions. Double interpolation collapses both endpoints
+    // onto the same cell for very distant rays (e.g. +/-1e100); only bounded endpoints are rounded.
+    type Fraction = (Decimal, Decimal)
+    var enter: Fraction = (Decimal.ZERO, Decimal.ONE)
+    var leave: Fraction = (Decimal.ONE, Decimal.ONE)
+    def compare(a: Fraction, b: Fraction): Int = a._1.multiply(b._2).compareTo(b._1.multiply(a._2))
+    def clip(p: Decimal, q: Decimal): Boolean =
+      if p.signum() == 0 then q.signum() >= 0
+      else
+        val t = if p.signum() < 0 then (q.negate(), p.negate()) else (q, p)
+        if p.signum() < 0 then
+          if compare(t, enter) > 0 then enter = t
+        else if compare(t, leave) < 0 then leave = t
+        compare(enter, leave) <= 0
+    val maxX = Decimal.valueOf(cols.toLong - 1)
+    val maxY = Decimal.valueOf(rows.toLong - 1)
+    if clip(dx.negate(), x0) && clip(dx, maxX.subtract(x0)) &&
+      clip(dy.negate(), y0) && clip(dy, maxY.subtract(y0))
+    then
+      def endpoint(origin: Decimal, delta: Decimal, t: Fraction, max: Int): Int =
+        val v =
+          origin.multiply(t._2).add(delta.multiply(t._1)).divide(t._2, MathContext.DECIMAL128).doubleValue()
+        math.max(0L, math.min(max.toLong, math.round(v))).toInt
+      val ax = endpoint(x0, dx, enter, cols - 1)
+      val ay = endpoint(y0, dy, enter, rows - 1)
+      val bx = endpoint(x0, dx, leave, cols - 1)
+      val by = endpoint(y0, dy, leave, rows - 1)
+      val hitInside =
+        x1.signum() >= 0 && x1.compareTo(maxX) <= 0 && y1.signum() >= 0 && y1.compareTo(maxY) <= 0
+      bresenham(ax, ay, bx, by): (cx, cy) =>
+        bump(cx, cy, if hitInside && cx == bx && cy == by then LogHit else -LogMiss)
 
   /** Occupancy probability in `[0, 1]` at world `(x, y)` — `0.5` for an unobserved or out-of-bounds cell. */
   def probability(x: Double, y: Double): Double =
@@ -87,18 +136,17 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
       logOdds(i) = math.max(-Clamp, math.min(Clamp, logOdds(i) + delta))
 
   /** Integer Bresenham line — the cells a ray passes through, endpoints included. */
-  private def bresenham(x0: Int, y0: Int, x1: Int, y1: Int): Seq[(Int, Int)] =
-    val cells = ArrayBuffer.empty[(Int, Int)]
+  private def bresenham(x0: Int, y0: Int, x1: Int, y1: Int)(visit: (Int, Int) => Unit): Unit =
     var x = x0
     var y = y0
     val dx = math.abs(x1 - x0)
     val dy = -math.abs(y1 - y0)
     val sx = if x0 < x1 then 1 else -1
     val sy = if y0 < y1 then 1 else -1
-    var err = dx + dy
+    var err = dx.toLong + dy
     var going = true
     while going do
-      cells += ((x, y))
+      visit(x, y)
       if x == x1 && y == y1 then going = false
       else
         val e2 = 2 * err
@@ -108,7 +156,6 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
         if e2 <= dx then
           err += dx
           y += sy
-    cells.toSeq
 
 object OccupancyGrid:
 
@@ -134,5 +181,5 @@ object OccupancyGrid:
       cols.toLong * rows <= Int.MaxValue,
       s"grid ${cols}x$rows has too many cells (${cols.toLong * rows}) to address"
     )
-    require(resolution > 0, s"resolution must be positive, got $resolution")
+    require(resolution.isFinite && resolution > 0, s"resolution must be positive, got $resolution")
     new OccupancyGrid(cols, rows, resolution)

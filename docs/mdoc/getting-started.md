@@ -3,7 +3,7 @@
 **scalacv** is a Scala 3 wrapper for [OpenCV](https://opencv.org) 4.14 — the industry-standard
 computer-vision library. It wraps the official OpenCV **Java API** so you write ordinary Scala:
 `Seq`, `Option`, `Either`, extension methods, and a fluent [`Image`](/image-api) you transform by
-chaining. No raw `int` constants, no manual memory management, no Java ceremony.
+chaining. Typed flags replace raw `int` constants; explicit ownership keeps native memory manageable.
 
 If you have never touched OpenCV, that is fine — this page takes you from an empty `build.mill` to a
 working edge-detection pipeline. If you *have*, the short version is: add one platform jar, call
@@ -11,7 +11,7 @@ working edge-detection pipeline. If you *have*, the short version is: add one pl
 
 :::tip[The 30-second mental model]
 scalacv has **two tiers** (the high-level [`Image`](/image-api) and mid-level `Mat` extensions),
-**three modules** (`core`, `vision`, `graphs`), **one ownership rule** (a transform consumes the
+**four artifacts** (`core`, `vision`, `graphs`, optional `zio`), **one ownership rule** (a transform consumes the
 image it was called on), and **one error policy** (expected failures are `Either`, bugs throw). The
 [Architecture](/architecture) page unpacks all four; you do not need them yet to run the examples
 below.
@@ -19,7 +19,15 @@ below.
 
 ## Add the dependency
 
-scalacv is published under the group id `com.worxbend` as **four separate artifacts**: `scalacv`
+**Source release, not verified Central availability:** these examples use the latest repository tag,
+`v0.4.1`. Central upload and attestation are disabled and tag workflows create draft releases.
+From a clean checkout of that tag, run `./mill __.publishLocal`, then enable local Ivy resolution
+(`ivy2Local` in Coursier; sbt includes it by default). For unreleased fixes, build the current
+checkout and substitute its actual `./mill show core.publishVersion` in every ScalaCV coordinate.
+Do not infer registry publication from a Git tag or from this site's deployment.
+
+
+scalacv defines publication coordinates under the group id `com.worxbend` as **four separate artifacts**: `scalacv`
 (the core), `scalacv-vision`, `scalacv-graphs` and `scalacv-zio`. Only the core is required. The
 other three are opt-in, so a program that reads and filters images never pulls a SLAM loop-closure
 detector into its jar — but that also means a symbol that lives in one of them will not compile
@@ -27,17 +35,18 @@ until you add its line. Three of the five tutorials on this site need `scalacv-v
 and the motion-alarm step of the video tutorial — so add that one too if you plan to follow along.
 
 On top of scalacv itself you need OpenCV. scalacv depends on the OpenCV **Java API**, which has no
-native code in it. The natives ship in per-platform classifier jars, and **no build tool can put a
-classifier into a published POM** — so you add the one for your platform yourself.
+native code in it. The natives ship in per-platform classifier jars. This project keeps its POMs
+platform-neutral (the pinned Mill publisher does not encode dependency classifiers), so you add
+both native artifacts for your platform yourself.
 
 All of it in Mill — delete the scalacv lines you do not need, and keep both bytedeco ones:
 
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.2.0",         // core: images, video, contours, drawing, filters
-  mvn"com.worxbend::scalacv-vision:0.2.0",  // detectors, DNN, pose, tracking, motion, OCR, calibration, SLAM
-  mvn"com.worxbend::scalacv-graphs:0.2.0",  // the Picture scene graph, charts, animated GIFs
-  mvn"com.worxbend::scalacv-zio:0.2.0",     // only if you use ZIO
+  mvn"com.worxbend::scalacv:0.4.1",         // core: images, video, contours, drawing, filters
+  mvn"com.worxbend::scalacv-vision:0.4.1",  // detectors, DNN, pose, tracking, motion, OCR, calibration, SLAM
+  mvn"com.worxbend::scalacv-graphs:0.4.1",  // the Picture scene graph, charts, animated GIFs
+  mvn"com.worxbend::scalacv-zio:0.4.1",     // only if you use ZIO
   mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
 )
@@ -48,10 +57,10 @@ The same for sbt (note `%%` for the Scala artifacts, `%` for the Java-world byte
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.worxbend" %% "scalacv"        % "0.2.0",
-  "com.worxbend" %% "scalacv-vision" % "0.2.0",
-  "com.worxbend" %% "scalacv-graphs" % "0.2.0",
-  "com.worxbend" %% "scalacv-zio"    % "0.2.0",
+  "com.worxbend" %% "scalacv"        % "0.4.1",
+  "com.worxbend" %% "scalacv-vision" % "0.4.1",
+  "com.worxbend" %% "scalacv-graphs" % "0.4.1",
+  "com.worxbend" %% "scalacv-zio"    % "0.4.1",
   "org.bytedeco" %  "opencv"         % "4.14.0-1.5.14" classifier "linux-x86_64",
   "org.bytedeco" %  "openblas"       % "0.3.34-1.5.14" classifier "linux-x86_64"
 )

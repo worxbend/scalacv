@@ -27,12 +27,11 @@ most common one.
 
 One line of build setup first. `Ocr`, `OcrEngine`, `OcrResult`, `OcrWord` and the `forOcr` extension
 live in `scalacv-vision`, beside the detectors of the last ten chapters, so
-`mvn"com.worxbend::scalacv-vision:0.1.0"` has to be on the classpath next to the core dependency of
+`mvn"com.worxbend::scalacv-vision:0.4.1"` has to be on the classpath next to the core dependency of
 Chapter 2. Everything `forOcr` composes --- `gray`, `medianBlur`, `adaptiveThreshold`, `deskew` ---
 and everything the pipelines below add to it --- `scale`, `crop`, `invert`, `morphology`, `contours`
---- is core, in the plain `scalacv` artifact underneath. The package is the same either way:
-`scalacv-vision` publishes into `scalacv`, so one `import scalacv.*` reaches all of it, and nothing
-in this chapter needs `scalacv-graphs`.
+--- is core, in the plain `scalacv` artifact underneath. Use `import scalacv.*` for core and
+`import scalacv.vision.*` for OCR; nothing in this chapter needs `scalacv-graphs`.
 
 #sect("The seam")
 
@@ -140,7 +139,7 @@ def forOcr(denoise: Int = 1, blockSize: Int = 15, c: Double = 10): Image =
 ]
 
 It is an extension method on `Image`, not a member of it --- OCR preparation is a domain verb, and
-domain verbs live beside their domain. `import scalacv.*` brings it in with everything else.
+domain verbs live beside their domain. `import scalacv.vision.*` brings in this extension.
 
 Each step earns its place, and each has a failure it is there to prevent.
 

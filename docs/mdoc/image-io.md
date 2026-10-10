@@ -32,7 +32,7 @@ is literally `Images.read` with an `Image` wrapped around the result.
 
 :::tip
 If you are new here, start with [`Image.reading`](#prefer-image-for-read--process--write) — it opens a
-file, runs your pipeline, and closes the image for you even on failure. You cannot leak with it.
+file, runs your pipeline, and closes the image for you even on failure. Keep borrowed handles and lazy effects inside its synchronous callback; raw or explicitly transferred resources still need an owner.
 :::
 
 ## Quick start

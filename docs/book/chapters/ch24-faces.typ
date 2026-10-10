@@ -27,10 +27,9 @@ catching.
 
 Both detectors live in `scalacv-vision`, not in the core artifact --- `Cascades.scala` and
 `FaceDetect.scala` are both in that module --- so every listing in this chapter needs
-`com.worxbend::scalacv-vision:0.1.0` on the classpath beside the core dependency of Chapter 2. The
-package does not change: `scalacv-vision` publishes into `scalacv` as well, so `import scalacv.*`
-brings in `detectHaar`, `faces` and `markFaces` alongside everything from core, and the only file
-you touch is the build.
+`com.worxbend::scalacv-vision:0.4.1` on the classpath beside the core dependency of Chapter 2. The
+vision package is `scalacv.vision`: add `import scalacv.vision.*` for `detectHaar`, `faces` and
+`markFaces`, alongside `import scalacv.*` for core.
 
 Start with the older detector, because its failure modes are the ones you will be talking a
 colleague out of.
@@ -130,7 +129,7 @@ remain reachable through `Cascades.loadFrom`, which takes a filesystem path and 
   rectangle --- held in native memory behind a Java object small enough that the collector will never
   feel it. One is a rounding error. One per frame is a service that dies overnight with a flat heap
   graph, the failure Chapter 1 opened with. `Cascades.load(...).map(_.use(...))` is the shape that
-  cannot leak; `Managed.scope` is the shape for holding several detectors at once.
+  releases its registered handles; `Managed.scope` is the shape for holding several detectors at once.
 ]
 
 #sect("Running the cascade")

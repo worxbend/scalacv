@@ -790,10 +790,11 @@ Video.open("clip.mp4").foreach { capture =>
 ## An effectful version
 
 The [`scalacv-zio`](/zio) module expresses the same capture and frame loop as a ZIO `Scope` and a
-`ZStream`. `frameStream` inherits this page's borrowing contract exactly — each emitted `Mat` is the
-one buffer, so reduce it inside the stream — and its `framesCopied` counterpart emits clones the
-ordinary stream combinators can safely retain. Reach for it when frames are one stage of a larger
-effectful pipeline, with acquisition and interruption handled by `Scope`.
+`ZStream`. `frameStream` emits liveness-checked `BorrowedMat` views over one reused buffer;
+reduce each view before the next pull. `framesCopied` emits caller-owned clones: filtering, dropping
+or abandoned queues do not release them. Prefer the current `processFrames` API for sequential
+effectful processing with bracketed acquisition and cleanup, then apply combinators to its reduced
+results. See the ZIO guide for synchronous `use` versus effect-aware `useZIO` and handoff limits.
 
 If you are consuming frames from several threads, or want to see how the borrowing contract interacts
 with parallelism, [Concurrency](/concurrency) covers the rules — the short version is that one

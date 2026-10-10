@@ -488,12 +488,18 @@ Four tiers, and the right answer is nearly always the first one.
 #tbl(
   columns: (auto, 1fr),
   [*Reach for*], [*When*],
-  [`Image.reading(path) { … }`], [Almost always. The block's image is released when it returns --- on success, on failure, and on exception --- and every intermediate in a transform chain frees itself as the next stage consumes it. This is the entry point that cannot leak.],
+  [`Image.reading(path) { … }`], [Almost always. The block's image is released when it returns --- on success, on failure, and on exception --- and every intermediate in a transform chain frees itself as the next stage consumes it. Keep borrows and lazy work inside the callback; explicit ownership escapes still need cleanup.],
   [`Managed.use(a) { … }` or `.use`], [One native object, one scope, and the result is not a native object. The mid-level `Ops` layer hands you `Managed[Mat]` values that fit this directly.],
   [`Managed.scope { own => … }`], [Two or more native objects live at the same time, and the answer is plain data. Anything that calls into `Calib3d`, or builds a detector plus its inputs plus its outputs.],
   [A bare `Managed` you hold], [A handle whose lifetime genuinely outlives any lexical scope --- a detector loaded once at startup and used for the life of the service. Close it in your shutdown path.],
 )
 ]
+
+In the current implementation, consuming transforms, copies and `.managed`/`pipe` keep the
+callback scope responsible for their live successors, even after the original wrapper is spent.
+Use `img.detach` to transfer one branch out explicitly, and close the returned image yourself;
+other branches remain scoped. The custom release strategy moves with its owner. These fixes are
+newer than the 0.4.1 source tag. Raw Mat allocations and arbitrary concurrent use are not covered.
 
 The one thing to avoid is a scope whose result is the thing the scope owns. It is easy to write by
 accident, because `use` returns whatever the body returns and the type checker is perfectly happy:

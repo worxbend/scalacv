@@ -6,11 +6,12 @@ The `scalacv-zio` module expresses that *same* ownership as ZIO `Scope`, so a na
 to a scope's lifetime and freed when the scope closes — on success, on failure, and on
 **interruption**, which a plain `try`/`finally` cannot promise once a fiber can be cancelled.
 
-Nothing here changes the memory model; it changes *who drives it*. A `Mat` acquired through a scope
-is freed exactly once, by the scope, and using it after the scope closes is the same
-use-after-release error `Managed` already guards against. On top of that, every native and
-filesystem call runs on ZIO's **blocking** pool, so a stalled camera or a slow decode can never
-starve the fibers doing your real work.
+Nothing here changes the memory model; it changes *who drives it*. Scope finalizers release their
+resources, but raw Mats returned by scoped acquisition must not escape: they do not carry the
+Managed owner's access guard. The adapter offloads acquisition, native reads and finalization to
+ZIO's **blocking** pool. Your callback's JNI work must also use a blocking effect; arbitrary user
+code is not automatically moved there, and fiber interruption cannot forcibly cancel an in-flight
+native read.
 
 Reach for this module when you already run a ZIO app and want native resources to obey the same
 `Scope`/interruption rules as everything else. If you are not on ZIO, the synchronous
@@ -19,10 +20,12 @@ same safety without the dependency.
 
 ## Install
 
-Add it alongside your natives:
+Add it alongside your natives. See [Getting started](/getting-started) for local installation and
+the distinction between source tag 0.4.1 and unverified Central availability; APIs explicitly marked
+as newer below require the current checkout’s artifacts:
 
 ```scala
-mvn"com.worxbend::scalacv-zio:0.2.0"
+mvn"com.worxbend::scalacv-zio:0.4.1"
 ```
 
 Everything below assumes these imports; in mdoc they are established once and persist across the
@@ -50,7 +53,9 @@ import org.opencv.videoio.VideoCapture
 | `imageScoped(path, flags)` | `ZIO[Scope, CvError, Image]` | Reads an image and closes it when the scope ends. |
 | `captureScoped(source, options)` | `ZIO[Scope, CvError, VideoCapture]` | Opens a video source and releases it when the scope ends; a source that will not open is a **typed failure**, not an empty stream. |
 | `frameStream(capture, attemptsPerFrame)` | `ZStream[Any, Throwable, BorrowedMat]` | Frames as **borrowed**, liveness-checked views — one reused buffer; a retained frame throws. |
-| `framesCopied(capture)` | `ZStream[Any, Throwable, Managed[Mat]]` | Frames as **owned** clones — the safe, costlier form. |
+| `framesCopied(capture)` | `ZStream[Any, Throwable, Managed[Mat]]` | Low-level caller-owned clones; discarded values are not automatically released. |
+| `processFrames(capture)(process)` | `ZStream[R, E, B]` | Brackets sequential clone acquisition and effect completion, then emits reduced results (newer than 0.4.1). |
+| `useManaged(acquire)(use)` / `m.useZIO(use)` | `ZIO[R, E, B]` | Effect-aware ownership brackets; prefer acquisition inside the bracket (newer than 0.4.1). |
 
 ## Loading the natives
 
@@ -279,9 +284,15 @@ backend that honours it.
 
 ## When you genuinely need to keep frames
 
-`framesCopied` is the safe-but-costlier counterpart: each element is its own clone as a
-[`Managed[Mat]`](/mat-lifecycle), so the usual `ZStream` combinators behave. Each clone must still be
-released — map straight into a releasing stage:
+For effectful frame work, prefer `processFrames` (added after the 0.4.1 tag). It acquires each clone
+inside an effect-aware bracket, keeps it alive until the callback finishes, and releases it before
+emitting the reduced result. Filtering or buffering those plain results cannot discard live frames.
+Do not return the Mat, a native view, or a lazy computation referencing it; join child work before
+returning. Processing is sequential; this is not a parallel native-frame queue.
+
+`framesCopied` remains a low-level escape hatch that emits caller-owned `Managed[Mat]` clones.
+Arbitrary stream combinators do **not** release them: even `filter(_ => false)` leaks discarded clones.
+The recommended processing path is:
 
 ```scala mdoc:silent
 def frameSizes(source: String): _root_.zio.ZIO[Any, Throwable, Long] =
@@ -289,19 +300,20 @@ def frameSizes(source: String): _root_.zio.ZIO[Any, Throwable, Long] =
     for
       _     <- loadNatives
       cap   <- captureScoped(source)
-      count <- framesCopied(cap).mapZIO(m => ZIO.succeed(m.use(_.rows))).runCount
+      count <- processFrames(cap)(mat => ZIO.attemptBlocking(mat.rows())).runCount
     yield count
   }
 ```
 
-:::warning[Consume each clone in the fiber that pulls it]
-Ownership of a clone transfers to the consumer, so release it promptly on the same fiber —
-`.mapZIO(m => m.use(process))`. A clone dropped because the fiber was **interrupted** before a
-downstream `use`/scope took it over leaks, exactly as a dropped `Managed` would in synchronous code.
-Do not buffer the `Managed`s (`.buffer`, `.grouped`, `runCollect` without a prior release) across an
-interruptible boundary. When you want the *stream* to own each frame, reduce it inside
-`frameStream` instead — its one reused buffer is tied to the stream's scope and released on
-interruption.
+:::warning[Synchronous use is not an effect bracket]
+Never write `m.use(mat => ZIO.succeed(mat.rows()))`: `Managed.use` closes the resource when the
+callback returns the *description* of the effect, before that effect executes. For synchronous
+work use `ZIO.attemptBlocking(m.use(syncFunction))`. For an already-adopted owner, `m.useZIO`
+keeps it alive through effect completion; `useManaged(acquire)(process)` also brackets acquisition.
+Neither a downstream `useZIO` nor synchronous `use` repairs the earlier `framesCopied` handoff:
+interruption, filtering, dropping or cancelled queues can abandon a clone before adoption. Prefer
+`processFrames`, and buffer or parallelize only its reduced results. Additional resources allocated
+by your callback still need their own scope.
 :::
 
 ## Blocking work stays off the compute pool
@@ -318,9 +330,9 @@ inside `frameStream` — never the CPU-sized default executor. That is the contr
   an interrupted stream unwinds only after that read returns by itself, as *A dropped frame ends your
   stream* above spells out. Cap the wait at the source with `CaptureOptions.withTimeout`.
 
-Parking these on the compute executor — which a plain `ZIO.attempt` would do — would let one hung
-capture exhaust it; that is why the module never does. (There is even a test that greps the module
-source to prove no bare `ZIO.attempt(` wraps a native call.)
+Native finalizers also run on the blocking executor, uninterruptibly, with failures visible as
+defects. Runtime executor tests matter here: a source-string check alone cannot establish where
+cleanup runs after a fiber yields. Callbacks are your code; use `attemptBlocking` for their JNI work.
 
 ## Next
 

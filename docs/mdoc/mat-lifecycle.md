@@ -13,6 +13,27 @@ The one thing to internalise: a scalacv **`Image` has move semantics** — a tra
 else on this page elaborates that idea.
 :::
 
+## Scope and escape boundaries
+
+`Managed.use` and callback-scoped image helpers are synchronous brackets, not effect interpreters.
+Returning a lazy `ZIO`, `Future`-starting closure, iterator or raw handle does not extend their
+lifetime. Guards protect access through the owner, not previously extracted JNI objects, and do
+not make concurrent access versus close safe. Independent low-level allocations and ownership
+transfers still require cleanup. A thrown cleanup error must not hide a body failure; ordinary
+nonfatal cleanup failures are suppressed on the primary error.
+
+The current ownership fixes extend scope cleanup to consuming image descendants and copies.
+Within `Image.reading`, `Camera.foreach`/`taking`, animation callbacks and ZIO `imageScoped`,
+consuming transforms move the registration to the live successor; `.copy` creates another scoped
+branch. `.managed` preserves both that scope and its custom release strategy (including through
+`pipe`); it is not an escape. To return an independently owned image, use `.detach` explicitly
+and close the returned value yourself. Other branches remain scoped. Raw Mat operations do not
+magically register unrelated allocations.
+
+That behavior is newer than the 0.4.1 source tag; do not treat the old tag's cleanup of the original
+wrapper as proof that a transformed successor is released. Finish manually owned pipelines with
+`close` or a consuming terminal, and use the current implementation for descendant-scoped cleanup.
+
 ## The problem
 
 An OpenCV `Mat` holds megabytes of pixel data off-heap, behind about forty bytes of Java object
@@ -58,9 +79,9 @@ val rows = Managed.use(Mat(1080, 1920, CvType.CV_8UC3)) { m =>
 rows
 ```
 
-After the block, the Mat is freed — on success, on exception, either way. Using it afterwards is an
-error scalacv catches in Scala, with an `IllegalStateException`, rather than letting it become a
-segfault from native code with no stack trace:
+After the synchronous block, the Mat is released on success or exception. Later access **through
+the Managed owner** throws `IllegalStateException`. A raw Mat captured inside the block bypasses
+that check: do not retain it, race it with close, or return a lazy effect that uses it later:
 
 ```scala mdoc:crash
 val leaked = Managed(Mat(8, 8, CvType.CV_8UC1))

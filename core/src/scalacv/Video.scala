@@ -270,15 +270,13 @@ object Video:
     *   if OpenCV fails while decoding. End-of-stream is not an error and does not throw.
     */
   def frames[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(f: Iterator[BorrowedMat] => A): A =
-    val source = FrameSource(capture, attemptsPerFrame)
-    try
+    scala.util.Using.resource(FrameSource(capture, attemptsPerFrame)): source =>
       val iterator = FrameIterator(source)
       // Retiring the iterator before its source closes is what makes a retained iterator inert rather
       // than dangerous: `read` on a released buffer would quietly reallocate it, handing back a real
       // frame in a Mat that nothing owns any more and nobody will free.
       try f(iterator)
       finally iterator.retire()
-    finally source.close()
 
   /** As `frames`, but each frame is cloned into a caller-owned [[Managed]].
     *
@@ -287,7 +285,10 @@ object Video:
     * frame, which is why it is not the default.
     *
     * The clone happens as you pull, not up front — frames you never reach are never copied. Everything you
-    * *do* pull is yours to release; `Using.Manager` or a `.use` per frame is the way to not forget.
+    * *do* pull is yours to release after a successful callback; `Using.Manager` or a `.use` per frame is the
+    * way to not forget. Acquisition is transactional: if traversal, the callback or source cleanup throws,
+    * every still-owned clone (and its managed successors) is released before the error propagates. Successful
+    * callbacks still transfer all outstanding owners, even those omitted from the return value.
     *
     * {{{
     * val firstThree = Video.framesCopied(c)(_.take(3).toVector)
@@ -298,7 +299,11 @@ object Video:
   def framesCopied[A](capture: VideoCapture, attemptsPerFrame: Int = 1)(
       f: Iterator[Managed[Mat]] => A
   ): A =
-    frames(capture, attemptsPerFrame)(it => f(it.map(frame => Managed(frame.clone()))))
+    scala.util.Using.resource(new NativeScope): pending =>
+      val result = frames(capture, attemptsPerFrame): it =>
+        f(it.map(frame => pending.own(Managed(frame.clone()))))
+      pending.detachAll()
+      result
 
   /** Opens a fresh `VideoCapture`, releasing it on every failure path.
     *

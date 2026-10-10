@@ -126,6 +126,10 @@ memory. If you need the Mat to outlive the `Image`, use `img.managed` (handover)
 
 ### `managed` hands the whole thing over
 
+Inside a callback scope, `.managed` retains the scope registration and custom release strategy.
+Use `img.detach.managed` only when explicitly transferring responsibility outside that scope; the
+caller must then release it. Copies remain scoped too unless explicitly detached.
+
 When you want to stop being an `Image` and manage the Mat's lifetime yourself, `img.managed` transfers
 ownership out. The `Image` is spent afterwards; the returned `Managed[Mat]` is now yours to release.
 

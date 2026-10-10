@@ -28,15 +28,14 @@ class ArTest extends munit.FunSuite:
     * `MatOfDouble` cannot be made to fail on demand, so this stands in for it and fails at the same instant:
     * `distCoeffs` reads `distortion` only when it splats it into the `MatOfDouble` constructor.
     *
-    * The length is four — the shortest count `Intrinsics` accepts — because the constructor checks the
-    * coefficient count, and it checks it via `size`, which for a `Seq` that defines `length` is that number
-    * and reads no element. So the vector is built without incident and detonates where this test needs it to:
-    * on the first read past element zero, inside the native acquisition.
+    * The constructor validates finite coefficients, so arm this fault only after building Intrinsics. It then
+    * fails on the first read past element zero, inside native acquisition.
     */
   private final class ExplodingDistortion extends scala.collection.immutable.Seq[Double]:
+    var armed = false
     def length: Int = 4
     override def isEmpty: Boolean = false
-    def apply(i: Int): Double = if i == 0 then 0.01 else throw Boom
+    def apply(i: Int): Double = if !armed || i == 0 then 0.01 else throw Boom
     def iterator: Iterator[Double] = Iterator.range(0, length).map(i => apply(i))
 
   test("Intrinsics.approx centres the principal point and grows f with a narrower FoV"):
@@ -110,7 +109,9 @@ class ArTest extends munit.FunSuite:
     val scene = markerScene()
     try
       val intr = Intrinsics.approx(scene.size)
-      val broken = intr.copy(distortion = ExplodingDistortion())
+      val coefficients = ExplodingDistortion()
+      val broken = intr.copy(distortion = coefficients)
+      coefficients.armed = true
       val marker = scene.arucoMarkers().head
       assert(
         intercept[RuntimeException](Ar.estimatePose(marker, 0.1, broken)) eq Boom,

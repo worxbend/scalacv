@@ -39,7 +39,10 @@ object Localizer:
     * the two cases applies, so scalacv does not try to predict it.
     *
     * Returns `None` — never throws — whenever the pose cannot be recovered: fewer than four correspondences,
-    * four or five non-coplanar ones, or a degenerate configuration that makes `solvePnP` fail or refuse.
+    * four or five non-coplanar ones, nonfinite/collapsed/collinear inputs, or a refused/invalid solution.
+    * Acceptance requires independent correspondences, positive depth for every point and reprojection RMS no
+    * larger than max(8 pixels, 5% of the image-point bounding-box diagonal). This generous sanity gate
+    * preserves planar localization; it is not a sensor-specific confidence or accuracy guarantee.
     *
     * @param intrinsics
     *   the pinhole camera model, including any lens distortion — use [[Intrinsics.approx]] when uncalibrated.
