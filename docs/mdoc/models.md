@@ -53,10 +53,9 @@ ship the XML with your own application and call `Cascades.loadFrom("path/to/haar
 Every other platform needs nothing.
 :::
 
-## The two fetch paths
+## Fetching into a fixed directory
 
-There are exactly two, and they behave identically in every way that matters. The difference is only how
-much you have to write down.
+`FaceDetect.downloadModel` delegates to `Models.fetch` with the built-in YuNet spec. Both use the same downloader and verification. For concurrent callers or model revisions sharing a filename, use the additive [content-addressed cache](#content-addressed-cache).
 
 | You want | Call | Verifies | Where the pinned values live |
 | --- | --- | --- | --- |
@@ -88,6 +87,23 @@ val sfacePath: Either[CvError, Path] = Models.fetch(FaceRecognizer.modelSpec, Pa
 Prefer this one as soon as you fetch more than one model — the loop over several specs is then the same
 three lines rather than one special case plus a loop.
 
+### Content-addressed cache {#content-addressed-cache}
+
+`Models.fetchCached` keeps pinned revisions separate and coordinates concurrent callers:
+
+```scala mdoc:compile-only
+val cachedModel: Either[CvError, java.nio.file.Path] =
+  Models.fetchCached(FaceRecognizer.modelSpec, java.nio.file.Path.of("model-cache"))
+```
+
+The path is `cacheRoot/sha256/<lowercase digest>/<fileName>`. The root is your namespace: use separate access-controlled roots for private models from unrelated tenants. Only an exact 64-hex-digit SHA-256 and a single safe filename are accepted. Unverified specs, separators, drive prefixes and malformed digests are rejected before cache directories are created.
+
+There is no TTL. A new digest selects a new entry; hits rehash the bytes under the lock, so tampering/corruption is still detected. Concurrent successful misses for the same target result in one download; failed downloads are not memoized. Each caller still pays verification cost. Fetch at startup, not on every frame.
+
+Coordination uses a fixed set of JVM locks and at most 64 persistent `.locks` files per root. Processes sharing the same root need a filesystem with process file-lock and atomic-move support. Stripe collisions may serialize unrelated models. Root aliases are supported, but symlinks inside the cache layout are rejected. The root and its ancestors must remain application-controlled: this is not protection against a hostile process rewriting the filesystem during a call.
+
+Do not delete lock files or the root while callers are active or waiting. There is no automatic disk eviction; perform quota cleanup while the cache is quiescent, retaining any files still needed by readers. A returned path is not a lease against later external deletion or modification.
+
 ### What "verified" means, step by step
 
 Both paths run the same sequence, and each step exists because of a failure mode that has actually
@@ -101,32 +117,31 @@ happened to somebody:
 3. **Try each URL in order.** The first one that downloads *and* verifies wins. Every failure is
    collected, so if all of them fail you get one `Left` listing what each mirror did.
 4. **Download to a temp file beside the target**, not to the target. The temp file is a sibling named
-   `.model-<random>.part`, so the final move stays inside one filesystem and is as close to atomic as the
-   filesystem allows.
-5. **Verify the temp file**, before anything else looks at those bytes.
-6. **Move it onto the target** — and only then. An interrupted run, a full disk or a killed process can
-   therefore never leave a half-written model for the next start-up to load. A model is executable content
-   fetched from a host nobody here controls; the checksum is the supply-chain gate, and it is checked
-   before OpenCV ever sees the file.
+   `.model-<random>.part`, so the final move stays inside one filesystem.
+5. **Verify the temp file**, before publishing those bytes.
+6. **Atomically move it onto the target** — and only then. Both fetch APIs fail closed if the filesystem
+   cannot perform atomic replacement; there is no non-atomic copy/delete fallback. The old target remains
+   intact on an unsupported move. This is atomic visibility, not fsync-backed crash durability. The checksum
+   is checked before the returned path is handed to OpenCV.
 7. **Delete the temp file** on the way out, whatever happened.
 
 :::note[Timeouts you inherit]
 `Models.fetch` gives each mirror a **15-second** connect budget and a **60-second** request budget, and
-follows HTTP redirects. `FaceDetect.downloadModel` uses **20 s** and **120 s** — it predates the generic
-downloader and keeps its own, roomier numbers. Mirrors are tried in order, so a mirror that hangs costs
+follows HTTP redirects. `FaceDetect.downloadModel` delegates to the same downloader and has the same budgets. Mirrors are tried in order, so a mirror that hangs costs
 you its timeout and then the next one is tried. Do not wrap either call in your own retry loop; the
 retry across mirrors is already there.
 :::
 
 ## Writing a `ModelSpec` for your own model {#modelspec}
 
-A `ModelSpec` is three things and nothing else:
+A `ModelSpec` carries the filename, mirrors and integrity expectations:
 
 | Field | Type | What it is |
 | --- | --- | --- |
-| `fileName` | `String` | the fixed name the file gets on disk. **This is the cache key** — see the danger below |
+| `fileName` | `String` | the fixed name the file gets on disk; the legacy `fetch` cache keys by this name within `into` |
 | `urls` | `Seq[String]` | the mirrors to try, **in order**. `http://`, `https://` and `file://` all work |
 | `sha256` | `Option[String]` | the pinned digest, lower- or upper-case. `Some` for `ModelSpec(...)`, `None` for `ModelSpec.unverified(...)` |
+| `sizeBytes` | `Option[Long]` | optional exact positive byte count; checked before hashing, not a download-size cap |
 
 `ModelSpec` has a private constructor and two named builders, so the verifying form is the one you reach
 for by default and the unverified form is something you have to ask for by name:
@@ -234,7 +249,7 @@ Models.fetch(tamperedSpec, rejectedDir).isLeft
 
 That `Left` is a `CvError.LoadFailed` whose details read
 `could not be downloaded from any source.` followed by one indented line per mirror — here,
-`checksum mismatch: got <the real digest>, expected 0000…`. Nothing was moved into `rejectedDir`: the
+`SHA-256 mismatch for …: expected 0000…, got <the real digest>`. Nothing was moved into `rejectedDir`: the
 temp file is deleted and the target is never created.
 
 ### `file://` and air-gapped deployments
@@ -342,11 +357,11 @@ Two defences, both already in the code:
   pointer is reported as *"expected 232589 bytes … but got 131 — the download is truncated, or the server
   answered with something that is not the model"* rather than as an opaque digest mismatch.
 
-`ModelSpec` has **no** size field, so the generic path cannot make that distinction. A pointer, an HTML
-error page and a corrupted transfer all surface the same way:
+`ModelSpec.sizeBytes` enables the same size-before-hash check for any model. Without a size pin, a pointer, an HTML
+error page and a corrupted transfer are all detected by the digest check:
 
 ```text
-checksum mismatch: got <digest of whatever arrived>, expected <the pinned digest>
+SHA-256 mismatch for <file>: expected <the pinned digest>, got <digest of whatever arrived>
 ```
 
 If you see that, look at the file size on disk first. A three-digit byte count means you got a pointer or
@@ -494,21 +509,21 @@ almost always either the wrong `KeypointLayout` or a topology whose size does no
 
 ## When a fetch fails {#errors}
 
-Every failure is a `Left(CvError.LoadFailed(resource, details))` — a value, not a thrown exception, so it
-composes with the rest of [the error model](/error-model). These are the messages you will actually see,
+Download and cache failures are `Left(CvError.LoadFailed(resource, details))` values, composing with
+[the error model](/error-model). Cancellation is different: `InterruptedException` propagates with the
+interrupt flag restored; it does not try another mirror. These are the messages you will see,
 and what each one means:
 
 | Message fragment | Where from | What it means |
 | --- | --- | --- |
 | `could not create the download directory:` | both paths | `into` is not writable, or a *file* already exists at that path |
 | `could not be downloaded from any source.` | `Models.fetch` | every mirror failed; one indented line per URL follows |
-| `could not be downloaded from any known mirror.` | `FaceDetect.downloadModel` | the same thing, phrased differently — grep for both |
 | `HTTP 404 from <url>` | `Models.fetch` | wrong path on the mirror — any status ≥ 400 is reported in this form |
-| `HTTP 404` (no URL in the text) | `FaceDetect.downloadModel` | the same, but it accepts **only** `200` once redirects have been followed |
-| `checksum mismatch: got …, expected …` | `Models.fetch` | an LFS pointer, an HTML error page, the wrong version, or a corrupt transfer |
 | `expected 232589 bytes … but got 131` | `FaceDetect.downloadModel` | the size pre-check fired: you got a pointer or an error page |
-| `SHA-256 mismatch for … Refusing to load an unverified model.` | `FaceDetect.downloadModel` | right size, wrong bytes |
-| a timeout message from the JDK HTTP client | both paths | the mirror was too slow for the request budget — see below. `FaceDetect.downloadModel` prefixes it with the exception's class name; `Models.fetch` reports the message alone |
+| `SHA-256 mismatch for … Refusing to load an unverified model.` | all fetch entry points | wrong bytes, or an LFS/HTML response without a size pin |
+| a timeout message from the JDK HTTP client | all fetch entry points | the mirror was too slow for the request budget |
+| `cached models require a 64-digit SHA-256 and a single safe filename` | `Models.fetchCached` | invalid cache identity; nothing was downloaded |
+| `could not access model cache:` | `Models.fetchCached` | directory, symlink or process-lock failure |
 | `there is no readable file at this path.` | `FaceDetect.create` | the loader's own pre-check: you never fetched the model, or you passed the directory instead of the file |
 | `no such file — supply the SFace ONNX model path` | `FaceRecognizer.load` | the same, for SFace |
 
@@ -528,19 +543,18 @@ being honest about the edges saves you a bad afternoon:
 - **No proxy configuration surface.** Whatever the JDK's `HttpClient` does by default in your environment
   is what you get; there is no knob here.
 - **No resume, and no progress reporting.** Each mirror gets one request with a **60-second** budget
-  (120 s for `FaceDetect.downloadModel`) — that is a budget for the whole exchange, not an idle timeout.
+  for the HTTP request, shared by `FaceDetect.downloadModel`.
   A 37 MB model on a slow link can exhaust it, at which point *every* mirror reports a timeout and you
   get a `Left` that looks like an outage but is a bandwidth problem. If that is your situation, fetch the
   file with `curl -C -` or your package pipeline and use a `file://` spec.
 - **No size limit.** The response body is written to the temp file before anything inspects it, so a
   mirror that serves ten gigabytes writes ten gigabytes to your disk and *then* fails the checksum. Point
   specs at hosts you trust.
-- **No size pre-check in the generic path.** Only `FaceDetect.downloadModel` pins a byte count;
-  `ModelSpec` has no size field.
-- **No locking between processes.** Two processes fetching the same spec into the same directory each
-  write their own temp file and then move it onto the target; with the same pinned hash that is harmless.
-  With *different* content under the same file name it is a race — which is the other reason to put the
-  version in the file name.
+- **A size pin is not a streaming limit.** `ModelSpec.sizeBytes` is checked after downloading; it improves validation and diagnostics, not disk-usage bounds.
+- **No locking in legacy `fetch`.** Concurrent calls can duplicate downloads; different revisions sharing
+  a filename can replace one another. Use `fetchCached` for digest-separated paths and process coordination.
+- **Atomic publication requires filesystem support.** Unsupported atomic moves return a failure without
+  a non-atomic fallback. Neither API promises durable persistence across power loss.
 - **No conversion and no model validation.** It moves bytes and checks a digest. Whether those bytes are
   a network OpenCV can import is discovered by `Dnn.fromOnnx` / `FaceDetect.create` /
   `FaceRecognizer.load`, each of which returns its own `Left`.
@@ -548,7 +562,7 @@ being honest about the edges saves you a bad afternoon:
 ## Fail fast at boot
 
 The place to fetch models is start-up, next to `OpenCv.load()`, with readiness gated on the result. Both
-calls are idempotent and cheap once satisfied, so this costs nothing after the first run:
+calls are idempotent. Model cache hits still read and hash the entire file, so fetch once at startup rather than per frame:
 
 ```scala mdoc:compile-only
 import java.nio.file.Path

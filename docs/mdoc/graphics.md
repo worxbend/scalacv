@@ -56,6 +56,28 @@ Text stays axis-aligned at its transformed baseline anchor; its glyph scale foll
 The explicit raster adapter is `OpenCvRenderer.render` / `renderOn`, with the same owned/consumed-image
 contract as the convenience methods.
 
+### Batch layout and session-local metric reuse
+
+`PictureLayout.row` and `column` tightly pack pictures with the same centre alignment and painter order as repeated `beside` or `above`. Each input is measured before placement and, when translated, once more at its final position—never by walking the accumulated scene again. This keeps layout linear while preserving floating-point evaluation at pixel boundaries. Empty inputs take no space; the first nonempty picture keeps its original position. Unlike `grid`, cells are not widened to the largest item.
+
+```scala mdoc:silent
+val metricCache = new TextMetricCache(TextMeasurer.openCv, maxEntries = 256, maxChars = 16384)
+val sessionLayout = new PictureLayout(metricCache)
+try
+  val labels = Seq("camera", "tracking", "camera").map(s => Picture.text(s, Point(10, 30)))
+  val row = sessionLayout.row(labels, gap = 12)
+  val column = sessionLayout.column(labels, gap = 6)
+  assert(sessionLayout.bounds(row).nonEmpty && sessionLayout.bounds(column).nonEmpty)
+  assert(metricCache.entryCount == 2)
+finally metricCache.clear()
+```
+
+The cache is opt-in and bound to one text measurer. Its key includes the exact text, font and effective scale (including scene transforms). Least-recently-used entries are bounded by both entry count and retained UTF-16 code units. Oversized strings bypass retention; a zero limit disables it. Failures are not cached. `entryCount` and `retainedChars` expose current occupancy, not hit-rate statistics.
+
+Keep the backend stable until `clear()`: clear after a coordinated font/backend configuration change and when the session ends. Clearing drops references, not securely erases text. Keep separate caches for unrelated users/privacy domains. Cache calls are synchronized, but backend access outside the wrapper remains the caller's responsibility. Each process warms its own cache; no cross-instance invalidation is needed for unchanged backend configuration.
+
+The default OpenCV renderer remains uncached. Passing a cache to `PictureLayout` accelerates layout measurements, not the default raster renderer's own measurements. A custom renderer can return the same cache from `textMeasurer`. There is no persistent cache of scene bounds: transforms and custom backend metrics remain part of measurement.
+
 ## A picture is a value
 
 Build it, then draw it — onto a fresh canvas with `render`, or onto an existing image with `image.draw`

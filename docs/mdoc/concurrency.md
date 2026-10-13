@@ -71,19 +71,21 @@ def edgeCountsInParallel(paths: Seq[String]): Future[Seq[Int]] =
 
 ### Sharing an expensive detector: pool, don't share
 
-A loaded `Dnn` net or a `FaceRecognizer` is expensive to build, so the temptation is to build one and share it. Don't — a second thread entering a stateful native call corrupts the in-flight one. Instead build **one per worker**, or pool them with a `ThreadLocal` and close each when its thread retires:
+A loaded `Dnn` net or a `FaceRecognizer` is expensive to build. Reuse **one per bounded worker**, with the worker's whole synchronous processing loop inside its ownership scope:
 
 ```scala mdoc:compile-only
 import org.opencv.dnn.Net
 
-// One net per thread: built on first use, reused by that thread, never shared across threads.
-// Dnn.fromOnnx hands back a caller-owned Managed[Net]; each thread closes its own when it retires.
-val perThreadNet = ThreadLocal.withInitial[Either[CvError, Managed[Net]]] { () =>
-  Dnn.fromOnnx("model.onnx")
-}
+// `work` runs the worker's loop, not just one request. It must finish all native work before returning.
+def withWorkerNet[A](modelPath: String)(work: Net => A): Either[CvError, A] =
+  Dnn.fromOnnx(modelPath).map(_.use(work))
 ```
 
-The rule of thumb: **share results, never handles.** If two threads need the same model, they need two copies of it.
+The application chooses the worker bound and admission/backpressure policy. Every worker owns and closes its own net; do not return a lazy effect or launch work that outlives the callback. An unbounded `ThreadLocal` is not a resource pool, and a migrating fiber cannot use it to establish exclusive ownership.
+
+A model revision creates new workers with the new model. Stop admitting work to old workers, let their in-flight calls finish, then close their scopes. Each application instance does this independently. Never close a cached net merely because a TTL elapsed while inference is still running.
+
+The rule of thumb: **share immutable results, not concurrently used handles.** An explicit exclusive lease or lock can serialize a shared net, but it must cover `setInput`, `forward`, output copying, and shutdown—not just lookup.
 
 ## Splitting work over one image
 
@@ -107,7 +109,7 @@ Reads are different: many threads may *read* one shared `Mat` at once — measur
 
 | You wrote… | What happens | Fix |
 |---|---|---|
-| shared one `Dnn`/detector across futures | in-flight native call corrupted → segfault | one per thread / `ThreadLocal` |
+| shared one `Dnn`/detector across futures | in-flight native state races | one per bounded worker, closed with its scope |
 | collected borrowed `Video.frames` Mats into a `Seq` and processed off-thread | N references to one reused buffer; a data race the moment decode continues | `Video.framesCopied` for frames that outlive the loop |
 | two workers `crop` the same `Image` | second `crop` throws use-after-move (the first consumed it) | `.copy` before the first crop |
 | two threads write the same `Mat` | undefined behaviour | give each its own buffer |
@@ -130,9 +132,9 @@ The [ZIO](/zio) module expresses ownership as `Scope`, so a native object is rel
 The two **borrowing** contracts carry over unchanged from the synchronous world:
 
 - `frameStream` borrows one reused buffer — reduce each frame *inside* the stream (`.mapZIO(...)`), don't buffer the borrowed `Mat` across stages.
-- `framesCopied` hands out owned `Managed[Mat]` clones — consume each in the pulling fiber (`.mapZIO(m => m.use(...))`). A clone dropped because the fiber is interrupted before a downstream `use`/scope takes it over leaks, exactly as a dropped `Managed` would in synchronous code — which is why `Scope`, not a bare clone, is how you keep frames in effectful code.
+- `framesCopied` is a low-level stream of caller-owned `Managed[Mat]` clones. Filtering, buffering or interruption before adoption can abandon them; even immediate downstream `useZIO` cannot repair that earlier handoff. Prefer `processFrames`, which acquires each clone inside an effect-aware bracket and releases it before emitting a reduced result. Never return a lazy effect from synchronous `Managed.use`.
 
-The **end-of-stream** semantics do not carry over. The synchronous readers take an `attemptsPerFrame` bound — how many consecutive empty reads it takes before the traversal is declared over. `Video.frames` defaults it to `1`, which is right for a file, where the first empty read is end-of-file; the `Camera` helpers (`foreach`, `take`, `taking`, `snapshot`) default it to `3`, so a webcam that drops one frame keeps going. `frameStream` has no such parameter: the first empty read ends the `ZStream`, and it ends it *cleanly* — your app sees a normal completion, not an error. See [A dropped frame ends your stream](/zio#dropped-frame) for what to do about it.
+Both synchronous and ZIO readers use the same `Video.FrameSource` and accept an `attemptsPerFrame` bound. `Video.frames` and `frameStream` default to `1`; the `Camera` helpers default to `3`. After that many consecutive unsuccessful reads, the stream ends cleanly: OpenCV does not distinguish ordinary EOF from every disconnected-source failure. See [A dropped frame ends your stream](/zio#dropped-frame). JVM interruption cannot forcibly stop a JNI read; timeout support remains backend-dependent.
 
 :::tip[Fibers do not change the rule]
 "One owner per handle" is about the *handle*, not the concurrency primitive. A ZIO fiber is still a thread as far as native memory is concerned — a native object still belongs to exactly one fiber at a time, and `Scope` is how you make that ownership survive interruption.

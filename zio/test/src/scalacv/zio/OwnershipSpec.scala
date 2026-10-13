@@ -196,33 +196,47 @@ object OwnershipSpec extends ZIOSpecDefault:
       val allocated = new java.util.concurrent.CountDownLatch(1)
       val deliver = new java.util.concurrent.CountDownLatch(1)
       val entered = new AtomicInteger()
-      ZIO.scoped {
-        for
-          _ <- loadNatives
-          cap <- capture()
-          fiber <- processFramesWith(cap, 1) { view =>
-            val owner = Managed(view.clone())(using releases)
-            allocated.countDown()
-            // Bounded only to keep a broken test from hanging the suite.
-            if !deliver.await(10, java.util.concurrent.TimeUnit.SECONDS) then
-              owner.release()
-              throw IllegalStateException("handoff test timed out")
-            owner
-          }(m => ZIO.succeed(entered.incrementAndGet()) *> ZIO.attemptBlocking(m.rows())).runDrain.fork
-          ready <- ZIO.attemptBlocking(allocated.await(10, java.util.concurrent.TimeUnit.SECONDS))
-          _ <- fiber.interruptFork
-          _ <- ZIO.succeed(deliver.countDown())
-          exit <- fiber.await
-        yield assertTrue(
-          ready,
-          exit.isInterrupted,
-          entered.get == 0,
-          releases.count.get == 1,
-          releases.allFreed,
-          releases.allBlocking,
-          cap.getExceptionMode
-        )
-      }
+      val acquiring = new java.util.concurrent.atomic.AtomicReference[Fiber[Any, Any]]()
+      ZIO
+        .scoped {
+          for
+            _ <- loadNatives
+            cap <- capture()
+            fiber <- processFramesWith(cap, 1) { view =>
+              // ZStream runs this acquisition in an internal channel fiber. Interrupting only the
+              // runDrain wrapper races propagation to that fiber against opening the handoff gate.
+              acquiring.set(Unsafe.unsafe { implicit unsafe =>
+                Fiber.currentFiber().getOrElse(throw IllegalStateException("no acquisition fiber"))
+              })
+              val owner = Managed(view.clone())(using releases)
+              allocated.countDown()
+              // Bounded only to keep a broken test from hanging the suite.
+              if !deliver.await(10, java.util.concurrent.TimeUnit.SECONDS) then
+                owner.release()
+                throw IllegalStateException("handoff test timed out")
+              owner
+            }(m => ZIO.succeed(entered.incrementAndGet()) *> ZIO.attemptBlocking(m.rows())).runDrain.fork
+            ready <- ZIO.attemptBlocking(allocated.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            target <- ZIO
+              .fromOption(Option(acquiring.get()))
+              .orDieWith(_ => IllegalStateException("clone acquisition did not start"))
+            // Queue interruption on the acquiring fiber itself before letting it return the clone.
+            _ <- target.interruptFork
+            pending <- fiber.poll
+            _ <- ZIO.succeed(deliver.countDown())
+            exit <- fiber.await
+          yield assertTrue(
+            ready,
+            pending.isEmpty,
+            exit.isInterrupted,
+            entered.get == 0,
+            releases.count.get == 1,
+            releases.allFreed,
+            releases.allBlocking,
+            cap.getExceptionMode
+          )
+        }
+        .provideLayer(Runtime.enableCurrentFiber)
     },
     test("buffer cancellation discards only reduced results, never allocated clones") {
       val releases = new Releases

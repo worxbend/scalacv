@@ -116,7 +116,7 @@ detection:
   val one = Features.detect(imgA)
   val two = Features.detect(imgB)
   try
-    val matched = Features.matches(one, two).size
+    val matched = Features.countMatches(one, two)
     s"${one.size} vs ${two.size} features, $matched matches"
   finally
     one.close(); two.close()
@@ -140,6 +140,8 @@ Two knobs shape the recognition:
 
 Matching is **cross-checked** — every returned pair is each other's mutual best — and sorted best
 (smallest distance) first, so `matches.take(n)` gives the `n` most confident correspondences.
+
+If you only need the count, use `Features.countMatches(a, b, maxDistance = 64f)`. It uses the same native cross-check and threshold but skips sorting and creating immutable `FeatureMatch` results. `LoopDetector` uses this path when scoring keyframes. Both calls borrow the descriptor sets; neither caches results or releases your inputs. Native brute-force matching still dominates at larger feature counts, so this is primarily an allocation reduction, not a change in matching complexity.
 
 ## Optical flow vs. features — which one?
 

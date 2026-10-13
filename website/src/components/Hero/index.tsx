@@ -16,7 +16,7 @@ import styles from './styles.module.css';
  *  of these maps to a documented page, which is the point — it is a promise, not a mood board. */
 const TARGETS = ['edges', 'contours', 'faces', 'motion', 'markers', 'gestures', 'depth'];
 
-const INSTALL = 'mvn"com.worxbend::scalacv:0.4.1"';
+const INSTALL = 'mvn"com.worxbend::scalacv:0.4.2"';
 
 function CopyButton({text}: {text: string}): React.ReactElement {
   const [copied, setCopied] = useState(false);
@@ -101,7 +101,7 @@ export default function Hero(): React.ReactElement {
             <CopyButton text={INSTALL} />
           </div>
           <p className={styles.installNote}>
-            Source tag 0.4.1; Central upload is disabled. Local install plus two native artifacts —{' '}
+            Source tag 0.4.2; Central upload is disabled. Local install plus two native artifacts —{' '}
             <Link to="/getting-started">the install page explains why</Link>.
           </p>
         </div>

@@ -25,7 +25,7 @@ lighting. The first half of this chapter builds a nightly watchdog over an inter
 second a conference feed recorded with a virtual background.
 
 One line of setup first. `Screen`, `BackgroundEffect` and `Segmenter` all live in `scalacv-vision`, the
-same module as the detectors of the last ten chapters, so `mvn"com.worxbend::scalacv-vision:0.4.1"` has
+same module as the detectors of the last ten chapters, so `mvn"com.worxbend::scalacv-vision:0.4.2"` has
 to sit on the classpath beside the core dependency of Chapter 2. Everything else this chapter touches
 --- `Image`, `Rect`, `Camera`, `Codec` --- is core. Use both `import scalacv.*` and
 `import scalacv.vision.*`; the optional artifact has its own package.

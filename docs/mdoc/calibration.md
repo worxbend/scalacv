@@ -230,6 +230,25 @@ Like every transform, `undistort` follows [move semantics](/mat-lifecycle): it *
 and returns a new `Image`. Take `.copy` first if you also need the original.
 :::
 
+### Reuse prepared maps for a video stream
+
+`Undistorter.prepare` builds lens-correction maps once for fixed intrinsics and resolution. It borrows each input `Mat` and returns a fresh `Managed[Mat]`; unlike `Image.undistort`, it does not consume the source.
+
+```scala mdoc:silent
+val streamSize = Size(160, 120)
+val streamIntrinsics = Intrinsics(150, 150, 80, 60, Seq(0.1, -0.05, 0, 0))
+scala.util.Using.resource(Undistorter.prepare(streamIntrinsics, streamSize)) { prepared =>
+  scala.util.Using.resource(Image.blank(160, 120, Scalar.White)) { frame =>
+    // Repeat this call for each frame, keeping only reduced data past `use`.
+    prepared(frame.mat).use(corrected => assert(corrected.cols() == 160))
+  }
+}
+```
+
+The prepared object snapshots the calibration and owns two native maps using six bytes per pixel. Its lifetime is the processing scope, not a time-based TTL. Rebuild on calibration or resolution changes; close the old object after all its work finishes. Dimensions must be positive integers smaller than 32767 on each axis. A mismatched frame and access after close fail before remapping.
+
+Calls and `close` must not overlap: this is a sequential owner, not a concurrent cache. Each worker/process owns its own maps. The existing one-shot operation is still the simpler choice for individual images. See [the benchmark results](/benchmark-results#prepared-undistortion) for measured preparation and frame costs.
+
 ## Feeding the geometry stack
 
 The recovered `intrinsics` are the *same* [`Intrinsics`](/api/core/scalacv/Intrinsics.html) the pose

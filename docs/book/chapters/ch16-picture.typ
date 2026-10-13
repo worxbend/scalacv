@@ -37,8 +37,8 @@ whole dependency list is `core` and the same OpenCV Java bindings `core` already
 
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.1",
-  mvn"com.worxbend::scalacv-graphs:0.4.1",
+  mvn"com.worxbend::scalacv:0.4.2",
+  mvn"com.worxbend::scalacv-graphs:0.4.2",
   // plus the two native lines for your platform, as in Chapter 2
 )
 ```

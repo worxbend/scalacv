@@ -20,7 +20,7 @@ below.
 ## Add the dependency
 
 **Source release, not verified Central availability:** these examples use the latest repository tag,
-`v0.4.1`. Central upload and attestation are disabled and tag workflows create draft releases.
+`v0.4.2`. Central upload and attestation are disabled and tag workflows create draft releases.
 From a clean checkout of that tag, run `./mill __.publishLocal`, then enable local Ivy resolution
 (`ivy2Local` in Coursier; sbt includes it by default). For unreleased fixes, build the current
 checkout and substitute its actual `./mill show core.publishVersion` in every ScalaCV coordinate.
@@ -43,10 +43,10 @@ All of it in Mill — delete the scalacv lines you do not need, and keep both by
 
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.1",         // core: images, video, contours, drawing, filters
-  mvn"com.worxbend::scalacv-vision:0.4.1",  // detectors, DNN, pose, tracking, motion, OCR, calibration, SLAM
-  mvn"com.worxbend::scalacv-graphs:0.4.1",  // the Picture scene graph, charts, animated GIFs
-  mvn"com.worxbend::scalacv-zio:0.4.1",     // only if you use ZIO
+  mvn"com.worxbend::scalacv:0.4.2",         // core: images, video, contours, drawing, filters
+  mvn"com.worxbend::scalacv-vision:0.4.2",  // detectors, DNN, pose, tracking, motion, OCR, calibration, SLAM
+  mvn"com.worxbend::scalacv-graphs:0.4.2",  // the Picture scene graph, charts, animated GIFs
+  mvn"com.worxbend::scalacv-zio:0.4.2",     // only if you use ZIO
   mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
 )
@@ -57,10 +57,10 @@ The same for sbt (note `%%` for the Scala artifacts, `%` for the Java-world byte
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.worxbend" %% "scalacv"        % "0.4.1",
-  "com.worxbend" %% "scalacv-vision" % "0.4.1",
-  "com.worxbend" %% "scalacv-graphs" % "0.4.1",
-  "com.worxbend" %% "scalacv-zio"    % "0.4.1",
+  "com.worxbend" %% "scalacv"        % "0.4.2",
+  "com.worxbend" %% "scalacv-vision" % "0.4.2",
+  "com.worxbend" %% "scalacv-graphs" % "0.4.2",
+  "com.worxbend" %% "scalacv-zio"    % "0.4.2",
   "org.bytedeco" %  "opencv"         % "4.14.0-1.5.14" classifier "linux-x86_64",
   "org.bytedeco" %  "openblas"       % "0.3.34-1.5.14" classifier "linux-x86_64"
 )

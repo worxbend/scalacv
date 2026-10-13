@@ -3,6 +3,7 @@ package scalacv
 import java.io.IOException
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.nio.channels.{ClosedByInterruptException, FileLockInterruptionException}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.security.MessageDigest
 import java.time.Duration
@@ -91,7 +92,10 @@ object Models:
   /** Fetches `spec` into the directory `into` (created if absent), returning the verified file's path or a
     * `Left` describing which stage failed — the directory, every URL tried, the size, or the checksum.
     * Cancellation is not a mirror failure: `InterruptedException` propagates with the interrupt flag
-    * restored.
+    * restored. The path remains exactly `into.resolve(spec.fileName)`; this API adds no lock artifacts or
+    * digest directories. Publication requires atomic replacement and fails closed if unsupported, leaving the
+    * prior target unchanged rather than falling back to a potentially partial copy. For coordinated,
+    * content-addressed storage, opt in to [[fetchCached]].
     */
   def fetch(spec: ModelSpec, into: Path): Either[CvError, Path] =
     val target = into.resolve(spec.fileName)
@@ -110,6 +114,56 @@ object Models:
             )
       prepared.flatMap(_ => fetchFirst(spec, target))
 
+  /** Fetches a pinned model at `cacheRoot/sha256/<lowercase SHA-256>/<fileName>`. The root is the caller's
+    * namespace; unlike [[fetch]], distinct revisions with the same filename coexist. Only an exact
+    * 64-hex-digit SHA-256 and a single non-special filename are accepted (no separators, NUL or drive
+    * prefixes); malformed tokens are rejected, never trimmed or path-normalized into valid ones.
+    *
+    * Every call verifies the bytes again, after acquiring JVM and process locks. Concurrent callers sharing a
+    * target coalesce a successful miss into one download; failures are not cached. Coordination uses 64 JVM
+    * lock stripes and at most 64 persistent lock files in `.locks` per root. Never remove these files or the
+    * cache root while callers may be active or waiting. Stripe collisions can serialize unrelated keys.
+    *
+    * The root may itself be a symlink; layout components and entries beneath it may not. The caller must
+    * control the root and its ancestors: this is not a sandbox against hostile concurrent filesystem edits.
+    * Sharing requires a filesystem supporting process file locks and atomic replacement. As with [[fetch]],
+    * unsupported atomic publication fails closed, with no non-atomic copy/delete fallback. Neither API
+    * promises fsync/crash durability or protects a returned path from subsequent external modification.
+    * `InterruptedException` propagates with the flag restored, including cancellation while waiting for a
+    * lock.
+    */
+  def fetchCached(spec: ModelSpec, cacheRoot: Path): Either[CvError, Path] =
+    val validName = spec.fileName.nonEmpty && spec.fileName != "." && spec.fileName != ".." &&
+      !spec.fileName.exists(c => c == '/' || c == '\\' || c == ':' || c == 0.toChar)
+    spec.sha256 match
+      case Some(digest) if digest.matches("[0-9a-fA-F]{64}") && validName =>
+        val key = digest.toLowerCase(java.util.Locale.ROOT)
+        try
+          ModelCache.withLock(cacheRoot, key, spec.fileName): target =>
+            val result = if cacheHit(spec, target) then Right(target) else fetchFirst(spec, target)
+            result.map(_ => cacheRoot.resolve("sha256").resolve(key).resolve(spec.fileName))
+        catch
+          case interrupted: InterruptedException =>
+            Thread.currentThread().interrupt()
+            throw interrupted
+          case interrupted: FileLockInterruptionException => cancelled(interrupted)
+          case interrupted: ClosedByInterruptException => cancelled(interrupted)
+          case e: Exception =>
+            Left(CvError.LoadFailed(cacheRoot.toString, s"could not access model cache: ${describe(e)}"))
+      case _ =>
+        Left(
+          CvError.LoadFailed(
+            spec.fileName,
+            "cached models require a 64-digit SHA-256 and a single safe filename"
+          )
+        )
+
+  private def cancelled(cause: IOException): Nothing =
+    Thread.currentThread().interrupt()
+    val interrupted = new InterruptedException("model cache operation interrupted")
+    interrupted.initCause(cause): Unit
+    throw interrupted
+
   /** Whether `target` is already the model we want, so nothing needs downloading.
     *
     * An unreadable cache entry is a *miss*, not a failure. Hashing it opens the file, which can fail for
@@ -120,8 +174,11 @@ object Models:
     * the destination really is unusable, produces a `Left` from the download that names the actual problem.
     */
   private def cacheHit(spec: ModelSpec, target: Path): Boolean =
+    ModelCache.checkInterrupted()
     try Files.isRegularFile(target) && verify(spec, target).isRight
-    catch case _: IOException => false
+    catch
+      case interrupted: ClosedByInterruptException => cancelled(interrupted)
+      case _: IOException => false
 
   /** Checks a file against everything the spec pins, cheapest first.
     *
@@ -134,6 +191,7 @@ object Models:
     * separate, weaker expression of the same idea.
     */
   private def verify(spec: ModelSpec, file: Path): Either[CvError, Unit] =
+    ModelCache.checkInterrupted()
     val actualSize = Files.size(file)
     spec.sizeBytes.filter(_ != actualSize) match
       case Some(want) =>
@@ -203,6 +261,7 @@ object Models:
       case interrupted: InterruptedException =>
         Thread.currentThread().interrupt()
         throw interrupted
+      case interrupted: ClosedByInterruptException => cancelled(interrupted)
       case e: Exception => Left(CvError.LoadFailed(url, describe(e)))
 
   /** An exception as text a reader can act on. `getMessage` is `null` for several of the exceptions that
@@ -230,7 +289,7 @@ object Models:
         )
 
   private def move(tmp: Path, target: Path): Path =
-    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING)
+    ModelCache.publish(tmp, target)
 
   /** The SHA-256 of a file, hashed as it is read.
     *
@@ -246,6 +305,8 @@ object Models:
     Using.resource(Files.newInputStream(file)): in =>
       var read = in.read(buffer)
       while read >= 0 do
+        ModelCache.checkInterrupted()
         digest.update(buffer, 0, read)
         read = in.read(buffer)
+    ModelCache.checkInterrupted()
     digest.digest().map(b => f"$b%02x").mkString

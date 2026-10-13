@@ -39,6 +39,40 @@ final class PictureLayout(val textMeasurer: TextMeasurer):
       case (Some(_), None) => first
       case (None, _) => that
 
+  /** Tight horizontal packing with the same alignment and painter's order as a left fold of [[beside]]. Each
+    * input is measured at most twice, without rescanning the placed prefix. Empty inputs take no space; the
+    * first non-empty input keeps its position. Metrics must remain stable during this call. No bounds are
+    * retained after layout.
+    */
+  def row(pictures: Seq[Picture], gap: Double = 8): Picture = pack(pictures, gap, horizontal = true)
+
+  /** Tight vertical packing, like a left fold of [[above]], measuring each input at most twice without
+    * rescanning the placed prefix. Empty inputs take no space; the first non-empty input keeps its position.
+    * Metrics must remain stable during this call. No bounds are retained after layout.
+    */
+  def column(pictures: Seq[Picture], gap: Double = 8): Picture = pack(pictures, gap, horizontal = false)
+
+  private def pack(pictures: Seq[Picture], gap: Double, horizontal: Boolean): Picture =
+    val placed = Vector.newBuilder[Picture]
+    var accumulated: Option[Bounds] = None
+    pictures.foreach { picture =>
+      bounds(picture).foreach { b =>
+        accumulated match
+          case None =>
+            placed += picture
+            accumulated = Some(b)
+          case Some(a) =>
+            val dx = if horizontal then a.maxX + gap - b.minX else a.centerX - b.centerX
+            val dy = if horizontal then a.centerY - b.centerY else a.maxY + gap - b.minY
+            val translated = picture.translate(dx, dy)
+            placed += translated
+            // Measure in the actual transform context: translating an existing box changes floating-point
+            // association (e.g. (center + dx) + radius versus (center + radius) + dx).
+            accumulated = union(accumulated, bounds(translated))
+      }
+    }
+    Picture.all(placed.result())
+
   /** Uniform cells based on the largest measured picture. Empty pictures retain their cell. */
   def grid(pictures: Seq[Picture], columns: Int, gap: Double = 8): Picture =
     require(columns >= 1, s"a grid needs at least one column, got $columns")

@@ -108,6 +108,18 @@ When you *do* need to keep frames, `Video.framesCopied` clones per frame — but
 
 AWT interop copies pixels once, straight into (or out of) the target's backing array — no intermediate `byte[]`, no defensive clone — when the raster is contiguous and already BGR. A `TYPE_3BYTE_BGR` `BufferedImage` round-trips through `toMat` / `toBufferedImage` on the fast path; other layouts fall back to a single normalising redraw. The upshot: the common notebook / `ImageIO` case is one bulk copy, not several. See [Image I/O](/image-io) for the round-trip, and [Notebooks](/notebooks) for the display path this feeds.
 
+## Reuse setup, not live results
+
+Start by removing repeated work inside one operation. A cache is useful only when the same inputs recur often enough to repay key construction, retained memory and invalidation.
+
+- **Do not memoize `Image`, `Managed[Mat]` or borrowed frames by object identity.** Images move, native buffers are mutable, and borrowed video storage is overwritten on the next pull. A cache hit can otherwise return consumed ownership or another frame's pixels.
+- **Keep model verification at the filesystem boundary.** A previous successful checksum, pathname, file size or modification time is not proof of the current bytes. Fetch models at startup rather than repeatedly in a frame loop.
+- **Reuse loaded networks in bounded worker scopes.** A `Net` is mutable, not a thread-safe cached function. See [worker ownership](/concurrency#sharing-an-expensive-detector-pool-dont-share).
+- **Do not cache live inference results by default.** Exact frame reuse is usually low; hashing every frame costs a full read. If an application demonstrates repeat requests, key immutable results by tenant/security domain, immutable input revision, model digest, preprocessing parameters and output selection. Model or input changes must select a new key, and authorization still runs before returning a hit. Bound retained bytes and privacy retention separately from freshness.
+- **Leave existing small caches alone.** Contour metrics are lazy per contour; native-loader state and reflection metadata already avoid repeated setup. Another cache layer only complicates their lifetime.
+
+Per-process caches warm independently. That is correct for pure setup data when configuration is versioned; user-specific results must never use a cross-tenant key. Record hit/miss counts and retained bytes in the consuming application before making a cache global.
+
 ## The benchmark harness
 
 Perf claims in this repo are gated by a rule: **no optimization without a measured delta and a bit-identical output hash.** The `benchmarks` module is a JNI-aware harness — deliberately not JMH, whose annotation processor is awkward under Mill 1.1.7 + natives — that warms the JIT to steady state, measures many iterations, reports mean ± a 95% confidence half-width so a delta can be judged against noise, and folds every result through a `blackhole` so the JIT cannot dead-code-eliminate the work.
@@ -119,6 +131,9 @@ Perf claims in this repo are gated by a rule: **no optimization without a measur
 ./mill benchmarks.runMain scalacv.bench.ToBufferedImageBench # Mat -> BufferedImage fast path
 ./mill benchmarks.runMain scalacv.bench.GraphicsAlphaBench   # translucent-shape blend overhead
 ./mill benchmarks.runMain scalacv.bench.PictureBoundsBench   # scene-graph layout cost vs shape count
+./mill benchmarks.runMain scalacv.bench.UndistortBench       # prepared maps vs one-shot lens correction
+./mill benchmarks.runMain scalacv.bench.GraphicsCachingBench # batch layout and repeated text metrics
+./mill benchmarks.runMain scalacv.bench.FeaturesCountBench   # count-only matching and JVM allocation
 ./mill benchmarks.runMain scalacv.bench.ConfigProbeBench     # how a heavy op scales with setNumThreads
 ```
 

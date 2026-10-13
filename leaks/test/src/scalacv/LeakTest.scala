@@ -43,6 +43,15 @@ class LeakTest extends munit.FunSuite:
     LeakAssertions.assertBounded("undistort", n = 300): () =>
       Image.blank(200, 200, Scalar.White).undistort(intr).close()
 
+  test("prepared undistortion releases cached maps and per-frame results"):
+    val intr = Intrinsics(500, 500, 320, 240, Seq(0.1, -0.05, 0, 0))
+    Managed.use(Mat(480, 640, CvType.CV_8UC3, Scalar.White.toCv)): source =>
+      // Each preparation holds six bytes per pixel; leaking either map exceeds the RSS budget.
+      LeakAssertions.assertBounded("prepared undistort", n = 150): () =>
+        scala.util.Using.resource(Undistorter.prepare(intr, Size(640, 480))): prepared =>
+          prepared(source).release()
+          prepared(source).release()
+
   test("the zio Scope mapping releases like any other owner — no accumulation over repeated scopes"):
     // scalacv.zio.acquireRelease routes release through the same Releasable as Managed; a regression in
     // the Scope mapping would leak a 640x480x3 Mat (~920 KB) per scope, far past tolerance.

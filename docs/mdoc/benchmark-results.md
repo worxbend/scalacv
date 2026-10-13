@@ -1,13 +1,13 @@
 ---
 title: Benchmark results
-description: What scalacv's benchmarks actually measured — the four shipped wins, the optimisation that was measured and rejected, the known headroom left in place, and how to read a confidence interval before you quote one.
+description: Measured allocation reductions, prepared undistortion, batch layout, bounded text caching, and rejected optimizations — with output-equivalence checks and confidence intervals.
 ---
 
 # Benchmark results
 
 [Performance](/performance) explains the *shape* of scalacv's speed story — one live buffer per pipeline, borrowed video frames, AWT fast lanes — and lists the benchmarks that gate it. This page is the other half: **the numbers those benchmarks produced**, what each one means for code you are about to write, and, just as importantly, the optimisation that was measured and then *not* built because the measurement said it was noise.
 
-A benchmark result is only worth reading if you know how it was produced, so this page starts with the method. Everything after that is a recovered record: the numbers lived only in commit messages, and this page is now where they live.
+A benchmark result is only worth reading if you know how it was produced, so this page starts with the method. The original copy-removal numbers were recovered from commit messages; the prepared-map, batch-layout and count-only sections record direct runs of the current benchmark programs.
 
 ```scala mdoc:silent
 import scalacv.graphs.*
@@ -94,7 +94,7 @@ Being clear about this is what makes the numbers usable:
 
 ## Shipped wins
 
-Four optimisations shipped with measured deltas. Each one removed a *copy*, which is the recurring theme: nothing here made an inner loop cleverer, and everything here stopped allocating or copying a full frame that nobody needed.
+The original four optimisations below each removed a *copy*: they stopped allocating or copying a full frame that nobody needed. Newer setup-reuse and allocation measurements follow the historical sections.
 
 ### 1. Translucent shapes now cost what opaque ones cost
 
@@ -210,7 +210,7 @@ Note what the argument does **not** rest on. The commit recorded the means but n
 Stop copying frames before you start reusing buffers. The measured wins are an order of magnitude larger and need no new API: use `Video.frames` (a single reused decode buffer, zero per-frame allocation) rather than a copying source when you only read the frame, and `Recorder.write`'s `Mat` overload to write a borrowed frame straight through without an `Image` clone. See [Video](/video) and [Performance](/performance).
 :::
 
-## Known headroom, deliberately left in place
+## Batch layout instead of bounds memoization {#known-headroom-deliberately-left-in-place}
 
 `Picture.beside` folds a row of shapes by asking the row built so far for its bounding box at every step, and `bounds` re-walks the whole tree each time it is asked. Folding a row of *n* shapes is therefore **O(n²)**.
 
@@ -223,9 +223,11 @@ Stop copying frames before you start reusing buffers. The measured wins are an o
 
 Doubling the count cost roughly four times the work, which is what quadratic looks like.
 
-**Why it was left alone.** The obvious fix — a `lazy val bounds` memo on each node — does not actually work here. Look at what `boundsOf` does: it threads an accumulating affine transform down the tree, so a `Transformed` node's children must be measured *under a composed transform*, and rotated bounds cannot be derived from identity bounds. A per-node memo caches the wrong thing and is bypassed exactly where the recursion is expensive. The cost is also one-off (it happens while you build a scene, not while you render frames) and, for shapes, contains no JNI calls at all. Trading a correctness risk in the layout engine for a one-time multi-millisecond cost at 400+ elements was not a good trade.
+**Why node memoization was rejected.** Bounds traversal threads an accumulating affine transform and style down the tree. Rotated bounds cannot in general be derived from an identity bounding box, and custom text metrics can change. A naive per-node memo caches the wrong context.
 
-**Guidance.** Below roughly 200 elements per fold, this is sub-millisecond and you can ignore it. Above that, build the row in one call instead of folding. `Picture.grid` measures each element **once** and translates it into place, which is linear:
+The additive fix is `PictureLayout.row` / `column`: measure each complete input under its own transforms, translate it, and remeasure only that placed item before updating the accumulated bounds. Each item is visited at most twice; the accumulated scene is never rescanned. Remeasuring the translated geometry preserves floating-point evaluation at fractional pixel boundaries, where simply adding an offset to a previously computed box can change raster output. The existing pairwise operations keep their behavior. No persistent scene-bounds cache or invalidation policy is needed.
+
+**Guidance.** Small, one-off folds can stay as they are. For larger rows use `PictureLayout.openCv.row`; use `column` for vertical packing. `Picture.grid` also measures each element once but uses uniform cells:
 
 ```scala mdoc:silent
 val spots = (0 until 50).map(i => Picture.circle(Point(0, 0), 5.0 + (i % 7)))
@@ -233,7 +235,10 @@ val spots = (0 until 50).map(i => Picture.circle(Point(0, 0), 5.0 + (i % 7)))
 // Quadratic: every `beside` asks the accumulated row for its bounds, re-walking all of it.
 val foldedRow: Picture = spots.reduceLeft((acc, p) => acc.beside(p))
 
-// Linear: one call, each element measured once. `columns = spots.size` makes it a single row.
+// Linear tight packing, unlike grid's uniform cells.
+val packedRow: Picture = PictureLayout.openCv.row(spots)
+
+// Linear uniform cells: use this when equal cell widths are desired.
 val gridRow: Picture = Picture.grid(spots, columns = spots.size)
 ```
 
@@ -241,11 +246,54 @@ val gridRow: Picture = Picture.grid(spots, columns = spots.size)
 gridRow.bounds.map(_.width)
 ```
 
-The two are not pixel-identical, and you should choose knowingly: `beside` packs each shape against the previous one's actual width, while `grid` gives every element a uniform cell sized to the largest of them. If you want tight packing at large *n*, compute the offsets yourself and compose with `Picture.all`.
+`packedRow` preserves the fold's tight packing and centre alignment. `gridRow` is intentionally different: each element occupies a uniform cell sized to the largest item. `GraphicsCachingBench` compares batch and folded layout with equal bounds and full-scene pixel hashes.
 
 :::note[One caveat if your row contains text]
 The "no JNI" part of the reasoning holds for shapes. Measuring a `Picture.text` node calls `Draw.textSize`, which goes through to OpenCV's `getTextSize` — so a quadratic fold over a row of *labels* pays a native call per node per walk, and gets expensive sooner than the shape numbers above suggest.
 :::
+
+## Prepared undistortion {#prepared-undistortion}
+
+`UndistortBench` compares the unchanged one-shot operation with a scoped `Undistorter`, reusing calibration maps but still allocating and releasing every output frame. These measurements used the repository's Mill runner, OpenJDK 25.0.2, Linux amd64 and OpenCV 4.14.0 with one native thread. Frame rows have 200 warmups and 800 samples; preparation has 100 warmups and 300 samples.
+
+| Resolution | One-shot | Prepared frame | Prepare + close | Frame-time reduction |
+|---|---|---|---|---|
+| 640×480 | 1532.07 ±2.00 µs | 680.32 ±1.90 µs | 1064.02 ±8.07 µs | 55.6% |
+| 1920×1080 | 11636.79 ±26.88 µs | 7309.27 ±141.91 µs | 6989.53 ±73.78 µs | 37.2% |
+
+Frame confidence intervals do not overlap. Preparation plus close amortized after two frames in this run. Maps retain six native bytes per pixel, and must be closed with the processing scope. Input size and calibration are fixed; changing either means preparing another object.
+
+Baseline/prepared hashes matched at both resolutions (`7534941041187462931` and `-6220631414939022571`). `UndistorterTest` also checks all supported distortion-vector lengths, multiple channels, non-contiguous input and higher-depth exact sample equality. Preserving OpenCV's stripe boundaries matters: a full-height float remap can round differently, so the prepared non-byte path retains those boundaries. This is CPU pixel equivalence against the pinned OpenCV implementation, not a promise across future native versions.
+
+## Session text metrics and batch layout measurements
+
+`GraphicsCachingBench` measures construction plus final bounds for 200 pictures. It compares equal bounds and full-scene pixel hashes before timing. OpenJDK 25.0.2/Linux amd64, 150 warmups and 600 samples:
+
+| Work | Repeated fold | Batch | Reduction |
+|---|---|---|---|
+| Shape row | 2606.34 ±126.59 µs | 73.35 ±1.12 µs | 97.2% |
+| Shape column | 2277.40 ±23.86 µs | 65.15 ±0.82 µs | 97.1% |
+| Text row | 5771.06 ±80.75 µs | 154.19 ±0.74 µs | 97.3% |
+| Text column | 7878.09 ±262.65 µs | 160.85 ±2.45 µs | 98.0% |
+
+With a warm session-local metric cache, text batch rows measured 83.01 ±0.47 µs and columns 85.37 ±0.66 µs. A separate batch of 256 metric requests over 16 repeated labels measured **37.71 ±0.13 µs uncached → 11.06 ±0.05 µs cached**, a **70.7% reduction** (1000 warmups, 3000 samples). All these comparison intervals are non-overlapping.
+
+This is a high-reuse workload, not evidence that caching unique labels is profitable. The cache retained 16 entries and 246 UTF-16 code units, then `clear()` returned both counts to zero. The default raster renderer is still uncached; these numbers do not claim faster native drawing. See [session lifetime and invalidation](/graphics#batch-layout-and-session-local-metric-reuse).
+
+## Count-only matching: allocation, not a new search algorithm
+
+`FeaturesCountBench` extracts real ORB descriptors from generated scenes outside timing, then alternates baseline/count calls with one native thread. It uses the same OpenJDK 25.0.2/Linux amd64 runtime. Exact count vectors agree across thresholds including empty results; their hashes are `888239bf91ef7b50` and `d2a777cf146e23a2`.
+
+| Feature budget (actual descriptor counts) | `matches.size` | `countMatches` | JVM allocated bytes/call, before → after |
+|---|---|---|---|
+| 500 (460/471) | 1922.64 ±10.19 µs | 1907.06 ±10.44 µs | 16952 → 8248 |
+| 2000 (1588/1604) | 22639.05 ±382.28 µs | 22443.47 ±331.66 µs | 75720 → 36808 |
+
+The independent timing intervals overlap: do not advertise a throughput gain under this page's coarse rule. Alternating-pair savings were 15.58 ±9.78 µs at the default budget and 195.59 ±225.99 µs at the larger budget (2000 and 500 pairs). The clear benefit is lower JVM allocation and removing unnecessary sorting/result construction. Native brute-force matching remains unchanged and dominates larger cases. The allocation counter measures the executing JVM thread, not native memory.
+
+## Model cache coordination
+
+`ModelCacheTest` uses a gated loopback server to measure redundant work rather than network timing. Twelve simultaneous thread callers produce one successful download; two independent JVMs sharing a cache root also produce one. Every caller still verifies the bytes after acquiring the lock. This is not a claim of constant-time cache hits, lock-free access, or shared native model ownership.
 
 ## Reproduce on your hardware
 
@@ -258,6 +306,9 @@ Every benchmark is a `main` you can run directly. Nothing here needs an image fi
 ./mill benchmarks.runMain scalacv.bench.ToBufferedImageBench # Mat -> BufferedImage fast path
 ./mill benchmarks.runMain scalacv.bench.GraphicsAlphaBench   # translucent-shape blend overhead
 ./mill benchmarks.runMain scalacv.bench.PictureBoundsBench   # scene-graph layout cost vs shape count
+./mill benchmarks.runMain scalacv.bench.UndistortBench       # prepared maps vs one-shot lens correction
+./mill benchmarks.runMain scalacv.bench.GraphicsCachingBench # batch layout and repeated text metrics
+./mill benchmarks.runMain scalacv.bench.FeaturesCountBench   # count-only matching and JVM allocation
 ./mill benchmarks.runMain scalacv.bench.ConfigProbeBench     # how a heavy op scales with setNumThreads
 ```
 

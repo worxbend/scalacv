@@ -6,13 +6,32 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-13
+
+### Added
+- Scoped `Undistorter` prepares fixed-resolution lens-correction maps once, snapshots calibration,
+  guards use after close, and returns independently owned frame results.
+- Opt-in `TextMetricCache` bounds session text retention by entry count and UTF-16 character budget,
+  with explicit invalidation; `PictureLayout.row` and `column` avoid repeated accumulated-scene scans.
+- `Models.fetchCached` separates pinned revisions by SHA-256 and coordinates concurrent misses across
+  threads and processes. Cache hits still verify the file; private roots remain caller-controlled.
+- `Features.countMatches` avoids sorting and constructing result objects when only a count is needed;
+  loop-closure scoring uses it without caching frame results.
+
+### Fixed
+- Model publication now requires atomic replacement and fails closed when unsupported, preserving an
+  existing target rather than falling back to a partial copy. Legacy `fetch` retains its flat paths.
+- Model-cache cancellation preserves interruption during lock waits, hashing and downloading.
+
 ### Build and documentation
+- Made the ZIO clone-handoff cancellation test target the actual acquisition fiber before releasing
+  its gate, removing a wrapper-to-channel cancellation race without weakening cleanup assertions.
 - Added a real historical JVM binary-compatibility gate: checksum-pinned japicmp 0.23.1 compares
   all four packaged artifacts against locally built, commit-pinned v0.4.0 and v0.4.1 baselines.
   Positive/negative controls include method finality and an unchanged compiled subclass.
 - Added a packaged Scala 3.3.8/JDK 17 consumer alongside Java, exercising all four module APIs;
   strengthened exact dependency/version/scope POM assertions and API-golden finality/generic bounds.
-- Aligned install examples with source tag 0.4.1 while explicitly distinguishing local artifacts,
+- Aligned install examples with source tag 0.4.2 while explicitly distinguishing local artifacts,
   unreleased fixes, draft GitHub releases and unverified Central availability. Upload and attestation
   remain disabled. Corrected synchronous/effectful ownership guidance and stale graphics prose.
 

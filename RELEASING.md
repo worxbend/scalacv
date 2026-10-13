@@ -2,14 +2,14 @@
 
 ## Current status: verification and drafts, not Central publication
 
-The latest repository tag is `v0.4.1`. A tag is a source release, not evidence of registry
+The latest repository tag is `v0.4.2`. A tag is a source release, not evidence of registry
 availability. `.github/workflows/release.yml` runs verification and creates a **draft** GitHub
 release for a pushed tag. **Central upload and provenance attestation are commented out.** It does
-not currently sign, stage or upload artifacts. This document makes no claim that `0.4.1` (or any
+not currently sign, stage or upload artifacts. This document makes no claim that `0.4.2` (or any
 older tag) is available on Maven Central.
 
-Installation examples use the `0.4.1` source-release coordinates consistently. To reproduce them
-without assuming a registry deployment, build a clean `v0.4.1` checkout with
+Installation examples use the `0.4.2` source-release coordinates consistently. To reproduce them
+without assuming a registry deployment, build a clean `v0.4.2` checkout with
 `./mill __.publishLocal` and enable local Ivy resolution in the consumer (`ivy2Local` in Coursier;
 sbt includes local Ivy by default). Changes after that tag use the version actually reported by
 `./mill show core.publishVersion`; use the same version for all four artifacts. Documentation on

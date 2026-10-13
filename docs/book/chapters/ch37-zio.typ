@@ -46,10 +46,10 @@ Chapter 2:
 #example("The dependency. `zio` and `zio-streams` come in transitively; the natives are still yours to choose.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.1",
-  mvn"com.worxbend::scalacv-zio:0.4.1",
+  mvn"com.worxbend::scalacv:0.4.2",
+  mvn"com.worxbend::scalacv-zio:0.4.2",
   // The detector examples later in this chapter need Cascades, which lives here.
-  mvn"com.worxbend::scalacv-vision:0.4.1",
+  mvn"com.worxbend::scalacv-vision:0.4.2",
   mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
   mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
 )

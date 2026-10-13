@@ -1,6 +1,6 @@
 package scalacv.vision
 
-import org.opencv.core.{Core, Mat, MatOfDMatch, MatOfKeyPoint}
+import org.opencv.core.{Core, DMatch, Mat, MatOfDMatch, MatOfKeyPoint}
 import org.opencv.features2d.{BFMatcher, ORB}
 
 import scalacv.*
@@ -62,12 +62,28 @@ object Features:
     * best), keeps those within `maxDistance`, and returns them best (smallest distance) first.
     */
   def matches(a: Descriptors, b: Descriptors, maxDistance: Float = 64f): Seq[FeatureMatch] =
-    if a.isEmpty || b.isEmpty then Seq.empty
+    withMatches(a, b): matches =>
+      matches.toSeq
+        .filter(_.distance <= maxDistance)
+        .sortBy(_.distance)
+        .map(m => FeatureMatch(m.queryIdx, m.trainIdx, m.distance))
+
+  /** Counts the same cross-checked correspondences as `matches(a, b, maxDistance).size`, without sorting or
+    * constructing the immutable [[FeatureMatch]] results. Both descriptor sets are borrowed, not consumed.
+    */
+  def countMatches(a: Descriptors, b: Descriptors, maxDistance: Float = 64f): Int =
+    withMatches(a, b): matches =>
+      var count = 0
+      var i = 0
+      while i < matches.length do
+        if matches(i).distance <= maxDistance then count += 1
+        i += 1
+      count
+
+  private def withMatches[A](a: Descriptors, b: Descriptors)(f: Array[DMatch] => A): A =
+    if a.isEmpty || b.isEmpty then f(Array.empty[DMatch])
     else
       Managed(BFMatcher.create(Core.NORM_HAMMING, true)).use: matcher =>
         Managed.use(MatOfDMatch()): dm =>
           Cv.orThrow("BFMatcher.match")(matcher.`match`(a.descriptors.get, b.descriptors.get, dm))
-          dm.toArray.toSeq
-            .filter(_.distance <= maxDistance)
-            .sortBy(_.distance)
-            .map(m => FeatureMatch(m.queryIdx, m.trainIdx, m.distance))
+          f(dm.toArray)

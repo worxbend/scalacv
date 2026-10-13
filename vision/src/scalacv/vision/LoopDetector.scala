@@ -73,7 +73,7 @@ final class LoopDetector private (
       keyframes.iterator
         .takeWhile(_._1 < nextId - recentExclusion)
         .foreach: (id, kf) =>
-          val count = Features.matches(current, kf).size
+          val count = Features.countMatches(current, kf)
           if count > bestMatches then
             bestMatches = count
             bestIndex = id

@@ -36,7 +36,7 @@ rather than buried in a footnote.
 
 #sect("What each group needs on the classpath")
 
-Every operation in this appendix ships in the core artifact, `com.worxbend::scalacv:0.4.1`, plus the
+Every operation in this appendix ships in the core artifact, `com.worxbend::scalacv:0.4.2`, plus the
 platform natives from Chapter 2. There is exactly one exception, marked in its row: `img.draw(picture)`
 in the Drawing table comes from `com.worxbend::scalacv-graphs`. Nothing here needs
 `scalacv-vision`; the detector verbs that live there --- `faces`, `qrCodes`, `arucoMarkers`,

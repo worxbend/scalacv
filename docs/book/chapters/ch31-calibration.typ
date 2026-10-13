@@ -106,7 +106,7 @@ This chapter straddles two artifacts, and it is worth being exact about which. `
 needs a camera model, and nothing above it should have to be on the classpath to describe a lens.
 `ChessboardPattern`, `Calibration`, `Calibration.findCorners`, `Calibration.fromChessboard` and the
 `undistort(calibration)` extension are all in `vision/src/scalacv/vision/Calibration.scala`, so *producing* a
-calibration needs `com.worxbend::scalacv-vision:0.4.1` on the classpath beside the core dependency of
+calibration needs `com.worxbend::scalacv-vision:0.4.2` on the classpath beside the core dependency of
 Chapter 2 --- the same artifact Chapters 24 through 30 already asked for. Add
 `import scalacv.vision.*` alongside `import scalacv.*`; the optional module has its own package.
 

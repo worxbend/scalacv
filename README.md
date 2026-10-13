@@ -30,22 +30,22 @@
 
 ## 🚀 Quick start
 
-**Publication status:** the latest repository tag is `v0.4.1`; the coordinates below refer to that
+**Publication status:** the latest repository tag is `v0.4.2`; the coordinates below refer to that
 source release, not a verified Central deployment. Central upload and attestation are disabled,
-and the release workflow creates drafts. For a reproducible local install, use a clean `v0.4.1`
+and the release workflow creates drafts. For a reproducible local install, use a clean `v0.4.2`
 checkout and run `./mill __.publishLocal`; configure your build to resolve local Ivy artifacts
 (e.g. `ivy2Local` in Coursier). sbt uses local Ivy by default; a Maven consumer instead needs
 `./mill __.publishM2Local`. See [RELEASING.md](RELEASING.md) before relying on remote availability.
 Unreleased fixes in this checkout require its actual `./mill show core.publishVersion`, not the
-`0.4.1` coordinates. All four module versions must match.
+`0.4.2` coordinates. All four module versions must match.
 
 ```scala
 // build.mill  (or the equivalent for your build tool)
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.1",         // the OpenCV wrapping: Image, Managed, filters, contours…
+  mvn"com.worxbend::scalacv:0.4.2",         // the OpenCV wrapping: Image, Managed, filters, contours…
   // Optional layers, each depending only on the core — add the ones you use:
-  //   mvn"com.worxbend::scalacv-vision:0.4.1"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
-  //   mvn"com.worxbend::scalacv-graphs:0.4.1"  // the Picture scene graph, charts, GIF animation
+  //   mvn"com.worxbend::scalacv-vision:0.4.2"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
+  //   mvn"com.worxbend::scalacv-graphs:0.4.2"  // the Picture scene graph, charts, GIF animation
 
   // Natives for YOUR platform. This project keeps classifiers out of its platform-neutral
   // published POM, so this line is yours to pick — see "Why two lines?" below.

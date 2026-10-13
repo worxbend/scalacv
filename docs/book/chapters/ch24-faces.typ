@@ -27,7 +27,7 @@ catching.
 
 Both detectors live in `scalacv-vision`, not in the core artifact --- `Cascades.scala` and
 `FaceDetect.scala` are both in that module --- so every listing in this chapter needs
-`com.worxbend::scalacv-vision:0.4.1` on the classpath beside the core dependency of Chapter 2. The
+`com.worxbend::scalacv-vision:0.4.2` on the classpath beside the core dependency of Chapter 2. The
 vision package is `scalacv.vision`: add `import scalacv.vision.*` for `detectHaar`, `faces` and
 `markFaces`, alongside `import scalacv.*` for core.
 

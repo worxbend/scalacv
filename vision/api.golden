@@ -952,6 +952,8 @@ object scalacv.vision.FeatureMatch
 object scalacv.vision.Features
   extends java.lang.Object
   implements java.io.Serializable
+  def countMatches$default$3(): float
+  def countMatches(scalacv.vision.Descriptors, scalacv.vision.Descriptors, float): int
   def detect$default$2(): int
   def detect(scalacv.Image, int): scalacv.vision.Descriptors
   def matches$default$3(): float

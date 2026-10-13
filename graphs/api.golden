@@ -19,6 +19,28 @@ abstract class scalacv.graphs.RenderPrimitive
   extends java.lang.Object
   implements scala.Product, scala.reflect.Enum
   def <init>(): void
+class scalacv.graphs.TextMetricCache.Key
+  extends java.lang.Object
+  implements java.io.Serializable, scala.Product
+  def <init>(scalacv.graphs.TextMetricCache, java.lang.String, scalacv.Font, long): void
+  def _1(): java.lang.String
+  def _2(): scalacv.Font
+  def _3(): long
+  def canEqual(java.lang.Object): boolean
+  def copy$default$1(): java.lang.String
+  def copy$default$2(): scalacv.Font
+  def copy$default$3(): long
+  def copy(java.lang.String, scalacv.Font, long): scalacv.graphs.TextMetricCache$Key
+  def equals(java.lang.Object): boolean
+  def font(): scalacv.Font
+  def hashCode(): int
+  def productArity(): int
+  def productElement(int): java.lang.Object
+  def productElementName(int): java.lang.String
+  def productPrefix(): java.lang.String
+  def scaleBits(): long
+  def text(): java.lang.String
+  def toString(): java.lang.String
 final class scalacv.graphs.Affine
   extends java.lang.Object
   implements java.io.Serializable, scala.Product
@@ -300,6 +322,8 @@ final class scalacv.graphs.PictureLayout
   def beside$default$3(): double
   def beside(scalacv.graphs.Picture, scalacv.graphs.Picture, double): scalacv.graphs.Picture
   def bounds(scalacv.graphs.Picture): scala.Option<scalacv.graphs.Bounds>
+  def column$default$2(): double
+  def column(scala.collection.immutable.Seq<scalacv.graphs.Picture>, double): scalacv.graphs.Picture
   def grid$default$3(): double
   def grid(scala.collection.immutable.Seq<scalacv.graphs.Picture>, int, double): scalacv.graphs.Picture
   def label$default$3(): scalacv.graphs.Color
@@ -308,6 +332,8 @@ final class scalacv.graphs.PictureLayout
   def label$default$6(): double
   def label$default$7(): scalacv.Font
   def label(java.lang.String, scalacv.Point, scalacv.graphs.Color, scalacv.graphs.Color, int, double, scalacv.Font): scalacv.graphs.Picture
+  def row$default$2(): double
+  def row(scala.collection.immutable.Seq<scalacv.graphs.Picture>, double): scalacv.graphs.Picture
   def textMeasurer(): scalacv.graphs.TextMeasurer
 final class scalacv.graphs.PictureStyle
   extends java.lang.Object
@@ -435,6 +461,16 @@ final class scalacv.graphs.StylePatch
   def strokeColor(): scala.Option<scala.Option<scalacv.graphs.Color>>
   def strokeWidth(): scala.Option<java.lang.Object>
   def toString(): java.lang.String
+final class scalacv.graphs.TextMetricCache
+  extends java.lang.Object
+  implements scalacv.graphs.TextMeasurer
+  def <init>(scalacv.graphs.TextMeasurer, int, int): void
+  def clear(): void
+  def entryCount(): int
+  def maxChars(): int
+  def maxEntries(): int
+  def measure(java.lang.String, scalacv.Font, double): scalacv.TextMetrics
+  def retainedChars(): long
 object scalacv.graphs.Affine
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -759,6 +795,19 @@ object scalacv.graphs.TextMeasurer
   extends java.lang.Object
   implements java.io.Serializable
   def openCv(): scalacv.graphs.TextMeasurer
+object scalacv.graphs.TextMetricCache
+  extends java.lang.Object
+  implements java.io.Serializable
+  def <init>$default$2(): int
+  def <init>$default$3(): int
+object scalacv.graphs.TextMetricCache.Key
+  extends java.lang.Object
+  implements java.io.Serializable, scala.deriving.Mirror$Product
+  def <init>(scalacv.graphs.TextMetricCache): void
+  def apply(java.lang.String, scalacv.Font, long): scalacv.graphs.TextMetricCache$Key
+  def fromProduct(scala.Product): scalacv.graphs.TextMetricCache$Key
+  def toString(): java.lang.String
+  def unapply(scalacv.graphs.TextMetricCache$Key): scalacv.graphs.TextMetricCache$Key
 trait scalacv.graphs.Picture
   def above$default$2(): double
   def above(scalacv.graphs.Picture, double): scalacv.graphs.Picture

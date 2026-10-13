@@ -941,6 +941,13 @@ final class scalacv.Thresholded
   def productElementName(int): java.lang.String
   def productPrefix(): java.lang.String
   def toString(): java.lang.String
+final class scalacv.Undistorter
+  extends java.lang.Object
+  implements java.lang.AutoCloseable
+  def <init>(scalacv.Size, scalacv.Managed<org.opencv.core.Mat>, scalacv.Managed<org.opencv.core.Mat>): void
+  def apply(org.opencv.core.Mat): scalacv.Managed<org.opencv.core.Mat>
+  def close(): void
+  def size(): scalacv.Size
 final class scalacv.Video.FrameIterator
   extends java.lang.Object
   implements scala.collection.Iterator<scalacv.BorrowedMat>
@@ -1466,6 +1473,12 @@ object scalacv.Mats
   def readMatrix(org.opencv.core.Mat, int, int): scala.collection.immutable.Seq<scala.collection.immutable.Seq<java.lang.Object>>
   def require8Bit3Channel(java.lang.String, org.opencv.core.Mat): void
   def requireKernel(java.lang.String, scalacv.Size, boolean): void
+object scalacv.ModelCache
+  extends java.lang.Object
+  implements java.io.Serializable
+  def checkInterrupted(): void
+  def publish(java.nio.file.Path, java.nio.file.Path): java.nio.file.Path
+  def withLock<A>(java.nio.file.Path, java.lang.String, java.lang.String, scala.Function1<java.nio.file.Path, A>): A
 object scalacv.ModelSpec
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Product
@@ -1478,6 +1491,7 @@ object scalacv.Models
   extends java.lang.Object
   implements java.io.Serializable
   def fetch(scalacv.ModelSpec, java.nio.file.Path): scala.util.Either<scalacv.CvError, java.nio.file.Path>
+  def fetchCached(scalacv.ModelSpec, java.nio.file.Path): scala.util.Either<scalacv.CvError, java.nio.file.Path>
 object scalacv.MorphOp
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1846,6 +1860,12 @@ object scalacv.Thresholded
   def fromProduct(scala.Product): scalacv.Thresholded
   def toString(): java.lang.String
   def unapply(scalacv.Thresholded): scalacv.Thresholded
+object scalacv.Undistorter
+  extends java.lang.Object
+  implements java.io.Serializable
+  def prepare(scalacv.Intrinsics, scalacv.Size): scalacv.Undistorter
+  def prepareObserved(scalacv.Intrinsics, scalacv.Size, scala.Function1<org.opencv.core.Mat, scala.runtime.BoxedUnit>): scalacv.Undistorter
+  def scalacv$Undistorter$$$stripeHeight(int, int): int
 object scalacv.Video
   extends java.lang.Object
   implements java.io.Serializable

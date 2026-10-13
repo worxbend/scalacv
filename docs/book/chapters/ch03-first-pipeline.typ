@@ -422,8 +422,8 @@ import mill.*, scalalib.*
 object scan extends ScalaModule {
   def scalaVersion = "3.3.8"
   def mvnDeps = Seq(
-    mvn"com.worxbend::scalacv:0.4.1",
-    mvn"com.worxbend::scalacv-vision:0.4.1",   // faces, QR, markers
+    mvn"com.worxbend::scalacv:0.4.2",
+    mvn"com.worxbend::scalacv-vision:0.4.2",   // faces, QR, markers
     mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
     mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
   )
@@ -448,8 +448,8 @@ For a single file, scala-cli needs no build definition at all --- the directives
 #example("The same program as one scala-cli script.")[
 ```scala
 //> using scala 3.3.8
-//> using dep com.worxbend::scalacv:0.4.1
-//> using dep com.worxbend::scalacv-vision:0.4.1
+//> using dep com.worxbend::scalacv:0.4.2
+//> using dep com.worxbend::scalacv-vision:0.4.2
 //> using dep org.bytedeco:opencv:4.13.0-1.5.13,classifier=linux-x86_64
 //> using dep org.bytedeco:openblas:0.3.31-1.5.13,classifier=linux-x86_64
 
