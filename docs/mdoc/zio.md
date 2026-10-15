@@ -21,11 +21,11 @@ same safety without the dependency.
 ## Install
 
 Add it alongside your natives. See [Getting started](/getting-started) for local installation and
-the distinction between source tag 0.4.2 and unverified Central availability. The APIs below,
-including the effect-aware ownership helpers added after 0.4.1, are included in 0.4.2:
+the distinction between source tag 0.4.3 and unverified Central availability. The APIs below,
+including the effect-aware ownership helpers added after 0.4.1, are included in 0.4.3:
 
 ```scala
-mvn"com.worxbend::scalacv-zio:0.4.2"
+mvn"com.worxbend::scalacv-zio:0.4.3"
 ```
 
 Everything below assumes these imports; in mdoc they are established once and persist across the

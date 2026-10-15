@@ -30,22 +30,20 @@
 
 ## 🚀 Quick start
 
-**Publication status:** the latest repository tag is `v0.4.2`; the coordinates below refer to that
-source release, not a verified Central deployment. Central upload and attestation are disabled,
-and the release workflow creates drafts. For a reproducible local install, use a clean `v0.4.2`
-checkout and run `./mill __.publishLocal`; configure your build to resolve local Ivy artifacts
-(e.g. `ivy2Local` in Coursier). sbt uses local Ivy by default; a Maven consumer instead needs
-`./mill __.publishM2Local`. See [RELEASING.md](RELEASING.md) before relying on remote availability.
-Unreleased fixes in this checkout require its actual `./mill show core.publishVersion`, not the
-`0.4.2` coordinates. All four module versions must match.
+The coordinates below target **0.4.3**. Release tags run CI-gated publishing to Maven Central
+and GitHub Packages; the release workflow verifies remote artifacts before creating a public
+GitHub release. See [RELEASING.md](RELEASING.md) for publication status and repository access.
+To build locally, use a clean `v0.4.3` checkout and run `./mill __.publishLocal` (local Ivy) or
+`./mill __.publishM2Local` (local Maven). Unreleased changes use the version reported by
+`./mill show core.publishVersion`. All four module versions must match.
 
 ```scala
 // build.mill  (or the equivalent for your build tool)
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.2",         // the OpenCV wrapping: Image, Managed, filters, contours…
+  mvn"com.worxbend::scalacv:0.4.3",         // the OpenCV wrapping: Image, Managed, filters, contours…
   // Optional layers, each depending only on the core — add the ones you use:
-  //   mvn"com.worxbend::scalacv-vision:0.4.2"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
-  //   mvn"com.worxbend::scalacv-graphs:0.4.2"  // the Picture scene graph, charts, GIF animation
+  //   mvn"com.worxbend::scalacv-vision:0.4.3"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
+  //   mvn"com.worxbend::scalacv-graphs:0.4.3"  // the Picture scene graph, charts, GIF animation
 
   // Natives for YOUR platform. This project keeps classifiers out of its platform-neutral
   // published POM, so this line is yours to pick — see "Why two lines?" below.

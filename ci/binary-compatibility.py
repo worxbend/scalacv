@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINES = {
     "v0.4.0": "3714fc10c1272fa29c23de22b35f2cf004c64d10",
     "v0.4.1": "ce99927559701a72702cd887a90821fb847fdb73",
+    "v0.4.2": "6a6e3040a890f2724a539834ea51d8e3a2b23d5c",
 }
 MODULES = ("core", "vision", "graphs", "zio")
 VERSION = "0.23.1"

@@ -239,7 +239,8 @@ trait ScalacvPublishModule extends ScalacvModule with PublishModule {
    * com.worxbend:core_3 and com.worxbend:zio_3. */
   def artifactName: T[String]
 
-  def publishVersion = Task(VcsVersion.calcVcsState(Task.log).format())
+  // Git refs and dirty state are external inputs: re-read them even when out/ is cached.
+  def publishVersion = Task.Input(VcsVersion.calcVcsState(Task.log).format())
 
   def pomSettings = PomSettings(
     description = "A Scala 3 wrapper for the OpenCV 4.14 Java API",

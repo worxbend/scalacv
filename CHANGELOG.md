@@ -6,6 +6,14 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-10-15
+
+### Build
+- Added CI-gated publishing of all four libraries to GitHub Packages and Sonatype Maven Central,
+  with exact tag/version/changelog checks, remote artifact verification, Java 17/Scala 3.3.8
+  consumer checks and Central build-provenance attestations.
+- Made VCS-derived publish versions track Git changes when build outputs are cached.
+
 ## [0.4.2] — 2026-10-13
 
 ### Added

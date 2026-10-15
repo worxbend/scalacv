@@ -1,0 +1,78 @@
+name: Publish GitHub Packages
+
+on:
+  push:
+    tags: ["v*"]
+  # Select a release tag when dispatching, just as for the Central workflow.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Require a release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "$GITHUB_REF_TYPE" = tag
+
+  validate:
+    needs: tag
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      MILL_JVM_ID: zulu:25
+      SCALACV_MAVEN_REPO: https://maven.pkg.github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate.outputs.validated-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout is the validated tag commit
+        env:
+          VALIDATED_SHA: ${{ needs.validate.outputs.validated-sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          test -n "$VALIDATED_SHA"
+          test "$actual" = "$VALIDATED_SHA"
+          test "$actual" = "$GITHUB_SHA"
+      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - name: Tag, changelog and all four publish versions agree
+        run: python3 ci/validate-release.py
+      - name: Publish all four libraries to GitHub Packages
+        timeout-minutes: 25
+        env:
+          MILL_MAVEN_USERNAME: ${{ github.actor }}
+          MILL_MAVEN_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./mill mill.javalib.MavenPublishModule/ \
+            --publishArtifacts '{core,vision,graphs,zio}.publishArtifacts' \
+            --releaseUri "$SCALACV_MAVEN_REPO" \
+            --snapshotUri "$SCALACV_MAVEN_REPO"
+      - name: Download and verify every GitHub Packages release file
+        timeout-minutes: 10
+        env:
+          GITHUB_PACKAGES_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 ci/verify-published.py "$SCALACV_MAVEN_REPO"
+      - uses: coursier/setup-action@648df969f41ef15fda2baba8b37f9fa3d16390a3 # v3
+        with:
+          jvm: zulu:17
+      - name: Java 17 and Scala 3.3.8 consumers resolve from GitHub Packages
+        timeout-minutes: 10
+        env:
+          COURSIER_CREDENTIALS: maven.pkg.github.com ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}
+        run: bash ci/consumer-smoke/run.sh "${GITHUB_REF_NAME#v}" "$SCALACV_MAVEN_REPO"

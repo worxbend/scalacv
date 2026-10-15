@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Linux x86-64 packaged consumers; first publish all four artifacts to local Ivy.
-# Usage: bash ci/consumer-smoke/run.sh "$(./mill show core.publishVersion | tr -d '\"')"
+# Linux x86-64 packaged consumers, using local Ivy or an explicit remote Maven repository.
+# Usage: bash ci/consumer-smoke/run.sh VERSION [REPOSITORY]
 set -euo pipefail
-VERSION=${1:?pass the exact locally published ScalaCV version}
+VERSION=${1:?pass the exact published ScalaCV version}
+REPOSITORY=${2:-ivy2Local}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-${RUNNER_TEMP:-$HOME/.cache}}/scalacv-consumer.XXXXXXXX")
 export COURSIER_CACHE="$WORK/cache"
 printf 'Consumer evidence: %s\n' "$WORK"
 java -version
-CP=$(cs fetch --classpath -r ivy2Local \
+CP=$(cs fetch --classpath --no-default -r "$REPOSITORY" -r https://repo.maven.apache.org/maven2 \
   "com.worxbend:scalacv_3:$VERSION" \
   "com.worxbend:scalacv-vision_3:$VERSION" \
   "com.worxbend:scalacv-graphs_3:$VERSION" \

@@ -5,6 +5,14 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      validated-sha:
+        description: Exact commit that passed every CI gate
+        value: ${{ jobs.validated.outputs.sha }}
+
+permissions:
+  contents: read
 
 # Mill 1.1.7 ignores JAVA_HOME and MILL_JVM_VERSION when it runs modules, and the
 # //| mill-jvm-version: header in build.mill would otherwise freeze every rung of the
@@ -12,10 +20,23 @@ on:
 # actions/setup-java is deliberately absent from the JDK matrix below — it cannot
 # steer Mill.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  release-tooling:
+    name: Release tooling checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s ci/tests -v
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+      - run: bash -n ci/consumer-smoke/run.sh
+
   build:
     name: JDK ${{ matrix.jdk }} · ubuntu
     runs-on: ubuntu-latest
@@ -280,3 +301,20 @@ jobs:
           set -euo pipefail
           VER=$(./mill show core.publishVersion | tr -d '"')
           bash ci/consumer-smoke/run.sh "$VER"
+
+  validated:
+    name: Record validated commit
+    needs: [release-tooling, build, leak-check, style, natives, publish-shape, binary-compatibility, consumer-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - id: commit
+        run: |
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "$GITHUB_SHA"
+          printf 'sha=%s\n' "$actual" >> "$GITHUB_OUTPUT"

@@ -1,101 +1,124 @@
 name: Release
 
-# Tag-driven verification and DRAFT GitHub release only. Central upload and attestation
-# below are disabled; this workflow does not stage, sign or publish registry artifacts.
-# Enabling publication requires a separate reviewed change; see RELEASING.md.
 on:
   push:
     tags: ["v*"]
+  # Select a release tag when dispatching; branches are rejected before CI starts.
   workflow_dispatch:
 
 permissions:
-  contents: write # create the GitHub Release from the tag
-  id-token: write # OIDC for build-provenance attestation (when publish is enabled)
-  attestations: write
+  contents: read
+
+concurrency:
+  group: central-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Test before publish
+  tag:
+    name: Require a release tag
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      MILL_JVM_ID: zulu:25
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
-      - name: Historical binary compatibility
-        run: python3 ci/binary-compatibility.py
-      - name: Test
-        # "master was green" is not a gate: a tag can be pushed on any commit, and VcsVersion
-        # versions whatever it sits on, so the release runs the suite itself. `+`-separated,
-        # for the same reason as ci.yml's Test step.
-        run: ./mill core.test + vision.test + graphs.test + zio.test + examples.test
+      - run: test "$GITHUB_REF_TYPE" = tag
+
+  validate:
+    needs: tag
+    uses: ./.github/workflows/ci.yml
 
   publish:
-    needs: verify
+    needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       MILL_JVM_ID: zulu:25
-      # TODO(release): add these as repository secrets before the first tag.
-      MILL_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-      MILL_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-      MILL_PGP_SECRET_BASE64: ${{ secrets.PGP_SECRET_BASE64 }}
-      MILL_PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0 # VcsVersion needs tags to compute the version
+          ref: ${{ needs.validate.outputs.validated-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout is the validated tag commit
+        env:
+          VALIDATED_SHA: ${{ needs.validate.outputs.validated-sha }}
+        run: |
+          actual=$(git rev-parse HEAD)
+          test -n "$VALIDATED_SHA"
+          test "$actual" = "$VALIDATED_SHA"
+          test "$actual" = "$GITHUB_SHA"
+      - name: Publishing credentials are present
+        env:
+          MILL_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          MILL_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          MILL_PGP_SECRET_BASE64: ${{ secrets.MILL_PGP_SECRET_BASE64 }}
+        run: |
+          missing=""
+          for variable in MILL_SONATYPE_USERNAME MILL_SONATYPE_PASSWORD MILL_PGP_SECRET_BASE64; do
+            [ -n "${!variable}" ] || missing="$missing $variable"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing publishing credentials:$missing (see RELEASING.md)"
+            exit 1
+          fi
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - name: Tag, changelog and all four publish versions agree
+        run: python3 ci/validate-release.py
+      - name: Publish signed libraries to Maven Central
+        timeout-minutes: 25
+        env:
+          MILL_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          MILL_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          MILL_PGP_SECRET_BASE64: ${{ secrets.MILL_PGP_SECRET_BASE64 }}
+          MILL_PGP_PASSPHRASE: ${{ secrets.MILL_PGP_PASSPHRASE }}
+        run: >-
+          ./mill mill.javalib.SonatypeCentralPublishModule/
+          --publishArtifacts '{core,vision,graphs,zio}.publishArtifacts'
+          --shouldRelease true --awaitTimeout 1200000
+      - name: Verify all public Central release files
+        timeout-minutes: 20
+        run: python3 ci/verify-published.py https://repo.maven.apache.org/maven2
+      - name: Attest the verified release jars
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: |
+            out/core/jar.dest/*.jar
+            out/core/sourceJar.dest/*.jar
+            out/core/docJar.dest/*.jar
+            out/vision/jar.dest/*.jar
+            out/vision/sourceJar.dest/*.jar
+            out/vision/docJar.dest/*.jar
+            out/graphs/jar.dest/*.jar
+            out/graphs/sourceJar.dest/*.jar
+            out/graphs/docJar.dest/*.jar
+            out/zio/jar.dest/*.jar
+            out/zio/sourceJar.dest/*.jar
+            out/zio/docJar.dest/*.jar
+      - uses: coursier/setup-action@648df969f41ef15fda2baba8b37f9fa3d16390a3 # v3
+        with:
+          jvm: zulu:17
+      - name: Java 17 and Scala 3.3.8 consumers resolve from Central
+        timeout-minutes: 10
+        run: bash ci/consumer-smoke/run.sh "${GITHUB_REF_NAME#v}" https://repo.maven.apache.org/maven2
 
-      - name: Guard — exactly the four published modules may publish
-        # Assert the exact *set*, not a count — the same check ci.yml's publish-shape leg runs. A count would
-        # wave through a rename or a fifth module that silently ships; a new publishable module must be a
-        # deliberate, failing-until-updated edit here (and in RELEASING.md). examples/examples-gui must never
-        # appear, which is why they do not extend PublishModule.
-        run: |
-          got=$(./mill resolve "__:PublishModule.publishArtifacts" \
-            | grep -E "^[a-z][a-zA-Z0-9-]*\.publishArtifacts$" \
-            | sed -E 's/\.publishArtifacts$//' \
-            | sort | paste -sd' ' -)
-          want="core graphs vision zio"
-          echo "publishable modules: $got"
-          test "$got" = "$want"
-
-      - name: Changelog has an entry for this tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        # Step 2 of RELEASING.md — moving [Unreleased] under a dated version heading — is easy to forget and
-        # silent when forgotten. The tag is the source of truth (VcsVersion), so require a matching heading.
-        run: |
-          v="${GITHUB_REF_NAME#v}"
-          esc="${v//./\\.}"
-          grep -qE "^## \[?${esc}\]?" CHANGELOG.md \
-            || { echo "CHANGELOG.md has no '## [$v]' heading — move [Unreleased] under it first (RELEASING.md step 2)"; exit 1; }
-
-      - name: Report the version being released
-        run: ./mill show core.publishVersion
-
-      # Uncomment once the secrets above are populated. Staged as USER_MANAGED so the release is
-      # inspected in the Central Portal before it goes live (RELEASING.md).
-      # - name: Publish to Central (staged)
-      #   run: ./mill mill.javalib.SonatypeCentralPublishModule/publishAll --publishArtifacts __.publishArtifacts --shouldRelease false
-
-      # Attest provenance for the signed jars once publishing is live. It needs the built artifacts on disk,
-      # so it belongs immediately after the publish step above — enable both together. `subject-path` globs the
-      # jars Mill assembles under out/. Provenance lets a consumer verify the jar came from this tag and repo.
-      # - name: Attest build provenance
-      #   uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-      #   with:
-      #     subject-path: "out/**/{jar,sourceJar,docJar}.dest/*.jar"
-
+  release:
+    name: Announce verified Central release
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate.outputs.validated-sha }}
+          persist-credentials: false
       - name: Create the GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        # A DRAFT until the Central publish step above is enabled: a pushed tag must never announce a
-        # public release whose artifacts do not exist on Central. Once publishing is live, make release
-        # creation the final step after publishAll and drop the draft flag.
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
-          draft: true
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
