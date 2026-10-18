@@ -28,8 +28,9 @@ final class Managed[A] private (initial: A, releaser: Releasable[A]) extends Aut
 
   private val ref = AtomicReference[A | Null](initial)
 
-  // Region membership is explicit and follows moves; native access remains sequential.
-  private[scalacv] var region: Option[NativeScope] = None
+  // Region membership is explicit and follows moves; native access remains sequential. Volatile because a
+  // scope closing on one thread clears it while another thread may still be moving or releasing the handle.
+  @volatile private[scalacv] var region: Option[NativeScope] = None
 
   private def unregister(): Unit =
     region.foreach(_.forget(this))

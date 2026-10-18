@@ -496,6 +496,8 @@ object Image:
     * }}}
     *
     * Do not let the `Image` (or one derived from it) escape `use`; it is closed when the block returns.
+    * Registering copies and successors with the scope is thread-safe; native access to any one handle is
+    * still single-owner.
     *
     * The whole `use` body runs inside [[Cv.attempt]], so a [[CvError.NativeCall]] thrown by a transform in
     * the chain (`gray`/`canny`/…) comes back as a `Left` rather than escaping past the `Either` — the return
