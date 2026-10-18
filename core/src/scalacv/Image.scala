@@ -350,7 +350,9 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
 
   // -- Drawing: mutate in place (we own the Mat), consume this Image -------------------------------
 
-  /** Draws an axis-aligned rectangle. Pass [[Thickness.Filled]] for a solid block. */
+  /** Draws an axis-aligned rectangle. Pass [[Thickness.Filled]] for a solid block. `color` defaults to
+    * `Scalar.White` like the other geometry primitives.
+    */
   def drawRect(rect: Rect, color: Scalar = Scalar.White, thickness: Thickness = Thickness.Default): Image =
     paint(_.drawRect(rect, color, thickness))
 
@@ -375,7 +377,10 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   ): Image =
     paint(_.drawContours(contours, color, thickness))
 
-  /** Draws every rectangle in one pass — detector bounding boxes, motion regions, ROIs. */
+  /** Draws every rectangle in one pass — detector bounding boxes, motion regions, ROIs. `color` defaults to
+    * `Scalar.Green`, the detector-overlay colour used by `markFaces`/`drawTracks` — note the difference from
+    * [[drawRect]].
+    */
   def drawRects(
       rects: Seq[Rect],
       color: Scalar = Scalar.Green,

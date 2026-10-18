@@ -119,10 +119,11 @@ object CaptureOptions:
 /** What the backend claims about an open capture.
   *
   * Every field is a `CAP_PROP_*` query, and every one of them is advisory. A live camera usually reports
-  * `frameCount == 0` (or `-1`) because the question is meaningless; some containers report a `frameCount`
-  * that is off by a frame or two from what actually decodes; `fps` can be `0` for a camera that has not
-  * delivered a frame yet. Use these to size a [[org.opencv.videoio.VideoWriter]] or to show progress — never
-  * as a loop bound. The frame count that is true is the one `frames` hands you.
+  * `frameCount == 0` because the question is meaningless (backends that report `-1` are normalised to `0` by
+  * `Video.info`); some containers report a `frameCount` that is off by a frame or two from what actually
+  * decodes; `fps` can be `0` for a camera that has not delivered a frame yet. Use these to size a
+  * [[org.opencv.videoio.VideoWriter]] or to show progress — never as a loop bound. The frame count that is
+  * true is the one `frames` hands you.
   */
 final case class CaptureInfo(
     width: Int,
