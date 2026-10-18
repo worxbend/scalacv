@@ -1,8 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.bytedeco.javacpp.Pointer
 
 /** RSS-based leak assertions.

@@ -7,6 +7,7 @@ import _root_.zio.*
 import _root_.zio.test.*
 import org.opencv.core.{CvType, Mat, Scalar}
 import org.opencv.videoio.VideoCapture
+
 import scalacv.*
 
 object OwnershipSpec extends ZIOSpecDefault:

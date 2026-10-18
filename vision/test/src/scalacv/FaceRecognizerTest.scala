@@ -1,8 +1,8 @@
 package scalacv
 
-import scalacv.vision.*
-
 import java.nio.file.Files
+
+import scalacv.vision.*
 
 /** Face recognition: the embedding metrics and Gallery lookup (no model needed), load-error handling, and a
   * model-gated end-to-end smoke that runs only when SCALACV_SFACE_MODEL points to the SFace ONNX.

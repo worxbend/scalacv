@@ -1,9 +1,9 @@
 package scalacv
 
-import scalacv.vision.*
-
 import org.opencv.core as cv
 import org.opencv.core.{CvType, Mat}
+
+import scalacv.vision.*
 
 /** [[Pose]] estimation: the topologies, the two output-tensor decoders (fed synthetic tensors, so no model
   * file is needed), head pose from face landmarks, and skeleton drawing.

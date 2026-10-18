@@ -1,9 +1,9 @@
 package scalacv
 
-import scalacv.vision.*
-
-import org.opencv.core.{CvType, Mat}
 import org.opencv.core as cv
+import org.opencv.core.{CvType, Mat}
+
+import scalacv.vision.*
 
 /** Screen analysis: template matching and change detection on synthetic screenshots. */
 class ScreenTest extends munit.FunSuite:

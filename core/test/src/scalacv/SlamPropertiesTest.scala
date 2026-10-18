@@ -1,10 +1,9 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.scalacheck.Gen
 import org.scalacheck.Prop.{forAll, propBoolean}
+
+import scalacv.vision.*
 
 /** Invariant/property-style checks for the algorithm-heavy SLAM stack, complementing the example-based
   * [[MappingTest]] and [[NavigationTest]]. Where those assert one worked case, these hammer the invariants a

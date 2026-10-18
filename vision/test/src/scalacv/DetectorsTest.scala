@@ -1,12 +1,12 @@
 package scalacv
 
-import scalacv.vision.*
-
 import scala.util.Using
 
 import org.opencv.core.{Core, CvType, Mat, Scalar as CvScalar, Size as CvSize}
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.QRCodeEncoder
+
+import scalacv.vision.*
 
 /** Round-trip tests. Every fixture is synthesised here — there is no image file in this repo and none may be
   * added — which for fiducials is the honest test anyway: OpenCV generates the marker, OpenCV reads it back,

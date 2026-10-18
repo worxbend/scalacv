@@ -3,13 +3,11 @@ package scalacv.zio
 import java.nio.file.Files
 
 import _root_.zio.*
-import _root_.zio.stream.*
 import _root_.zio.test.*
 import _root_.zio.test.Assertion.*
-
 import org.opencv.core.{CvType, Mat, Point as CvPoint, Scalar as CvScalar, Size as CvSize}
 import org.opencv.imgproc.Imgproc
-import org.opencv.videoio.{VideoCapture, VideoWriter, Videoio}
+import org.opencv.videoio.{VideoCapture, VideoWriter}
 
 import scalacv.*
 

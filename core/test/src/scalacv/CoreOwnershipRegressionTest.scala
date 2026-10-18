@@ -3,8 +3,8 @@ package scalacv
 import java.nio.file.Files
 
 import org.opencv.core.{CvException, CvType, Mat}
-import org.opencv.videoio.VideoCapture
 import org.opencv.objdetect.CascadeClassifier
+import org.opencv.videoio.VideoCapture
 
 private final class FailingBatchCapture extends VideoCapture:
   private var reads = 0

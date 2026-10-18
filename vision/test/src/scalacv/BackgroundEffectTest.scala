@@ -1,11 +1,11 @@
 package scalacv
 
-import scalacv.vision.*
-
 import java.nio.file.Files
 
-import org.opencv.core.{Core, CvType, Mat}
 import org.opencv.core as cv
+import org.opencv.core.{Core, CvType, Mat}
+
+import scalacv.vision.*
 
 /** Video-conferencing background effects and the segmentation-mask decode. Verified by construction — a
   * half-and-half mask must keep the person half and change only the background half.

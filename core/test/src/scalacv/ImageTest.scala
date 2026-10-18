@@ -1,13 +1,12 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import java.nio.file.Files
 
 import org.opencv.core as cv
 import org.opencv.core.{Core, CvType, Mat}
 import org.opencv.imgproc.Imgproc
+
+import scalacv.vision.*
 
 /** The high-level [[Image]] API: the fluent chain, and — the part that matters — its ownership discipline.
   *

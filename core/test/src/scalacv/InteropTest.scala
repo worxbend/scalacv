@@ -1,8 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import java.awt.image.BufferedImage
 import java.nio.file.{Files, Path}
 import java.security.MessageDigest
@@ -11,6 +8,8 @@ import scala.jdk.CollectionConverters.*
 import scala.util.Using
 
 import org.opencv.core.{Core, CvType, Mat}
+
+import scalacv.vision.*
 
 /** BufferedImage interop and the Models downloader (tested offline through file:// URLs). */
 class InteropTest extends munit.FunSuite:

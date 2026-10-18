@@ -1,11 +1,11 @@
 package scalacv
 
-import scalacv.graphs.*
-
 import java.nio.file.{Files, Path}
 
 import org.opencv.core.Core
 import org.opencv.imgcodecs.{Animation as CvAnimation, Imgcodecs}
+
+import scalacv.graphs.*
 
 /** The deepened graphics layer: new primitives, layout, colour palettes, richer charts, and GIF export. */
 class GraphicsDeepTest extends munit.FunSuite:

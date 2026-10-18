@@ -1,12 +1,12 @@
 package scalacv
 
-import scalacv.vision.*
-
 import java.nio.file.Files
 
 import org.bytedeco.javacpp.Loader
 import org.opencv.core.{CvType, Mat, Point as CvPoint, Scalar as CvScalar, Size as CvSize}
 import org.opencv.imgproc.Imgproc
+
+import scalacv.vision.*
 
 /** The point of this suite is the *loud* failure.
   *

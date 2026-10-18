@@ -1,8 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import java.io.RandomAccessFile
 import java.nio.file.{Files, Path}
 

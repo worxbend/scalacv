@@ -1,10 +1,10 @@
 package scalacv
 
-import scalacv.vision.*
-
 import org.opencv.core as cv
 import org.opencv.core.{CvType, Mat}
 import org.opencv.imgproc.Imgproc
+
+import scalacv.vision.*
 
 /** [[MotionDetector]] on synthetic frames: a static grey scene with a white square that we move. No camera
   * needed — the detector is fed hand-built [[Image]]s and, for the stream path, JPEG bytes.

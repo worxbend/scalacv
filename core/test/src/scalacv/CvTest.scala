@@ -1,8 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 /** The error policy of [[Cv.attempt]]: OpenCV's JNI shim throws a bare `java.lang.Exception` for failures
   * that are not `cv::Exception` (std::bad_alloc, std::out_of_range, unknown). Those must be captured as
   * `CvError.NativeCall`, while genuine programmer errors thrown as subclasses must still propagate.

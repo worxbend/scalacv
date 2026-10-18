@@ -1,8 +1,5 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import java.lang.reflect.{Constructor, Field, Method, Modifier, Type as JType}
 import java.net.URI
 import java.nio.charset.StandardCharsets

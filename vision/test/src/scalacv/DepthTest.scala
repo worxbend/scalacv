@@ -1,9 +1,9 @@
 package scalacv
 
-import scalacv.vision.*
-
 import org.opencv.core.{CvType, Mat, Point as CvPoint, Scalar as CvScalar}
 import org.opencv.imgproc.Imgproc
+
+import scalacv.vision.*
 
 /** Stereo depth and obstacle detection. `Obstacles.fromDisparity` is exercised on a hand-built disparity map
   * (brightness = nearness), which is deterministic; `StereoDepth.disparity` is checked for its output shape

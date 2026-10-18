@@ -1,16 +1,16 @@
 package scalacv
 
-import java.nio.file.{Files, Path}
-import java.nio.charset.StandardCharsets.UTF_8
-import java.security.MessageDigest
 import java.net.InetSocketAddress
-import java.util.concurrent.{Callable, CountDownLatch, Executors, FutureTask, TimeUnit}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Path}
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
-
-import com.sun.net.httpserver.{HttpExchange, HttpServer}
+import java.util.concurrent.{Callable, CountDownLatch, Executors, FutureTask, TimeUnit}
 
 import scala.jdk.CollectionConverters.*
 import scala.util.Using
+
+import com.sun.net.httpserver.{HttpExchange, HttpServer}
 
 class ModelCacheTest extends munit.FunSuite:
   private def withDirectory[A](body: Path => A): A =

@@ -1,8 +1,8 @@
 package scalacv
 
-import org.opencv.core.{CvType, Mat}
-
 import scala.util.Using
+
+import org.opencv.core.{CvType, Mat}
 
 import scalacv.vision.*
 

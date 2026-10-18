@@ -1,8 +1,8 @@
 package scalacv
 
-import scalacv.vision.*
-
 import org.opencv.core.{CvType, Mat}
+
+import scalacv.vision.*
 
 class VisionNumericalRegressionTest extends munit.FunSuite:
 

@@ -2,10 +2,9 @@ package scalacv
 
 import java.nio.file.{Files, Path}
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.opencv.core.{CvType, Mat}
+
+import scalacv.vision.*
 
 /** Native-leak regression gate. Each test drives a workload a few hundred times and asserts process RSS stays
   * bounded — the signal that sees `org.opencv.core.Mat` buffers (see [[LeakAssertions]]). This suite owns its

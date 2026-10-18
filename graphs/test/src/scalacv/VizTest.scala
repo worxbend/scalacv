@@ -1,8 +1,8 @@
 package scalacv
 
-import scalacv.graphs.*
-
 import java.nio.file.Files
+
+import scalacv.graphs.*
 
 /** Data-visualisation charts and animation, on top of the Picture layer. */
 class VizTest extends munit.FunSuite:

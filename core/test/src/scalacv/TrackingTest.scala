@@ -1,13 +1,12 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.opencv.core as cv
 import org.opencv.core.{CvType, Mat}
 import org.opencv.imgproc.Imgproc
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
+
+import scalacv.vision.*
 
 /** Object tracking: IoU, the Kalman smoother, single-object CSRT tracking, and SORT-lite identity. */
 class TrackingTest extends munit.ScalaCheckSuite:

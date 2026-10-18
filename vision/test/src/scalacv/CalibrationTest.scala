@@ -1,11 +1,11 @@
 package scalacv
 
-import scalacv.vision.*
-
 import org.opencv.calib3d.Calib3d
 import org.opencv.core as cv
 import org.opencv.core.{Core, CvType, Mat}
 import org.opencv.imgproc.Imgproc
+
+import scalacv.vision.*
 
 /** Camera calibration from chessboard captures.
   *

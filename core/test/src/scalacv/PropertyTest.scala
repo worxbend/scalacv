@@ -1,10 +1,10 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
+
+import scalacv.graphs.*
+import scalacv.vision.*
 
 /** Property/invariant laws over generated Mat sizes and channel counts — the roundtrip and identity checks a
   * regression is most likely to break, complementing the example-based suites. Generators stay small and case

@@ -1,10 +1,7 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
-import org.opencv.objdetect.{ArucoDetector, CascadeClassifier, QRCodeDetector}
 import org.opencv.dnn.Net
+import org.opencv.objdetect.{ArucoDetector, CascadeClassifier, QRCodeDetector}
 
 /** Guards against the double free that every handle type is born with.
   *

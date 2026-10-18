@@ -1,13 +1,14 @@
 package scalacv
 
-import scalacv.vision.*
-
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Using
 
 import org.opencv.core.{CvType, Mat, Scalar as CvScalar}
+
+import scalacv.vision.*
 
 /** The model under test is *built here*, byte by byte.
   *

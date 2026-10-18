@@ -1,13 +1,13 @@
 package scalacv
 
-import scalacv.vision.*
-
 import java.nio.file.{Files, Path}
 import java.security.MessageDigest
 
 import org.opencv.core.{Core, CvType, Mat, Point as CvPoint, Scalar as CvScalar, Size as CvSize}
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.FaceDetectorYN
+
+import scalacv.vision.*
 
 /** Where the features of `FaceDetectTest.synthFace` were actually drawn, so the assertions can compare
   * YuNet's landmarks against ground truth instead of against themselves. Without this, a decode that read the

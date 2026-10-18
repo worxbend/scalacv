@@ -1,9 +1,8 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.opencv.core as cv
+
+import scalacv.vision.*
 
 /** The value types are plain data, but their `toCv`/`from` conversions are the binary boundary every detector
   * result crosses — `PublicApiTest` calls them out as surface — so the round-trips get a direct assertion

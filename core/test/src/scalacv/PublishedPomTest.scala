@@ -1,9 +1,7 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import javax.xml.parsers.DocumentBuilderFactory
+
 import org.w3c.dom.{Element, Node}
 
 /** Guards the published dependency set of every publishable module.

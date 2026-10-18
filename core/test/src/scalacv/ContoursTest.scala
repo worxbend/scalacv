@@ -1,12 +1,8 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import scala.util.Using
 
-import org.opencv.core.{CvType, Mat, Scalar as CvScalar}
-import org.opencv.core.Point as CvPoint
+import org.opencv.core.{CvType, Mat, Point as CvPoint, Scalar as CvScalar}
 import org.opencv.imgproc.Imgproc
 
 /** Fixtures are drawn, not loaded. There is no test image in this repo by design, and a synthetic one is also

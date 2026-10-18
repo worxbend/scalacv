@@ -1,8 +1,10 @@
 package scalacv
 
-import scalacv.graphs.*
 import java.util.concurrent.TimeUnit
+
 import org.opencv.core.Core
+
+import scalacv.graphs.*
 
 class GraphicsReviewGeometryTest extends munit.FunSuite:
   private class Recorder extends Renderer:
