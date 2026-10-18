@@ -4,6 +4,9 @@ import scalacv.*
 
 /** Backend-controlled text measurement. The result includes the descender baseline, as in [[Draw.textSize]].
   * Measurement deliberately uses the historical one-pixel glyph metrics, independently of stroke width.
+  *
+  * An open trait that consumers may implement: within a minor line a new member added to it always carries a
+  * default implementation, so an existing implementation keeps compiling.
   */
 trait TextMeasurer:
   def measure(text: String, font: Font, scale: Double): TextMetrics

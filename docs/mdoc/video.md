@@ -717,7 +717,7 @@ and why `Camera`, which always makes it, is a copy dearer than `Video.frames`. I
 `Image` and the lifetime handled — so if you find yourself reaching for `framesCopied`, ask whether
 `Camera` already does what you want.
 
-### End of stream, or a broken one
+### End of stream, or a broken one {#end-of-stream-or-a-broken-one}
 
 `VideoCapture.read` has no timeout overload and blocks in native code, and OpenCV reports the end of
 a video through the *same* exception it uses for a broken stream. So `frames` turns exception mode
