@@ -49,6 +49,9 @@ jobs:
         jdk: ["17", "21", "25"]
     env:
       MILL_JVM_ID: zulu:${{ matrix.jdk }}
+      # FaceDetectTest fetches the YuNet model from the network. Locally a failed fetch skips the
+      # suite (assume); in CI that would turn a dead mirror into a silent green, so here it fails.
+      SCALACV_REQUIRE_MODELS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
@@ -95,10 +98,13 @@ jobs:
     # The one gate the test suite cannot be: an unreleased Mat frees its native buffer only when
     # finalize eventually runs, so a leak shows up as *resident-memory growth*, not a failing
     # assertion -- a green test run with a steadily climbing RSS. This is the leg that would have
-    # caught the H1/M3/L2/L3 leaks. It drives the high-level read->gray->canny->bytes pipeline 2000×
-    # in a single long-lived JVM and asserts RSS does not climb once the natives are warm. A
-    # per-iteration leak of a 240×240×3 Mat is ~170 KB, so ~1800 measured iterations would grow RSS
-    # by ~300 MB -- far past the ceiling below -- while a leak-free run stays flat.
+    # caught the H1/M3/L2/L3 leaks. It drives the high-level read->gray->canny->bytes pipeline 6000×
+    # in a single long-lived JVM and asserts RSS does not climb once the natives are warm. The
+    # smallest Mat in that chain is a single-channel 240×240 intermediate (gray/blur/canny) of
+    # 57,600 bytes; leaking one per iteration over the 5800 measured iterations grows RSS by
+    # 5800 × 57,600 = 334 MB, past the 200 MB ceiling below, and the 3-channel 240×240×3 input
+    # (172,800 bytes) by ~1 GB -- while a leak-free run stays flat. (At the previous 2000 total the
+    # single-channel case was 1800 × 57,600 = 104 MB, under the ceiling: the gate passed while leaking.)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
@@ -114,7 +120,8 @@ jobs:
       - name: Leak regression suite (RSS-gated, finding-specific paths)
         # The leaks module runs in its own forked JVM as a single suite, so process RSS is not
         # contaminated by concurrent suites. It gates the finding-specific paths (background-effect
-        # error path, Intrinsics-per-call) that the single-pipeline driver below does not exercise.
+        # error path, Intrinsics-per-call, borrowed video frames, scoped copies, camera recording,
+        # zio frame processing) that the single-pipeline driver below does not exercise.
         # RSS -- not Pointer.totalBytes() -- is the only signal that sees org.opencv.core.Mat buffers.
         run: ./mill leaks.test
 
@@ -145,7 +152,7 @@ jobs:
             }
             public static void main(String[] args) throws Exception {
               scalacv.OpenCv$.MODULE$.load();
-              int warmup = 200, total = 2000;
+              int warmup = 200, total = 6000;
               for (int i = 0; i < warmup; i++) iter();
               System.gc(); Thread.sleep(200);
               long baseline = rssKb();
@@ -170,7 +177,7 @@ jobs:
           echo "$out"
           echo "$out" | grep -q '^LEAK-OK'
           growth=$(echo "$out" | sed -n 's/^RSS-GROWTH-KB=//p')
-          ceiling=204800   # 200 MB: far below a real leak's ~300 MB, far above steady-state jitter
+          ceiling=204800   # 200 MB: below a single-channel leak's 334 MB, far above steady-state jitter
           echo "RSS grew ${growth:-<none>} KB across the measured run (ceiling ${ceiling} KB)"
           test -n "$growth"
           test "$growth" -le "$ceiling"
@@ -191,11 +198,43 @@ jobs:
         # `+`-separated, for the same reason as the Test step: without it, `vision.fix` and the rest
         # are passed to `core.fix` as arguments and only core is ever linted.
         run: ./mill core.fix --check + vision.fix --check + graphs.fix --check + zio.fix --check + examples.fix --check
+      - name: scalafix (test sources)
+        # Test sources are linted too (unused imports; see Deps.looseTestScalacOptions). Every test
+        # module in the build, including leaks, which has no main sources worth a separate --check.
+        run: ./mill core.test.fix --check + vision.test.fix --check + graphs.test.fix --check + zio.test.fix --check + examples.test.fix --check + leaks.test.fix --check
+
+  docs-site:
+    name: Docs site builds and API links resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # docs.yml builds and deploys the site on push to master only. Without this job a PR could break
+    # the Docusaurus build, an /api/ deep link or a heading anchor and only be found out at deploy
+    # time; mdocCheck in the build matrix only proves the snippets compile.
+    env:
+      MILL_JVM_ID: zulu:25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Assemble docs (mdoc + Scaladoc + API-link check)
+        run: ./scripts/assemble-docs.sh
+      - name: Build the Docusaurus site
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
 
   natives:
     name: Natives · macos-26 arm64
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      # Same as the build matrix: a YuNet model that cannot be fetched fails FaceDetectTest here.
+      SCALACV_REQUIRE_MODELS: "1"
     # macOS only. The headless loader is verified on linux-x86_64 by the build job; this leg
     # verifies the @rpath-resolved macOS path. Windows is deliberately absent: the `./mill`
     # bootstrap is a Unix-only launcher (it prints "supports only Linux and macOS" and exits),
@@ -304,7 +343,7 @@ jobs:
 
   validated:
     name: Record validated commit
-    needs: [release-tooling, build, leak-check, style, natives, publish-shape, binary-compatibility, consumer-smoke]
+    needs: [release-tooling, build, leak-check, style, docs-site, natives, publish-shape, binary-compatibility, consumer-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

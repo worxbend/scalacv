@@ -18,6 +18,7 @@ BASELINES = {
     "v0.4.0": "3714fc10c1272fa29c23de22b35f2cf004c64d10",
     "v0.4.1": "ce99927559701a72702cd887a90821fb847fdb73",
     "v0.4.2": "6a6e3040a890f2724a539834ea51d8e3a2b23d5c",
+    "v0.4.3": "7f2d0e6c5130b9ab8e81984afaa937e6526259fe",
 }
 MODULES = ("core", "vision", "graphs", "zio")
 VERSION = "0.23.1"
@@ -138,7 +139,7 @@ def main():
                 failed.append(f"{tag}/{module}")
     if failed:
         raise SystemExit("Binary compatibility failed: " + ", ".join(failed))
-    print("BINARY-COMPATIBILITY-OK: all four artifacts against both 0.4.x release tags")
+    print(f"BINARY-COMPATIBILITY-OK: all four artifacts against {len(BASELINES)} 0.4.x release tags")
 
 
 if __name__ == "__main__":

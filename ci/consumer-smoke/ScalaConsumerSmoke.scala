@@ -29,4 +29,6 @@ object ScalaConsumerSmoke:
       Runtime.default.unsafe.run(effect).getOrThrowFiberFailure()
     }
     assert(rows == 8)
+    // run.sh pins its natives coordinate to this line (see ConsumerSmoke.java).
+    println(s"OPENCV-ARTIFACT=${Build.openCvArtifactVersion}")
     println("SCALA-CONSUMER-OK")

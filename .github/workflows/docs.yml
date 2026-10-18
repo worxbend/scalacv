@@ -2,8 +2,8 @@ name: Docs
 
 # Builds the Docusaurus site and deploys it to GitHub Pages. mdoc type-checks every Scala snippet
 # first (via scripts/assemble-docs.sh), so a code change that breaks a doc example fails here rather
-# than shipping a wrong example. The mdoc check also runs on PRs (in ci.yml), so drift is caught
-# before merge, not only at deploy time.
+# than shipping a wrong example. mdoc runs on PRs (ci.yml's build matrix); the API-link check and the
+# site build run on PRs in ci.yml's `docs-site` job, so drift is caught before merge, not only here.
 on:
   push:
     branches: [master]

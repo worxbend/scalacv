@@ -35,6 +35,10 @@ public class ConsumerSmoke {
       throw new RuntimeException("vision/graphs types did not link");
     }
 
+    // The OpenCV coordinate the library was built against; run.sh pins its own natives coordinate to
+    // this line so the two cannot drift apart unnoticed.
+    System.out.println("OPENCV-ARTIFACT=" + scalacv.Build.openCvArtifactVersion());
+
     // The success signal is this line, not the exit code: OpenCV/OpenBLAS native teardown at JVM
     // shutdown occasionally exits non-zero after a fully successful run. CI greps for it.
     System.out.println("CONSUMER-OK");

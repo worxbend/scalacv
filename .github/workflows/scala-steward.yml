@@ -7,9 +7,17 @@ on:
     - cron: "0 6 * * 1" # Mondays, 06:00 UTC
   workflow_dispatch:
 
+# The least the action needs: it pushes update branches and opens PRs. Without an explicit block the
+# job inherits the repository default, which may be read-only (silent no-op) or broader than needed.
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   scala-steward:
     runs-on: ubuntu-latest
+    # Bounded like every other job: a stalled resolver would otherwise hold a runner for six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Launch Scala Steward
