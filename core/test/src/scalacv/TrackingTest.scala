@@ -234,3 +234,21 @@ class TrackingTest extends munit.ScalaCheckSuite:
         tr.close()
         f0.close()
         f1.close()
+
+  test("Tracker.init rejects a box whose far edge overflows Int instead of handing it to native code"):
+    // Probed in isolation (scratch, not here): CSRT SIGSEGVs the JVM on such a box, KCF and MIL hit a native
+    // assertion. A Rect admits Int.MaxValue extents, so the far edge must be checked in Long arithmetic.
+    for kind <- TrackerKind.values do
+      val tr = Tracker.create(kind).fold(throw _, identity)
+      val f0 = frame(50)
+      try
+        for box <- Seq(Rect(Int.MaxValue, 0, 1, 1), Rect(0, Int.MaxValue, 1, 1), Rect(1, 0, Int.MaxValue, 1))
+        do
+          val e = intercept[IllegalArgumentException](tr.init(f0, box))
+          assert(e.getMessage.contains("Tracker.init"), s"$kind: ${e.getMessage}")
+        // The precondition consumed nothing: the tracker and the frame are still usable afterwards.
+        tr.init(f0, Rect(35, 85, 30, 30))
+        assert(tr.update(f0).isDefined, s"$kind should still track after the rejected boxes")
+      finally
+        tr.close()
+        f0.close()

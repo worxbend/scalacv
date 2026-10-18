@@ -40,8 +40,17 @@ final class Tracker private (private val handle: Managed[CvTracker]) extends Aut
 
   private var started = false
 
-  /** Starts tracking the object inside `box` in `image`. May be called again to re-seed on a fresh box. */
+  /** Starts tracking the object inside `box` in `image`. May be called again to re-seed on a fresh box.
+    *
+    * A box may extend past the image (the algorithms clip it, or MIL reports a `CvError.NativeCall`), but its
+    * far edge must be representable: a `Rect` whose `x + width` or `y + height` overflows `Int` is rejected
+    * here, because handed to native code it is a JVM crash (CSRT) rather than an error.
+    *
+    * @throws IllegalArgumentException
+    *   if the far edge of `box` overflows `Int`.
+    */
   def init(image: Image, box: Rect): Unit =
+    require(Tracker.farEdgeFits(box), s"Tracker.init $box has a far edge beyond Int.MaxValue")
     Cv.orThrow("Tracker.init")(handle.get.init(image.mat, box.toCv))
     started = true
 
@@ -58,6 +67,12 @@ final class Tracker private (private val handle: Managed[CvTracker]) extends Aut
 object Tracker:
 
   private given Releasable[CvTracker] = Releasable.nativeHandle
+
+  /** `x + width` and `y + height` taken in `Long`, so a `Rect` with an `Int.MaxValue` extent — which the type
+    * admits — cannot wrap to a negative far edge and pass as "inside".
+    */
+  private def farEdgeFits(box: Rect): Boolean =
+    box.x.toLong + box.width <= Int.MaxValue && box.y.toLong + box.height <= Int.MaxValue
 
   /** Builds a tracker of the given kind; `Left` when this OpenCV build lacks the algorithm. Free the tracker
     * when done.
