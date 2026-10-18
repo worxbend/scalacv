@@ -418,6 +418,16 @@ class GraphicsDeepTest extends munit.FunSuite:
       }
     finally deleteRecursively(dir)
 
+  test("Animation.record with zero frames returns Right(0) and creates no file"):
+    val dir = Files.createTempDirectory("scalacv-record-zero")
+    try
+      val out = dir.resolve("zero.avi")
+      val written = Animation.record(out.toString, frames = 0, width = 64, height = 48)(_ => Picture.empty)
+      assertEquals(written, Right(0L))
+      // Like `gif` and `Camera.recordTo`: nothing to write means no header-only file left behind.
+      assert(!Files.exists(out), "zero frames must not touch the filesystem")
+    finally deleteRecursively(dir)
+
   test("a recorded video decodes back to exactly the frames written"):
     val dir = Files.createTempDirectory("scalacv-record-roundtrip")
     try

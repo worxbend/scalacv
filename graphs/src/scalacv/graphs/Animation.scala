@@ -33,7 +33,8 @@ object Animation:
 
   /** Renders `frames` frames — each the picture `frame(i)` drawn on a `width`×`height` `background` canvas —
     * and writes them to `path` as a video at `fps`. Returns the number of frames written, or a `Left` if the
-    * recorder cannot open or a frame fails to encode.
+    * recorder cannot open or a frame fails to encode. Zero frames creates no file and answers `Right(0)`, as
+    * [[gif]] and [[Camera.recordTo]] do.
     *
     * @param codec
     *   defaults to [[Codec.Mjpg]], the one codec videoio can always write, because it is served by the
@@ -51,34 +52,36 @@ object Animation:
       codec: Codec = Codec.Mjpg
   )(frame: Int => Picture): Either[CvError, Long] =
     require(frames >= 0, s"frames cannot be negative, got $frames")
-    Recorder
-      .open(path, Size(width.toDouble, height.toDouble), fps, codec)
-      .flatMap: recorder =>
-        // One close, in the finally: the recorder is released exactly once however the loop ends, and the
-        // close must run BEFORE `deletePartial` — the writer holds the file, and an open file will not
-        // delete on Windows. Recording the failure and acting on it after the finally keeps that order
-        // with a single close call; the previous shape closed in the try and again in the catch, correct
-        // only because `Managed.release` happens to be idempotent.
-        var written = 0L
-        var failure: Throwable | Null = null
-        try
-          var i = 0
-          while i < frames do
-            val canvas = frame(i).render(width, height, background)
-            try recorder.write(canvas).fold(e => throw e, _ => written += 1)
-            finally canvas.close()
-            i += 1
-        catch case e => failure = e
-        finally recorder.close()
-        // A CvError (a failed encode) becomes a Left; a bad Picture's IllegalArgumentException stays a throw.
-        failure match
-          case null => Right(written)
-          case cv: CvError =>
-            deletePartial(path)
-            Left(cv)
-          case other =>
-            deletePartial(path)
-            throw other
+    if frames == 0 then Right(0L)
+    else
+      Recorder
+        .open(path, Size(width.toDouble, height.toDouble), fps, codec)
+        .flatMap: recorder =>
+          // One close, in the finally: the recorder is released exactly once however the loop ends, and the
+          // close must run BEFORE `deletePartial` — the writer holds the file, and an open file will not
+          // delete on Windows. Recording the failure and acting on it after the finally keeps that order
+          // with a single close call; the previous shape closed in the try and again in the catch, correct
+          // only because `Managed.release` happens to be idempotent.
+          var written = 0L
+          var failure: Throwable | Null = null
+          try
+            var i = 0
+            while i < frames do
+              val canvas = frame(i).render(width, height, background)
+              try recorder.write(canvas).fold(e => throw e, _ => written += 1)
+              finally canvas.close()
+              i += 1
+          catch case e => failure = e
+          finally recorder.close()
+          // A CvError (a failed encode) becomes a Left; a bad Picture's IllegalArgumentException stays a throw.
+          failure match
+            case null => Right(written)
+            case cv: CvError =>
+              deletePartial(path)
+              Left(cv)
+            case other =>
+              deletePartial(path)
+              throw other
 
   /** Renders `count` frames as owned [[Image]]s (each `frame(i)` on a fresh `width`×`height` `background`
     * canvas) — for feeding elsewhere than a file. **Each image is yours to close.**
