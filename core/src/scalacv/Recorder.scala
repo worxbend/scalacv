@@ -74,8 +74,12 @@ object Recorder:
       codec: Codec = Codec.Mjpg,
       color: Boolean = true
   ): Either[CvError, Recorder] =
-    require(fps > 0, s"fps must be positive, got $fps")
-    require(size.width > 0 && size.height > 0, s"a recorder needs a positive frame size, got $size")
+    require(fps.isFinite && fps > 0, s"fps must be positive and finite, got $fps")
+    // Checked after truncation, the way VideoWriter reads it: Size(0.5, 0.5) is positive and opens a 0x0 writer.
+    require(
+      size.width.toInt > 0 && size.height.toInt > 0,
+      s"a recorder needs a frame size of at least one whole pixel per side, got $size"
+    )
     val vw = VideoWriter()
     // `vw` is a native object with no owner until it reaches `new Recorder`, so every exit that does not get
     // there has to release it by hand. Failure arrives in two shapes: `vw.open` can throw at the codec

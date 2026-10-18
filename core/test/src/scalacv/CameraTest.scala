@@ -316,6 +316,11 @@ class CameraTest extends munit.FunSuite:
       intercept[IllegalArgumentException](Recorder.open(out.toString, FrameSize, fps = 0))
       intercept[IllegalArgumentException](Recorder.open(out.toString, FrameSize, fps = -1))
       intercept[IllegalArgumentException](Recorder.open(out.toString, Size(0, 10)))
+      intercept[IllegalArgumentException](
+        Recorder.open(out.toString, FrameSize, fps = Double.PositiveInfinity)
+      )
+      // Positive, but truncates to 0x0 natively: the writer opens, then every write fails to match 0x0.
+      intercept[IllegalArgumentException](Recorder.open(out.toString, Size(0.5, 0.5)))
     finally Files.deleteIfExists(out)
 
   test("a recorder borrows the frame it writes"):
