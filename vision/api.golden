@@ -280,6 +280,7 @@ final class scalacv.vision.Guidance
   def _4(): double
   def _5(): double
   def canEqual(java.lang.Object): boolean
+  def centerNearness(): double
   def centreNearness(): double
   def clearanceAhead(): double
   def copy$default$1(): scalacv.vision.Steering
@@ -794,6 +795,7 @@ object scalacv.vision.Calibration
   def fromChessboard$default$3(): int
   def fromChessboard(scala.collection.immutable.Seq<scalacv.Image>, scalacv.vision.ChessboardPattern, int): scala.util.Either<scalacv.CvError, scalacv.vision.Calibration>
   def fromProduct(scala.Product): scalacv.vision.Calibration
+  def toCalibration(double, org.opencv.core.Mat, org.opencv.core.Mat, scalacv.Size): scala.util.Either<scalacv.CvError, scalacv.vision.Calibration>
   def unapply(scalacv.vision.Calibration): scalacv.vision.Calibration
 object scalacv.vision.Calibration.package
   extends java.lang.Object

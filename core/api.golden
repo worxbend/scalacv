@@ -140,6 +140,7 @@ final class scalacv.Camera
   def close(): void
   def foreach$default$1(): int
   def foreach(int, scala.Function1<scalacv.Image, scala.runtime.BoxedUnit>): void
+  def foreach(scala.Function1<scalacv.Image, scala.runtime.BoxedUnit>): void
   def fps(): double
   def info(): scalacv.CaptureInfo
   def recordTo$default$2(): double
@@ -610,6 +611,7 @@ final class scalacv.PencilSketchPair
   def _1(): scalacv.Managed<org.opencv.core.Mat>
   def _2(): scalacv.Managed<org.opencv.core.Mat>
   def canEqual(java.lang.Object): boolean
+  def color(): scalacv.Managed<org.opencv.core.Mat>
   def colour(): scalacv.Managed<org.opencv.core.Mat>
   def copy$default$1(): scalacv.Managed<org.opencv.core.Mat>
   def copy$default$2(): scalacv.Managed<org.opencv.core.Mat>
@@ -1439,6 +1441,7 @@ object scalacv.Intrinsics
   implements java.io.Serializable, scala.deriving.Mirror$Product
   def <init>$default$5(): scala.collection.immutable.Seq<java.lang.Object>
   def ValidDistortionSizes(): scala.collection.immutable.Set<java.lang.Object>
+  def apply$default$5(): scala.collection.immutable.Seq<java.lang.Object>
   def apply(double, double, double, double, scala.collection.immutable.Seq<java.lang.Object>): scalacv.Intrinsics
   def approx$default$2(): double
   def approx(scalacv.Size, double): scalacv.Intrinsics
@@ -1491,7 +1494,9 @@ object scalacv.Models
   extends java.lang.Object
   implements java.io.Serializable
   def fetch(scalacv.ModelSpec, java.nio.file.Path): scala.util.Either<scalacv.CvError, java.nio.file.Path>
+  def fetch(scalacv.ModelSpec, java.nio.file.Path, java.time.Duration): scala.util.Either<scalacv.CvError, java.nio.file.Path>
   def fetchCached(scalacv.ModelSpec, java.nio.file.Path): scala.util.Either<scalacv.CvError, java.nio.file.Path>
+  def isSafeFileName(java.lang.String): boolean
 object scalacv.MorphOp
   extends java.lang.Object
   implements java.io.Serializable, scala.deriving.Mirror$Sum
@@ -1691,6 +1696,7 @@ object scalacv.Preconditions
   extends java.lang.Object
   implements java.io.Serializable
   def requireGray8(java.lang.String, org.opencv.core.Mat): void
+  def requireInside(java.lang.String, scalacv.Rect, org.opencv.core.Mat): void
   def requireNonEmpty(java.lang.String, org.opencv.core.Mat): void
 object scalacv.Recorder
   extends java.lang.Object

@@ -36,4 +36,4 @@ object scalacv.zio.package.package
   def scoped(org.opencv.core.Mat, scalacv.Releasable<org.opencv.core.Mat>): zio.ZIO<zio.Scope, java.lang.Throwable, org.opencv.core.Mat>
   def scopedZIO<A>(scalacv.Managed<A>): zio.ZIO<zio.Scope, scala.runtime.Nothing$, A>
   def useManaged<R, E, A, B>(zio.ZIO<R, E, scalacv.Managed<A>>, scala.Function1<A, zio.ZIO<R, E, B>>): zio.ZIO<R, E, B>
-  def useZIO<A>(scalacv.Managed<A>): zio.ZIO
+  def useZIO<A>(scalacv.Managed, scala.Function1) /* erased */: zio.ZIO
