@@ -70,6 +70,9 @@ it. So the `Managed[Mat]` you get back has to be `use`d, `release()`d, or passed
 on the floor and it leaks, precisely as a stray `Managed` would; see
 [Dropping to the low level](#dropping-to-the-low-level) for the shape that gets it right.
 
+A transform is not an accessor even when it looks like a field: `img.gray` spends `img`, and a discarded
+`img.gray` statement leaks the result, because nobody holds the new `Image` to close it.
+
 Keep that table in your head and the ownership rules below stop being rules and become obvious.
 
 ### A transform consumes the image

@@ -25,8 +25,8 @@ nonfatal cleanup failures are suppressed on the primary error.
 The current ownership fixes extend scope cleanup to consuming image descendants and copies.
 Within `Image.reading`, `Camera.foreach`/`taking`, animation callbacks and ZIO `imageScoped`,
 consuming transforms move the registration to the live successor; `.copy` creates another scoped
-branch. `.managed` preserves both that scope and its custom release strategy (including through
-`pipe`); it is not an escape. To return an independently owned image, use `.detach` explicitly
+branch. Registration is synchronized across threads (0.4.4). `.managed` preserves both that scope
+and its custom release strategy (including through `pipe`); it is not an escape. To return an independently owned image, use `.detach` explicitly
 and close the returned value yourself. Other branches remain scoped. Raw Mat operations do not
 magically register unrelated allocations.
 

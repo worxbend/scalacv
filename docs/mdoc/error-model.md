@@ -22,8 +22,9 @@ OpenCV's Java API reports failure three incompatible ways — a `false` return, 
 | Missing model, cascade, video source | `Left(CvError.LoadFailed)` | branch on it | a 404 on a model download |
 | Unwritable destination / bad encoder | `Left(CvError.EncodeFailed)` | branch on it | writing to a missing directory |
 | Ill-posed calibration | `Left(CvError.CalibrationFailed)` | recapture data | too few chessboard views |
-| Natives absent, **or** the release bridge cannot be opened | thrown `CvError.NativesMissing` | fix the build, or add the `--add-opens` flag the message names | forgot the classifier jar; OpenCV on the module path |
+| Natives absent, **or** the release bridge cannot be opened | thrown `CvError.NativesMissing` (or `Left` inside the scoped `using`/`reading` blocks) | fix the build, or add the `--add-opens` flag the message names | forgot the classifier jar; OpenCV on the module path |
 | Unforeseen native rejection | `CvError.NativeCall` (returned via `Cv.attempt`, else thrown) | usually a bug; sometimes handle | wrong channel count |
+| Wrong model shape / algorithm missing from this OpenCV build | `CvError.NativeCall` with an `IllegalStateException` cause (returned by `Tracker.create`, thrown by `StereoDepth`) | check the model file / build | a `FaceDetect` model whose output rows have an unexpected width |
 | Bad argument | thrown `IllegalArgumentException` | fix the call | `blur(-1)` |
 | Reusing a spent `Image` | thrown `IllegalStateException` | fix the code | use-after-move |
 
@@ -31,7 +32,7 @@ OpenCV's Java API reports failure three incompatible ways — a `false` return, 
 
 `CvError` is a `sealed abstract class` that extends `RuntimeException`. That looks unusual for an error ADT, and it is a considered choice: the core cannot be made total. `CvException` escapes from ordinary `Imgproc` calls — including on the empty `Mat` a failed `imread` hands back — and no wrapper can prevent that. Because `CvError` *is* a `Throwable`, it interoperates with that JNI boundary: it can be the `cause` of a wrapped native throw, it can be rethrown by [`Cv.orThrow`](#the-escape-hatch-cv-attempt), and it can cross a `try`/`catch` unchanged. You still get exhaustive `match` on the sealed hierarchy where you want it; you also get a type that behaves correctly at the one place the language cannot help you.
 
-## The seven cases {#the-six-cases}
+## The seven cases {#the-seven-cases}
 
 `CvError` has exactly seven shapes. Each names *when you see it*.
 
@@ -50,6 +51,8 @@ It is *thrown* rather than returned, because there is no sensible way to carry o
 **At load.** `OpenCv.load()` throws when the per-platform *classifier* jars are absent. Those are the jars carrying the actual `.so` / `.dylib` / `.dll` for the machine you are running on, as opposed to the Java classes that call into them. Here `details` is a dependency line naming the platform it detected, ready to paste into your build. This is the common case, and you hit it once, before any real work. See [Troubleshooting](/troubleshooting#natives-missing) for the classifier table.
 
 **At release.** `Releasable.handle` — the bridge that frees the 185 OpenCV types that expose no public `release()` method of their own — throws `NativesMissing` too, and it throws it **when a handle is freed**. That is typically at the end of a `Managed.use` block, in the middle of a pipeline that has been working for a while, which is why the name can be misleading. It fires when reflection cannot reach a binding's private `delete(long)`, or cannot zero its `nativeObj` field to disarm the finalizer that would otherwise free the same pointer a second time. Here `details` carries an `--add-opens` flag rather than a dependency line; the usual trigger is OpenCV loaded from the *module path* instead of the classpath. It throws rather than degrading, because the fallback — leaving the memory to the garbage collector — is an unbounded native leak that looks like success, and freeing without disarming the finalizer is a double free. See [Working with the raw OpenCV API](/low-level) and [Troubleshooting](/troubleshooting#add-opens).
+
+Inside `Image.reading`, `Camera.using` and `Recorder.using`, which run their body under `Cv.attempt`, a `NativesMissing` raised at release time comes back as a `Left` like any other `CvError`; only the `OpenCv.load()` case always throws.
 
 ### `DecodeFailed`
 
@@ -99,7 +102,7 @@ Managed.use(Mat(8, 8, CvType.CV_8UC3)): m =>
   Images.write("/no/such/dir/out.png", m) // Left(CvError.EncodeFailed(...))
 ```
 
-Both encode-failure modes share the one type, so a single `case EncodeFailed(...)` catches them all.
+Both encode-failure modes share the one type, so a single `case EncodeFailed(...)` catches them all; an empty or 2-channel image is `EncodeFailed` too, not `NativeCall`.
 
 ### `CalibrationFailed`
 

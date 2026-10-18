@@ -203,6 +203,8 @@ That is the flag for a `CascadeClassifier` or a `QRCodeDetector`; a `Net` asks f
 
 On the classpath — the normal case — there is no module to open at all, so the flag would be meaningless; if you somehow see this failure there, the message says exactly that and asks for a bug report rather than printing a flag with a `null` module name in it. So the simplest fix, when you have the choice, is to run OpenCV on the classpath rather than as a module.
 
+**JDK 26+ and final-field mutation.** The release bridge zeroes OpenCV's `final nativeObj` field reflectively to disarm the finalizer, and [JEP 500](https://openjdk.org/jeps/500) is phasing that out: per the JEP text, JDK 26 prints a warning the first time a `final` field is mutated, and a later JDK refuses unless the JVM is started with `--enable-final-field-mutation=ALL-UNNAMED`. scalacv fails closed when that happens — `NativesMissing` at release time, and the object is **not** freed — rather than freeing the pointer and leaving the finalizer to free it a second time. This has not been executed on JDK 26 here; it is what the JEP specifies, so if you move to JDK 26 or later add the flag (or run the suite once and watch for the warning) before trusting a long-running pipeline.
+
 ## `Recorder.open` returns `Left` — "codec may be unavailable" {#codec}
 
 `VideoWriter` reports a missing codec by refusing to open, not by throwing — so scalacv returns `Left(CvError.LoadFailed)`. Whether a codec works depends on what your platform's OpenCV build links (FFmpeg, the OS frameworks). The portable fallback encodes with the always-built-in codecs:

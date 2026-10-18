@@ -65,8 +65,23 @@ A transform on a consumed image throws — take `.copy` first to branch. Extensi
 | Operation | Does |
 |---|---|
 | `canny(threshold1, threshold2, apertureSize, l2Gradient)` | Canny edges → always `CV_8UC1`. `threshold1` is the weak (edge-linking) level and `threshold2` the strong one — both `Double`, so name them at the call site; `apertureSize` is the internal Sobel window and must be `3`, `5` or `7`; `l2Gradient = true` uses the exact gradient magnitude instead of the cheaper approximation. Parameter by parameter in [Image processing](/image-processing) |
-| `threshold(value, maxValue, kind)` | fixed or automatic binarise. **Discards** the level OpenCV computed — with `Threshold.otsu()` or `Threshold.triangle()` that number *is* usually the point, so reach for the mid-level `mat.threshold(...)`, which returns `(Managed[Mat], ThresholdResult)` |
-| `adaptiveThreshold(blockSize, c, method, inverse)` | per-neighbourhood threshold (uneven light) |
+| `threshold(value, maxValue, kind)` | fixed or automatic binarise. **Discards** the level OpenCV computed — with `Threshold.otsu()` or `Threshold.triangle()` that number *is* usually the point, so reach for the mid-level `mat.threshold(...)`, which returns a `Thresholded(image, computed)` |
+| `adaptiveThreshold(blockSize, c, method, mode)` | per-neighbourhood threshold (uneven light); `mode` is `Threshold.Mode.Binary` or `BinaryInv` |
+
+Both signatures as the table states them — compiled against the library, so the row and the code cannot drift apart:
+
+```scala mdoc:compile-only
+import org.opencv.core.Mat
+
+def thresholdBoth(img: Image, mat: Mat): (Double, Image) =
+  // mid-level: keeps the level OpenCV chose
+  val result: Thresholded = mat.threshold(0, 255, Threshold.otsu())
+  result.image.release()
+  // high-level: `mode` names the polarity; there is no `inverse` flag
+  val binary = img.adaptiveThreshold(
+    blockSize = 11, c = 2.0, method = AdaptiveMethod.Gaussian, mode = Threshold.Mode.BinaryInv)
+  (result.computed.value, binary)
+```
 
 ## Geometry — *transforms*
 

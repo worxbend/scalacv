@@ -126,8 +126,8 @@ happened to somebody:
 7. **Delete the temp file** on the way out, whatever happened.
 
 :::note[Timeouts you inherit]
-`Models.fetch` gives each mirror a **15-second** connect budget and a **60-second** request budget, and
-follows HTTP redirects. `FaceDetect.downloadModel` delegates to the same downloader and has the same budgets. Mirrors are tried in order, so a mirror that hangs costs
+`Models.fetch` gives each mirror a **15-second** connect budget and a **60-second** budget for the whole
+download (headers and body), and follows HTTP redirects. `FaceDetect.downloadModel` delegates to the same downloader and has the same budgets. Mirrors are tried in order, so a mirror that hangs costs
 you its timeout and then the next one is tried. Do not wrap either call in your own retry loop; the
 retry across mirrors is already there.
 :::
@@ -138,7 +138,7 @@ A `ModelSpec` carries the filename, mirrors and integrity expectations:
 
 | Field | Type | What it is |
 | --- | --- | --- |
-| `fileName` | `String` | the fixed name the file gets on disk; the legacy `fetch` cache keys by this name within `into` |
+| `fileName` | `String` | the fixed name the file gets on disk — a single path component (no separators, `.`/`..`); escaping names are rejected with `Left(LoadFailed)` before anything touches the filesystem. The legacy `fetch` cache keys by this name within `into` |
 | `urls` | `Seq[String]` | the mirrors to try, **in order**. `http://`, `https://` and `file://` all work |
 | `sha256` | `Option[String]` | the pinned digest, lower- or upper-case. `Some` for `ModelSpec(...)`, `None` for `ModelSpec.unverified(...)` |
 | `sizeBytes` | `Option[Long]` | optional exact positive byte count; checked before hashing, not a download-size cap |
@@ -543,7 +543,8 @@ being honest about the edges saves you a bad afternoon:
 - **No proxy configuration surface.** Whatever the JDK's `HttpClient` does by default in your environment
   is what you get; there is no knob here.
 - **No resume, and no progress reporting.** Each mirror gets one request with a **60-second** budget
-  for the HTTP request, shared by `FaceDetect.downloadModel`.
+  for the whole download — headers and body — shared by `FaceDetect.downloadModel`; a mirror that answers
+  the headers and then stalls mid-body is abandoned at the same deadline.
   A 37 MB model on a slow link can exhaust it, at which point *every* mirror reports a timeout and you
   get a `Left` that looks like an outage but is a bandwidth problem. If that is your situation, fetch the
   file with `curl -C -` or your package pipeline and use a `file://` spec.

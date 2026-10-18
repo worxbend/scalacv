@@ -246,7 +246,7 @@ Camera.usingFile("clip.mp4") { cam =>
 |---|---|---|---|
 | `width` / `height` | `Int` | reported frame size (`size` bundles them) | a camera may report 0 before warm-up |
 | `fps` | `Double` | reported frame rate | `0` for a camera that has not delivered a frame |
-| `frameCount` | `Long` | reported total frames | `0`/`-1` for a live source; off by a frame or two for some containers |
+| `frameCount` | `Long` | reported total frames | `0` for a live source (backends that report `-1` are normalised to `0` by `Video.info`); off by a frame or two for some containers |
 | `backendName` | `String` | which videoio backend opened it | — |
 
 :::danger[Never loop on `frameCount`]

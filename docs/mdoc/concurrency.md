@@ -32,7 +32,7 @@ edgeCount >= 0
 | Thing | Concurrent use | Why |
 |---|---|---|
 | **Immutable results** — `Contour`, `Rect`, `Scalar`, `Pose`, `FaceMatch`, any `Seq[…]` a detector returns | ✅ fully safe | plain Scala data, copied out of native memory, no pointer behind them |
-| **`Managed` release** — `release()`/`close()` from several threads | ✅ safe | idempotent atomic compare-and-set; frees exactly once even under a race |
+| **`Managed` release** — `release()`/`close()` from several threads | ✅ safe | idempotent compare-and-set; frees exactly once. Handles registered in one scoped block (`Image.reading`, `Camera.taking`, `imageScoped`) may be created, moved and released from several threads — the registry is synchronized — but native *access* to any one handle is still single-owner |
 | **A shared `Mat`'s pixels — reads only** | ✅ safe | concurrent reads of a buffer nobody writes are fine |
 | **`OpenCv.load()`** | ✅ safe | idempotent, internally synchronised; call it from anywhere |
 | **A shared `Mat` with a concurrent write** | ❌ **unsafe** | OpenCV's refcount ops are atomic, but pixel writes are not synchronised |
