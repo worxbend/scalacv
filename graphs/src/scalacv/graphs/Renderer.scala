@@ -13,6 +13,9 @@ enum RenderPrimitive:
 /** A destination-bound renderer. Implement [[draw]] for a raster, an SVG sink, or a command recorder; the
   * library supplies scene traversal, transform composition and contextual style resolution. The
   * implementation owns its destination's lifetime. No native type or flag is required by this contract.
+  *
+  * An open trait that consumers may implement: within a minor line a new member added to it always carries a
+  * default implementation, so an existing implementation keeps compiling.
   */
 trait Renderer:
   def textMeasurer: TextMeasurer
