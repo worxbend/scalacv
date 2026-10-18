@@ -258,10 +258,9 @@ extension (mat: Mat)
     Preconditions.requireNonEmpty("drawSegments", mat)
     // One JNI call per segment, deliberately — there is no batched primitive to prefer. The batch entry
     // points (`polylines`, `fillPoly`, `drawContours`) all funnel their input through the generated
-    // `Converters.vector_vector_Point_to_Mat`, which leaks one Mat per polygon (see `withPolygons` below),
-    // and a segment cloud is exactly the input shape that would multiply that residue. `Imgproc.line`
-    // allocates nothing native beyond its scalar arguments, so this loop is the leak-free form; the
-    // per-call JNI overhead is the accepted price.
+    // `Converters.vector_vector_Point_to_Mat`, which allocates one small index Mat per call that the binding
+    // never releases (see `withPolygons` below). `Imgproc.line` allocates nothing native beyond its scalar
+    // arguments, so this loop leaves no residue at all; the per-call JNI overhead is the accepted price.
     segments.foreach(s => mat.drawLine(s.start, s.end, color, thickness, lineType))
 
 /** File-private helpers. Wrapped in an object rather than left top-level so their names cannot collide with
@@ -278,12 +277,14 @@ private object DrawOps:
     * through the list — or a `CvException` from the draw, which is exactly when cleanup is most likely to be
     * skipped — still releases everything already allocated, in reverse order.
     *
-    * **This does not make the call leak-free, and it would be dishonest to claim otherwise.** The generated
-    * Java binding for `polylines`, `fillPoly` and `drawContours` runs the input through
-    * `Converters.vector_vector_Point_to_Mat`, which allocates one `Mat` per polygon plus one more for the
-    * outer vector and releases none of them. That residue is upstream in the official Java API and cannot be
-    * fixed from here without reimplementing the converter. It is bounded per call but, like everything else
-    * in this class of bug, unbounded across a video loop.
+    * **This does not make the call allocation-free, and it would be dishonest to claim otherwise.** The
+    * generated Java binding for `polylines`, `fillPoly` and `drawContours` runs the input through
+    * `Converters.vector_vector_Point_to_Mat`, which allocates one small `count×1 CV_32SC2` index Mat per call
+    * (a header plus 8 bytes per polygon), never released by the binding and reclaimed by
+    * `CleanableMat.finalize` on a later GC — bounded and GC-visible, not one Mat per polygon (checked with
+    * `javap -p -c` against bytedeco 4.14.0-1.5.14: `vector_vector_Point_to_Mat` collects the polygons into a
+    * list and `vector_Mat_to_Mat` allocates a single `new Mat(count, 1, CV_32SC2)`). That residue is upstream
+    * in the official Java API and cannot be removed from here without reimplementing the converter.
     */
   def withPolygons[A](polygons: Seq[Seq[Point]])(f: java.util.List[MatOfPoint] => A): A =
     Managed.scope: own =>

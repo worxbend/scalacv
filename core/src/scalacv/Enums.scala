@@ -51,14 +51,22 @@ enum Font(val cvValue: Int):
   case Triplex extends Font(Imgproc.FONT_HERSHEY_TRIPLEX)
   case Script extends Font(Imgproc.FONT_HERSHEY_SCRIPT_SIMPLEX)
 
-/** Which contours findContours reports. A true enumeration. */
+/** Which contours findContours reports. A true enumeration.
+  *
+  * Do not wildcard-import this enum: the case `List` shadows the standard library name in that scope. Import
+  * the enum and qualify the case (`ContourRetrieval.List`).
+  */
 enum ContourRetrieval(val cvValue: Int):
   case External extends ContourRetrieval(Imgproc.RETR_EXTERNAL)
   case List extends ContourRetrieval(Imgproc.RETR_LIST)
   case CComp extends ContourRetrieval(Imgproc.RETR_CCOMP)
   case Tree extends ContourRetrieval(Imgproc.RETR_TREE)
 
-/** How findContours compresses each contour. A true enumeration. */
+/** How findContours compresses each contour. A true enumeration.
+  *
+  * Do not wildcard-import this enum: the case `None` shadows the standard library name in that scope. Import
+  * the enum and qualify the case (`ContourApproximation.None`).
+  */
 enum ContourApproximation(val cvValue: Int):
   case None extends ContourApproximation(Imgproc.CHAIN_APPROX_NONE)
   case Simple extends ContourApproximation(Imgproc.CHAIN_APPROX_SIMPLE)
