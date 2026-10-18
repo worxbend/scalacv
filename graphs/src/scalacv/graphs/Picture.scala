@@ -217,7 +217,9 @@ object Picture:
     require(points.forall(p => p.x.isFinite && p.y.isFinite), "path coordinates must be finite")
     Leaf(Prim.Path(points, closed))
   def polygon(points: Seq[Point]): Picture = polyline(points, closed = true)
-  def text(text: String, at: Point): Picture = Leaf(Prim.Text(text, at))
+  def text(text: String, at: Point): Picture =
+    require(at.x.isFinite && at.y.isFinite, "text anchor must be finite")
+    Leaf(Prim.Text(text, at))
 
   /** An ellipse with semi-axes `rx`/`ry`, `rotation` degrees turned. A closed shape, so it fills and dashes
     * like any polygon (it is drawn as a fine polyline, which keeps the styling uniform).

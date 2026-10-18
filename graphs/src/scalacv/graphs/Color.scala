@@ -98,8 +98,12 @@ object Color:
   /** A shade of grey. */
   def gray(value: Int): Color = Color(value, value, value)
 
-  /** From hue (degrees), saturation and lightness (`[0, 1]`) — the natural space for generating palettes. */
+  /** From hue (degrees), saturation and lightness (`[0, 1]`) — the natural space for generating palettes. The
+    * hue wraps around the wheel; a non-finite hue is a precondition violation (`IllegalArgumentException`),
+    * not a silent grey.
+    */
   def hsl(hue: Double, saturation: Double, lightness: Double, alpha: Int = 255): Color =
+    require(hue.isFinite, s"hue must be finite, got $hue")
     val h = ((hue % 360) + 360) % 360 / 360.0
     val s = math.max(0.0, math.min(1.0, saturation))
     val l = math.max(0.0, math.min(1.0, lightness))

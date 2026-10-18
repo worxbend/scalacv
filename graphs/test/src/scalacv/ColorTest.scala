@@ -109,3 +109,11 @@ class ColorTest extends munit.FunSuite:
   test("gray builds an equal-channel colour"):
     assertEquals(Color.gray(80), Color(80, 80, 80))
     assertEquals(Color.rgba(1, 2, 3, 4), Color(1, 2, 3, 4))
+    assertEquals(Color.LightGray, Color(200, 200, 200))
+
+  test("hsl rejects a non-finite hue, and spin inherits the check"):
+    // Before 0.4.4 a NaN hue fell through `% 360` and came back as a silent grey.
+    intercept[IllegalArgumentException](Color.hsl(Double.NaN, 0.5, 0.5))
+    intercept[IllegalArgumentException](Color.hsl(Double.PositiveInfinity, 0.5, 0.5))
+    intercept[IllegalArgumentException](Color.hsl(Double.NegativeInfinity, 0.5, 0.5))
+    intercept[IllegalArgumentException](Color.Red.spin(Double.NaN))

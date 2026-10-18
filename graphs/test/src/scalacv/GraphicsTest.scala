@@ -182,3 +182,8 @@ class GraphicsTest extends munit.FunSuite:
     var calls = 0
     Animation.foreach(0, 8, 8)(_ => Picture.empty)(_ => calls += 1)
     assertEquals(calls, 0)
+
+  test("text with a non-finite anchor is rejected at construction"):
+    // The other primitives validate their coordinates up front; text used to defer the failure to render.
+    intercept[IllegalArgumentException](Picture.text("x", Point(Double.NaN, 10)))
+    intercept[IllegalArgumentException](Picture.text("x", Point(10, Double.PositiveInfinity)))
