@@ -33,8 +33,8 @@ object UndistortBench:
         )
         Managed.use(BenchImages.scene(width, height)): src =>
           Using.resource(Undistorter.prepare(calibration, size)): prepared =>
-            val baselineHash = src.undistorted(calibration).use(BenchImages.hash)
-            val preparedHash = prepared(src).use(BenchImages.hash)
+            val baselineHash = src.undistorted(calibration).use(PixelHash.of)
+            val preparedHash = prepared(src).use(PixelHash.of)
             require(baselineHash == preparedHash, s"undistort output differs at ${width}x$height")
             println(
               s"${width}x$height baseline=$baselineHash prepared=$preparedHash maps=${width.toLong * height * 6} bytes"

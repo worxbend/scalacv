@@ -29,11 +29,14 @@ object Deps {
   val opencvRelease = opencv.takeWhile(_ != '-')
 
   /** Options for test sources: deliberately looser than main. The leak-catchers
-    * (`-Wvalue-discard`/`-Wnonunit-statement`), `-Werror` and `-Wunused:all` are for the published surface,
-    * not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard, nor for
-    * deliberately-unused test bindings.
+    * (`-Wvalue-discard`/`-Wnonunit-statement`), `-Werror` and the rest of `-Wunused:all` are for the
+    * published surface, not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard,
+    * nor for deliberately-unused test bindings. Unused *imports* are the exception: scalafix's
+    * `OrganizeImports.removeUnused` needs the compiler to report them, so test sources get that one warning
+    * (never fatal) and `<module>.test.fix --check` keeps dead imports out.
     */
-  val looseTestScalacOptions = Seq("-deprecation", "-feature", "-unchecked", "-java-output-version", "17")
+  val looseTestScalacOptions =
+    Seq("-deprecation", "-feature", "-unchecked", "-Wunused:imports", "-java-output-version", "17")
 
   /** The bytedeco classifier for the machine running the build.
     *
@@ -72,7 +75,7 @@ object Deps {
     * adding to it, so declaring only the classifier yields a classpath with zero `org/opencv/` classes. And
     * `libopencv_core` has a NEEDED on `libopenblas.so.0`, which ships only in openblas's own classifier jar.
     */
-  val opencvNatives = Seq(
+  lazy val opencvNatives = Seq(
     opencvApi,
     mvn"org.bytedeco:opencv:$opencv;classifier=$platform",
     mvn"org.bytedeco:openblas:$openblas;classifier=$platform"
@@ -197,17 +200,16 @@ trait ScalacvModule extends ScalaModule with ScalafixModule {
   )
 }
 
-/** Test settings. Test sources are deliberately looser than main: `-Wunused:all` (dead test helpers are
-  * common), the leak-catchers (`-Wvalue-discard`/`-Wnonunit-statement`) and `-Werror` are for the published
-  * surface, not for `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard. So the
-  * strict flags do not carry into tests.
+/** The JVM selection and per-suite isolation every test module in this build gets, whatever its framework.
+  *
+  * Separate from [[ScalacvTests]] so the zio-test module (which is not munit) shares exactly the same forking
+  * and discovery guard instead of re-implementing a subset of them.
   */
-trait ScalacvTests extends TestModule.Munit {
-  def mvnDeps = Seq(mvn"org.scalameta::munit:1.3.6")
-
-  /* Test modules pick their own JVM, so they need the same override and the same version-gating as
-   * ScalacvModule -- see the comments there. The default and the fallback live in Deps so that this
-   * copy and ScalacvModule's cannot drift apart. */
+trait ScalacvTestIsolation extends TestModule {
+  /* Mill 1.1.9's `JavaTests` forwards `jvmId` from the enclosing module (observed: `zio.test.jvmId`
+   * honours `MILL_JVM_ID` with no local definition); this duplicate is defensive and keeps
+   * `jvmMajor`/`forkArgs` self-contained. The default and the fallback live in Deps so that this copy
+   * and ScalacvModule's cannot drift apart. */
   def jvmId = Task.Input(Task.env.getOrElse("MILL_JVM_ID", Deps.defaultJvmId))
   def jvmMajor = Task(Deps.jvmMajorOf(jvmId()))
 
@@ -226,6 +228,20 @@ trait ScalacvTests extends TestModule.Munit {
     require(suites.nonEmpty, "scalacv: no test suites discovered; check the test sources and framework")
     suites.map(Seq(_))
   }
+}
+
+/** munit test settings. Test sources stay looser than main: the leak-catchers
+  * (`-Wvalue-discard`/`-Wnonunit-statement`) and `-Werror` are for the published surface, not for
+  * `intercept[…]` and `Files.deleteIfExists` cleanup that legitimately discard, and dead test helpers are
+  * common. Dead *imports* are linted all the same: `-Wunused:imports` (Deps.looseTestScalacOptions) feeds
+  * scalafix's `OrganizeImports.removeUnused`, and `<module>.test.fix --check` is a CI gate.
+  */
+trait ScalacvTests extends TestModule.Munit with ScalacvTestIsolation with ScalafixModule {
+  def mvnDeps = Seq(mvn"org.scalameta::munit:1.3.6")
+
+  /* ScalafixModule is a ScalaModule, so this trait sees both JavaModule.defaultTask and
+   * TestModule.defaultTask; pick the test one, exactly as Mill's own JavaTests does. */
+  override def defaultTask(): String = "testForked"
 }
 
 /** Everything that ships to Maven Central.
@@ -371,15 +387,23 @@ object zio extends ScalacvPublishModule {
   def mvnDeps = Seq(mvn"dev.zio::zio:2.1.26", mvn"dev.zio::zio-streams:2.1.26")
 
   /* zio-test rather than munit here (D6): the module under test is ZIO, so its own effects are
-   * the natural thing to write assertions in. Natives are still needed at run time. */
-  object test extends ScalaTests {
+   * the natural thing to write assertions in. Natives are still needed at run time. Same one-JVM-
+   * per-suite isolation and empty-discovery guard as the munit modules (ScalacvTestIsolation). */
+  object test extends ScalaTests with ScalacvTestIsolation with ScalafixModule {
     def scalacOptions = Task(Deps.looseTestScalacOptions)
     def testFramework = "zio.test.sbt.ZTestFramework"
     def mvnDeps = Seq(
       mvn"dev.zio::zio-test:2.1.26",
       mvn"dev.zio::zio-test-sbt:2.1.26"
     ) ++ Deps.opencvNatives
-    def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
+
+    /* ScalacvZioSpec scans zio/src/scalacv/zio/package.scala for `ZIO.attempt` on the compute executor.
+     * Hand it the exact file (its fallback is a walk up from the forked JVM's sandbox cwd). `moduleDir`
+     * here is `zio/test`, hence `os.up`. */
+    def forkArgs = Task {
+      super.forkArgs() :+
+        s"-Dscalacv.zio.source=${moduleDir / os.up / "src" / "scalacv" / "zio" / "package.scala"}"
+    }
   }
 }
 
@@ -434,6 +458,11 @@ object benchmarks extends ScalacvModule {
   // Headless (via Deps.headlessJvmArgs) keeps toBufferedImage benchmarks from opening a window; the
   // GC/JIT flags used for a run are printed by the harness so a run is reproducible.
   def forkArgs = Task(Deps.headlessJvmArgs(jvmMajor()))
+
+  /* The pixel-exact regression key is the one the tests use (same as graphs.test): compile the tracked
+   * fixture source rather than keep a second copy of the hash that can drift from it. */
+  def sharedPixelHash = Task.Source(core.test.moduleDir / "src" / "scalacv" / "PixelHash.scala")
+  def sources = Task(super.sources() :+ sharedPixelHash())
 }
 
 /** JavaFX examples. Deliberately excluded from CI and never published: OpenJFX resolves per-host through the

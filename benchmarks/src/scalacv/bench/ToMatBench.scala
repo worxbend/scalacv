@@ -40,7 +40,7 @@ object ToMatBench:
     println("=== fromBufferedImage output hashes (must be identical before/after) ===")
     for (w, h) <- sizes; (name, mk) <- Seq("3BYTE_BGR" -> (bgr(_, _)), "INT_ARGB" -> (argb(_, _))) do
       val img = Image.fromBufferedImage(mk(w, h))
-      try println(f"${w}x$h%-9s $name%-10s hash=${BenchImages.hash(img.mat)}%d")
+      try println(f"${w}x$h%-9s $name%-10s hash=${PixelHash.of(img.mat)}%d")
       finally img.close()
 
     val results =

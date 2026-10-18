@@ -27,7 +27,7 @@ object GrayBlurCloneBench:
         val direct = g.gaussianBlur(side)
         try
           println(
-            f"${w}x$h%-9s cloned=${BenchImages.hash(cloned.get)}  direct=${BenchImages.hash(direct.get)}"
+            f"${w}x$h%-9s cloned=${PixelHash.of(cloned.get)}  direct=${PixelHash.of(direct.get)}"
           )
         finally { cloned.release(); direct.release() }
       finally g.release()

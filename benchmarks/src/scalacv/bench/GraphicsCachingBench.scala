@@ -22,7 +22,7 @@ object GraphicsCachingBench:
     val b = layout.bounds(picture).get
     val image =
       picture.translate(8 - b.minX, 8 - b.minY).render(b.width.ceil.toInt + 17, b.height.ceil.toInt + 17)
-    try BenchImages.hash(image.mat)
+    try PixelHash.of(image.mat)
     finally image.close()
 
   private def reportDelta(baseline: Bench.Result, optimized: Bench.Result): Unit =

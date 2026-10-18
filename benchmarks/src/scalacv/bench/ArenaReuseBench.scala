@@ -42,7 +42,7 @@ object ArenaReuseBench:
         Imgproc.cvtColor(frame, g, Imgproc.COLOR_BGR2GRAY)
         Imgproc.GaussianBlur(g, b, k, 0)
         Imgproc.Canny(b, e, 50, 150)
-        try println(f"${w}x$h%-9s chain=${BenchImages.hash(chained.get)}  reuse=${BenchImages.hash(e)}")
+        try println(f"${w}x$h%-9s chain=${PixelHash.of(chained.get)}  reuse=${PixelHash.of(e)}")
         finally chained.release()
       finally { frame.release(); g.release(); b.release(); e.release() }
 

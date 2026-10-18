@@ -55,20 +55,3 @@ object BenchImages:
       Imgproc.cvtColor(bgr, g, Imgproc.COLOR_BGR2GRAY)
       g
     finally bgr.release()
-
-  /** A stable 64-bit content hash of a Mat's pixels — the pixel-exact regression key. Reads the raw bytes row
-    * by row (so it is correct for non-continuous Mats too) and folds them with FNV-1a.
-    */
-  def hash(m: Mat): Long =
-    val rowBytes = m.cols * m.elemSize().toInt
-    val buf = new Array[Byte](rowBytes)
-    var h = 0xcbf29ce484222325L
-    var r = 0
-    while r < m.rows do
-      val _ = m.get(r, 0, buf)
-      var i = 0
-      while i < rowBytes do
-        h = (h ^ (buf(i) & 0xffL)) * 0x100000001b3L
-        i += 1
-      r += 1
-    h

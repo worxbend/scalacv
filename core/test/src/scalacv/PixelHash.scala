@@ -7,10 +7,7 @@ import org.opencv.core.Mat
   * The clone-elimination checks in PixelHashTest, the translucent ROI alpha-blend in GraphicsAlphaRoiTest and
   * the roundtrip laws in PropertyTest must fold pixels the same way. graphs.test compiles this fixture source
   * directly rather than depending on core.test's integration suites, so neither test module gains a
-  * dependency on the other's tests.
-  *
-  * Keep this in sync with BenchImages.hash in the benchmarks module: that is a deliberate separate copy
-  * because the benchmarks module is not on the test classpath.
+  * dependency on the other's tests. The benchmarks module compiles it the same way.
   */
 object PixelHash:
 
