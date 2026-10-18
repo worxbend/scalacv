@@ -7,6 +7,7 @@ import java.nio.channels.{ClosedByInterruptException, FileLockInterruptionExcept
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.concurrent.{ExecutionException, TimeUnit, TimeoutException}
 
 import scala.util.Using
 
@@ -17,6 +18,10 @@ import scala.util.Using
   * on every download and on every cache hit. Skipping the check is a deliberate, named opt-out —
   * [[ModelSpec.unverified]] — that loses the tamper/corruption guard, so reach for it only for a model with
   * no published checksum.
+  *
+  * `fileName` must be a single path component: no `/`, `\\`, `:` or NUL, and neither `.` nor `..`. The
+  * constructor only checks that it is non-empty (a historical contract); [[Models.fetch]] and
+  * [[Models.fetchCached]] both reject a name that is not a single component before touching the filesystem.
   *
   * `sizeBytes` is not redundant with the hash; it changes the *message*, and only ever in the direction of
   * being more useful. The failure it catches is the common one: a mirror that answers a model request with an
@@ -74,7 +79,7 @@ object Models:
   /** How long to wait for a mirror's TCP connection before giving up and moving to the next. */
   private val ConnectTimeout: Duration = Duration.ofSeconds(15)
 
-  /** How long a single download may take, end to end, before it is abandoned for the next mirror. */
+  /** How long a single download — headers and body — may take before it is abandoned for the next mirror. */
   private val RequestTimeout: Duration = Duration.ofSeconds(60)
 
   /** Read size for [[sha256Of]]. 64 KiB is the usual sweet spot: large enough that the syscall count stops
@@ -96,23 +101,40 @@ object Models:
     * digest directories. Publication requires atomic replacement and fails closed if unsupported, leaving the
     * prior target unchanged rather than falling back to a potentially partial copy. For coordinated,
     * content-addressed storage, opt in to [[fetchCached]].
+    *
+    * `spec.fileName` must be a single path component — see [[isSafeFileName]]. A name that would resolve
+    * outside `into` (`../x`, an absolute path) or below it (`sub/x`) is a `Left(CvError.LoadFailed)` returned
+    * before the cache is consulted or the directory created, never a write somewhere else.
     */
-  def fetch(spec: ModelSpec, into: Path): Either[CvError, Path] =
-    val target = into.resolve(spec.fileName)
-    if cacheHit(spec, target) then Right(target)
+  def fetch(spec: ModelSpec, into: Path): Either[CvError, Path] = fetch(spec, into, RequestTimeout)
+
+  /** [[fetch]] with an explicit per-download budget — the seam the timeout tests use. */
+  private[scalacv] def fetch(spec: ModelSpec, into: Path, requestTimeout: Duration): Either[CvError, Path] =
+    // Checked before `resolve`, not just before the filesystem: `Path.resolve` itself throws for a NUL byte.
+    if !isSafeFileName(spec.fileName) then
+      Left(
+        CvError.LoadFailed(
+          spec.fileName,
+          "a model file name must be a single path component inside the target directory " +
+            "(no separators, '.', '..' or drive prefixes)"
+        )
+      )
     else
-      // Only this one step belongs under the `catch` below. A wider `try` would take a failure raised while
-      // downloading — a temp file that could not be created, a mirror that refused the connection — and
-      // report it as "could not create the download directory", pointing the reader at the step that had
-      // demonstrably just succeeded. `fetchFirst` reports its own failures, per mirror.
-      val prepared: Either[CvError, Path] =
-        try Right(Files.createDirectories(into))
-        catch
-          case e: Exception =>
-            Left(
-              CvError.LoadFailed(into.toString, s"could not create the download directory: ${describe(e)}")
-            )
-      prepared.flatMap(_ => fetchFirst(spec, target))
+      val target = into.resolve(spec.fileName)
+      if cacheHit(spec, target) then Right(target)
+      else
+        // Only this one step belongs under the `catch` below. A wider `try` would take a failure raised while
+        // downloading — a temp file that could not be created, a mirror that refused the connection — and
+        // report it as "could not create the download directory", pointing the reader at the step that had
+        // demonstrably just succeeded. `fetchFirst` reports its own failures, per mirror.
+        val prepared: Either[CvError, Path] =
+          try Right(Files.createDirectories(into))
+          catch
+            case e: Exception =>
+              Left(
+                CvError.LoadFailed(into.toString, s"could not create the download directory: ${describe(e)}")
+              )
+        prepared.flatMap(_ => fetchFirst(spec, target, requestTimeout))
 
   /** Fetches a pinned model at `cacheRoot/sha256/<lowercase SHA-256>/<fileName>`. The root is the caller's
     * namespace; unlike [[fetch]], distinct revisions with the same filename coexist. Only an exact
@@ -133,14 +155,13 @@ object Models:
     * lock.
     */
   def fetchCached(spec: ModelSpec, cacheRoot: Path): Either[CvError, Path] =
-    val validName = spec.fileName.nonEmpty && spec.fileName != "." && spec.fileName != ".." &&
-      !spec.fileName.exists(c => c == '/' || c == '\\' || c == ':' || c == 0.toChar)
     spec.sha256 match
-      case Some(digest) if digest.matches("[0-9a-fA-F]{64}") && validName =>
+      case Some(digest) if digest.matches("[0-9a-fA-F]{64}") && isSafeFileName(spec.fileName) =>
         val key = digest.toLowerCase(java.util.Locale.ROOT)
         try
           ModelCache.withLock(cacheRoot, key, spec.fileName): target =>
-            val result = if cacheHit(spec, target) then Right(target) else fetchFirst(spec, target)
+            val result =
+              if cacheHit(spec, target) then Right(target) else fetchFirst(spec, target, RequestTimeout)
             result.map(_ => cacheRoot.resolve("sha256").resolve(key).resolve(spec.fileName))
         catch
           case interrupted: InterruptedException =>
@@ -157,6 +178,14 @@ object Models:
             "cached models require a 64-digit SHA-256 and a single safe filename"
           )
         )
+
+  /** Whether `name` is a single, non-special path component: non-empty, neither `.` nor `..`, and free of
+    * `/`, `\\`, `:` and NUL. Shared by [[fetch]] and [[fetchCached]] so the two cannot drift on what counts
+    * as escaping the target directory.
+    */
+  private[scalacv] def isSafeFileName(name: String): Boolean =
+    name.nonEmpty && name != "." && name != ".." &&
+      !name.exists(c => c == '/' || c == '\\' || c == ':' || c == 0.toChar)
 
   private def cancelled(cause: IOException): Nothing =
     Thread.currentThread().interrupt()
@@ -217,14 +246,15 @@ object Models:
           case None => Right(())
 
   /** Tries each mirror in turn, keeping the first that downloads and (if pinned) verifies. */
-  private def fetchFirst(spec: ModelSpec, target: Path): Either[CvError, Path] =
+  private def fetchFirst(spec: ModelSpec, target: Path, requestTimeout: Duration): Either[CvError, Path] =
     // A left fold rather than `find` over a side-effecting predicate: the failures have to accumulate in
     // order so the final message can list every mirror that was tried, and `iterator.map(...).find(...)`
     // only collects them because the iterator happens to be pulled lazily and left to right.
     spec.urls.foldLeft(Left(Nil): Either[List[String], Path]) { (soFar, url) =>
       soFar match
         case Right(path) => Right(path) // already downloaded; do not touch the remaining mirrors
-        case Left(failures) => fetchOne(spec, url, target).left.map(e => failures :+ describe(e))
+        case Left(failures) =>
+          fetchOne(spec, url, target, requestTimeout).left.map(e => failures :+ describe(e))
     } match
       case Right(path) => Right(path)
       case Left(failures) =>
@@ -244,14 +274,19 @@ object Models:
     * deletes the temp file on every path and suppresses cleanup failure on a primary error. Interruption
     * propagates instead of advancing to another mirror.
     */
-  private def fetchOne(spec: ModelSpec, url: String, target: Path): Either[CvError, Path] =
+  private def fetchOne(
+      spec: ModelSpec,
+      url: String,
+      target: Path,
+      requestTimeout: Duration
+  ): Either[CvError, Path] =
     try
       val tmp = Files.createTempFile(target.getParent, ".model-", ".part")
       val cleanup = new AutoCloseable:
         def close(): Unit =
           Files.deleteIfExists(tmp): Unit
       Using.resource(cleanup): _ =>
-        download(url, tmp)
+        download(url, tmp, requestTimeout)
         // The mirror, not the temp file, is what the reader has to act on, so `verify`'s message is
         // re-attributed to the URL it came from.
         verify(spec, tmp).left
@@ -275,18 +310,38 @@ object Models:
     * fails fast — surfacing as an exception that lets [[fetchFirst]] try the next mirror rather than hang
     * forever. Other schemes (notably `file://`, which the JDK HTTP client does not serve) fall back to a
     * plain stream.
+    *
+    * `HttpRequest.Builder.timeout` bounds only the wait for the response *headers*; a mirror that answers
+    * `200` and then stalls mid-body would otherwise pin `send` forever. The body is therefore awaited through
+    * `sendAsync` under the same budget, and a stall is cancelled and reported as an `IOException` so the next
+    * mirror gets its turn. The scheme is compared case-insensitively: `HTTP://` is the same protocol and must
+    * get the same timeouts and status check.
     */
-  private def download(url: String, tmp: Path): Unit =
+  private def download(url: String, tmp: Path, requestTimeout: Duration): Unit =
     val uri = URI.create(url)
-    uri.getScheme match
-      case "http" | "https" =>
-        val request = HttpRequest.newBuilder(uri).timeout(RequestTimeout).GET().build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(tmp))
+    Option(uri.getScheme).map(_.toLowerCase(java.util.Locale.ROOT)) match
+      case Some("http" | "https") =>
+        val request = HttpRequest.newBuilder(uri).timeout(requestTimeout).GET().build()
+        val pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofFile(tmp))
+        val response =
+          try pending.get(requestTimeout.toMillis, TimeUnit.MILLISECONDS)
+          catch
+            case _: TimeoutException =>
+              pending.cancel(true): Unit
+              throw IOException(s"the download did not complete within ${describeBudget(requestTimeout)}")
+            case interrupted: InterruptedException =>
+              pending.cancel(true): Unit
+              throw interrupted
+            case failed: ExecutionException => throw failed.getCause
         if response.statusCode() >= 400 then throw IOException(s"HTTP ${response.statusCode()} from $url")
       case _ =>
         Using.resource(uri.toURL.openStream())(in =>
           Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING): Unit
         )
+
+  /** `60 s` for whole seconds, `500 ms` otherwise — a sub-second test budget must not read as "0 s". */
+  private def describeBudget(budget: Duration): String =
+    if budget.toMillis % 1000 == 0 then s"${budget.toSeconds} s" else s"${budget.toMillis} ms"
 
   private def move(tmp: Path, target: Path): Path =
     ModelCache.publish(tmp, target)

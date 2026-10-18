@@ -7,7 +7,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.{Callable, CountDownLatch, Executors, FutureTask, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.sun.net.httpserver.HttpServer
+import com.sun.net.httpserver.{HttpExchange, HttpServer}
 
 import scala.jdk.CollectionConverters.*
 import scala.util.Using
@@ -492,6 +492,79 @@ class ModelCacheTest extends munit.FunSuite:
       assertEquals(Files.readString(a), "first revision")
       assertEquals(Files.readString(b), "other revision")
       assertEquals(Models.fetch(first, dir.resolve("legacy")), Right(dir.resolve("legacy/model.bin")))
+
+  /** A loopback server whose every request runs `handle`; `body` receives the bound port. */
+  private def withRawServer[A](handle: HttpExchange => Unit)(body: Int => A): A =
+    val executor = Executors.newCachedThreadPool()
+    val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
+    try
+      server.setExecutor(executor)
+      server.createContext(
+        "/",
+        exchange =>
+          try handle(exchange)
+          finally exchange.close()
+      )
+      server.start()
+      body(server.getAddress.getPort)
+    finally
+      server.stop(0)
+      executor.shutdownNow()
+      assert(executor.awaitTermination(10, TimeUnit.SECONDS))
+
+  test("legacy fetch rejects escaping, absolute and nested file names before touching the filesystem"):
+    withDirectory: dir =>
+      val good = source(dir, "bytes")
+      val into = dir.resolve("inner")
+      val absolute = dir.resolve("absolute-escape.bin")
+      // The NUL name is the one `Path.resolve` itself refuses: the check must run before any path is built.
+      Seq("../escaped.bin", absolute.toString, "sub/dir/model.bin", ".", "..", "x\u0000y").foreach: name =>
+        val spec = ModelSpec.unverified(name, good.urls)
+        Models.fetch(spec, into) match
+          case Left(_: CvError.LoadFailed) => ()
+          case other => fail(s"$name: expected Left(LoadFailed), got $other")
+        assert(!Files.exists(into), s"$name: fetch created the target directory")
+      assert(!Files.exists(dir.resolve("escaped.bin")), "an escaping name was written beside the directory")
+      assert(!Files.exists(absolute), "an absolute name was written at its absolute path")
+
+  test("an upper-case HTTP scheme takes the HTTP client path"):
+    withDirectory: dir =>
+      withRawServer(exchange => exchange.sendResponseHeaders(404, -1)): port =>
+        val spec = ModelSpec.unverified("m.bin", Seq(s"HTTP://127.0.0.1:$port/m.bin"))
+        Models.fetch(spec, dir.resolve("models")) match
+          case Left(e) => assert(e.getMessage.contains("HTTP 404"), e.getMessage)
+          case Right(path) => fail(s"a 404 must not produce a model at $path")
+
+  test("a mirror that stalls mid-body is abandoned within the request budget"):
+    withDirectory: dir =>
+      val bytes = Array.tabulate[Byte](1000)(i => (i % 251).toByte)
+      val finish = new CountDownLatch(1)
+      def stall(exchange: HttpExchange): Unit =
+        exchange.sendResponseHeaders(200, bytes.length.toLong)
+        val out = exchange.getResponseBody
+        out.write(bytes, 0, 100)
+        out.flush()
+        // Headers and a body prefix are on the wire; now hold the rest back for longer than the budget.
+        finish.await(5, TimeUnit.SECONDS): Unit
+        out.write(bytes, 100, bytes.length - 100)
+      try
+        withRawServer(stall): port =>
+          val spec = ModelSpec.unverified("stalled.bin", Seq(s"http://127.0.0.1:$port/stalled.bin"))
+          val started = System.nanoTime()
+          val result = Models.fetch(spec, dir, java.time.Duration.ofMillis(500))
+          val elapsedMs = (System.nanoTime() - started) / 1_000_000
+          finish.countDown()
+          result match
+            case Left(e: CvError.LoadFailed) =>
+              assert(e.getMessage.contains("did not complete within"), e.getMessage)
+            case other =>
+              fail(s"expected Left(LoadFailed) from a stalled mirror, got $other after $elapsedMs ms")
+          assert(elapsedMs < 3000, s"a 500 ms budget took $elapsedMs ms to expire")
+          val parts = Using.resource(Files.list(dir))(
+            _.iterator.asScala.filter(_.getFileName.toString.endsWith(".part")).toList
+          )
+          assertEquals(parts, Nil)
+      finally finish.countDown()
 
 /** A real second JVM, with no shared Models singleton or in-memory synchronization. */
 object ModelCacheWorker:
