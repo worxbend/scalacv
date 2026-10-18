@@ -92,6 +92,13 @@ class MotionTest extends munit.FunSuite:
       assert(moved.moving, s"after the mismatch the detector still works, ratio=${moved.ratio}")
     finally d.close()
 
+  test("frameDifference rejects a blur radius whose kernel side would overflow Int"):
+    // `radius * 2 + 1` wraps negative past (Int.MaxValue - 1) / 2; without the guard the factory accepts the
+    // radius and the first `detect` fails with a misleading "a Size cannot be negative".
+    val e = intercept[IllegalArgumentException](MotionDetector.frameDifference(blurRadius = 1 << 30))
+    assert(e.getMessage.contains("1073741824"), e.getMessage)
+    MotionDetector.frameDifference(blurRadius = (Int.MaxValue - 1) / 2).close() // the largest legal radius
+
   test("Motion.still is no motion"):
     assert(!Motion.still.moving)
     assertEquals(Motion.still.regionCount, 0)

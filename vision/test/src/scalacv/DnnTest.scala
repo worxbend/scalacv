@@ -151,6 +151,14 @@ class DnnTest extends munit.FunSuite:
     Managed.use(bgrFixture()): src =>
       intercept[IllegalArgumentException](Dnn.blobFromImage(src, size = Some(Size(0, 0))).release())
 
+  test("blobFromImage rejects a size that truncates to zero"):
+    // Size(0.5, 0.5) passes a `> 0` check but OpenCV truncates it to 0x0 — its spelling of "do not resize" —
+    // and hands back an un-resized blob with nothing thrown.
+    Managed.use(bgrFixture()): src =>
+      val e =
+        intercept[IllegalArgumentException](Dnn.blobFromImage(src, size = Some(Size(0.5, 0.5))).release())
+      assert(e.getMessage.contains("0x0"), e.getMessage)
+
   // ------------------------------------------------------------------ forward
 
   test("forward runs the graph — a Relu clamps the negatives its input carries"):

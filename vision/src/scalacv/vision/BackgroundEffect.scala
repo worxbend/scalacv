@@ -20,6 +20,9 @@ import scalacv.*
   */
 object BackgroundEffect:
 
+  /** The largest radius whose kernel side `radius * 2 + 1` still fits in an `Int`. */
+  private val MaxRadius = (Int.MaxValue - 1) / 2
+
   /** fg where `mask` is white, `bg` where black, feathered across the edge. `fg`, `bg` and `mask` are all
     * borrowed and must share the image size; `mask` is `CV_8UC1`. Returns a new owned `CV_8UC3` Mat.
     */
@@ -39,6 +42,7 @@ object BackgroundEffect:
       s"the background (${bg.cols}x${bg.rows}) must match the image (${fg.cols}x${fg.rows})"
     )
     require(feather >= 0, s"feather cannot be negative, got $feather")
+    require(feather <= MaxRadius, s"alphaBlend feather $feather is too large")
     // One `orThrow` around the whole block rather than eight around the individual calls. Every step below
     // is part of one operation from a caller's point of view, and OpenCV's own message already quotes the
     // failing C++ expression; what it cannot say is which scalacv call it came from. A `CvError` raised
@@ -75,6 +79,7 @@ object BackgroundEffect:
   /** Blurs the background behind `mask`, keeping the person sharp. Borrows `image` and `mask`. */
   private[scalacv] def blur(image: Mat, mask: Mat, strength: Int, feather: Int): Managed[Mat] =
     require(strength >= 1, s"blur strength must be ≥ 1, got $strength")
+    require(strength <= MaxRadius, s"blurBackground strength $strength is too large")
     val side = (strength * 2 + 1).toDouble
     image.gaussianBlur(Size(side, side)).use(bg => alphaBlend(image, bg, mask, feather))
 

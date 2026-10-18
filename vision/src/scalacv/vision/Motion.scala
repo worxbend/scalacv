@@ -89,6 +89,9 @@ object MotionDetector:
 
   private given Releasable[BackgroundSubtractorMOG2] = Releasable.nativeHandle
 
+  /** The largest radius whose kernel side `radius * 2 + 1` still fits in an `Int`. */
+  private val MaxBlurRadius = (Int.MaxValue - 1) / 2
+
   /** Frame-difference motion detection: each frame is compared to the previous one. The first frame reports
     * [[Motion.still]] and becomes the baseline.
     *
@@ -110,6 +113,7 @@ object MotionDetector:
     require(threshold >= 0 && threshold <= 255, s"threshold must be in [0, 255], got $threshold")
     require(minArea >= 0, s"minArea cannot be negative, got $minArea")
     require(blurRadius >= 0, s"blurRadius cannot be negative, got $blurRadius")
+    require(blurRadius <= MaxBlurRadius, s"frameDifference blurRadius $blurRadius is too large")
     require(motionRatio >= 0 && motionRatio <= 1, s"motionRatio must be in [0, 1], got $motionRatio")
     FrameDiff(threshold, minArea, blurRadius, motionRatio)
 

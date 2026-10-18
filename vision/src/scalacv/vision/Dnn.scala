@@ -107,8 +107,9 @@ object Dnn:
     * @return
     *   a caller-owned blob.
     * @throws IllegalArgumentException
-    *   if `mat` is empty, or if `size` is given but not strictly positive — OpenCV treats a zero extent as
-    *   "do not resize", which would silently produce a blob of the wrong shape rather than fail.
+    *   if `mat` is empty, or if `size` is given but truncates to a zero extent (OpenCV takes whole pixels, so
+    *   `Size(0.5, 0.5)` is `0x0` to it) — it treats a zero extent as "do not resize", which would silently
+    *   produce a blob of the wrong shape rather than fail.
     */
   def blobFromImage(
       mat: Mat,
@@ -120,11 +121,12 @@ object Dnn:
   ): Managed[Mat] =
     require(!mat.empty(), "Dnn.blobFromImage needs a non-empty image")
     require(
-      size.forall(s => s.width > 0 && s.height > 0),
-      s"Dnn.blobFromImage needs a strictly positive size, or None to keep the source's: ${size.orNull}"
+      size.forall(s => s.width.toInt > 0 && s.height.toInt > 0),
+      "Dnn.blobFromImage needs a size of at least one whole pixel each way, or None to keep the source's; " +
+        s"got ${size.fold("None")(s => s"${s.width.toInt}x${s.height.toInt}")} after truncation"
     )
     // Size(0, 0) is OpenCV's spelling of "do not resize"; `require` above keeps a caller from reaching it
-    // by accident, and None reaches it on purpose.
+    // by accident (including through a sub-pixel Size that truncates to it), and None reaches it on purpose.
     val target = size.fold(CvSize(0, 0))(_.toCv)
     // Unlike the Imgproc wrappers in Ops.scala, this native call allocates the destination itself and
     // returns it, so there is no half-built Mat to release if it throws — the throw happens before any

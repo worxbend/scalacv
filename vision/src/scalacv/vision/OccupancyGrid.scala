@@ -116,7 +116,9 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
     while i < bytes.length do
       bytes(i) = (sigmoid(logOdds(i)) * 255).toByte
       i += 1
-    val mat = Mat(rows, cols, CvType.CV_8UC1)
+    // Under `Cv.orThrow` so an allocation OpenCV refuses (an enormous grid) is the documented
+    // `CvError.NativeCall` naming this method, not a raw CvException.
+    val mat = Cv.orThrow("OccupancyGrid.toImage")(Mat(rows, cols, CvType.CV_8UC1))
     val handle = Managed(mat)
     try
       mat.put(0, 0, bytes): Unit

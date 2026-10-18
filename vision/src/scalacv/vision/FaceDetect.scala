@@ -195,7 +195,7 @@ object FaceDetect:
     * @param nmsThreshold
     *   IoU above which two overlapping boxes are treated as the same face and the weaker one dropped.
     * @throws IllegalArgumentException
-    *   if `inputSize` has a zero side or a threshold is outside `[0, 1]`.
+    *   if `inputSize` has a side that truncates to zero pixels or a threshold is outside `[0, 1]`.
     */
   def create(
       modelPath: String,
@@ -203,9 +203,12 @@ object FaceDetect:
       scoreThreshold: Float = 0.9f,
       nmsThreshold: Float = 0.3f
   ): Either[CvError, Managed[FaceDetectorYN]] =
+    // OpenCV takes the input size in whole pixels, so the check is on the truncated extents: Size(0.5, 0.5)
+    // is positive as Doubles and 0x0 to the detector.
     require(
-      inputSize.width > 0 && inputSize.height > 0,
-      s"FaceDetectorYN needs a positive input size, got ${inputSize.width}x${inputSize.height}"
+      inputSize.width.toInt > 0 && inputSize.height.toInt > 0,
+      s"FaceDetectorYN needs an input size of at least one pixel each way, got " +
+        s"${inputSize.width.toInt}x${inputSize.height.toInt} after truncation"
     )
     require(
       scoreThreshold >= 0f && scoreThreshold <= 1f,

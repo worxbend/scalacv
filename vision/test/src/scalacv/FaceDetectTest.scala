@@ -149,6 +149,12 @@ class FaceDetectTest extends munit.FunSuite:
       FaceDetect.create("ignored.onnx", Size(320, 320), nmsThreshold = -0.1f)
     )
 
+  test("create rejects an input size that truncates to zero before loading the model"):
+    // No model and no network: the precondition must fire before the path is even looked at. Size(0.5, 0.5)
+    // is positive as Doubles but 0x0 once OpenCV truncates it.
+    val e = intercept[IllegalArgumentException](FaceDetect.create("/nonexistent.onnx", Size(0.5, 0.5)))
+    assert(e.getMessage.contains("0x0"), e.getMessage)
+
   // ---------------------------------------------------------------- detect
 
   test("a drawn face is found, and all 15 columns decode to the features that were drawn"):
