@@ -186,8 +186,12 @@ object PublicApi:
     */
   def classesIn(dir: Path): Seq[Class[?]] =
     val names = binaryNames(dir).filter(n => n == "scalacv" || n.startsWith("scalacv."))
-    val loaded = names.flatMap(n => Try(Class.forName(n, false, loader)).toOption)
-    loaded.filter(keepClass)
+    val attempts = names.map(n => n -> Try(Class.forName(n, false, loader)))
+    // A class that will not load is a gate that silently shrank, not a class to skip: the golden would then
+    // report the member removals of a class that is still there.
+    val unloadable = attempts.collect { case (n, scala.util.Failure(e)) => s"$n ($e)" }
+    if unloadable.nonEmpty then munit.Assertions.fail(s"could not load: ${unloadable.mkString(", ")}")
+    attempts.flatMap((_, t) => t.toOption).filter(keepClass)
 
   private def keepClass(c: Class[?]): Boolean =
     Modifier.isPublic(c.getModifiers) &&
@@ -231,9 +235,19 @@ object PublicApi:
     */
   private def typeName(t: JType): String = t.getTypeName
 
+  /** The parameter list, from the generic signature when it is trustworthy and from the erased descriptor —
+    * marked ` /* erased */` — when it is not.
+    *
+    * "Not trustworthy" means the generic signature lists a different number of parameters than the descriptor
+    * (or cannot be read at all). Scala 3 emits exactly that for an extension method with its own type
+    * parameters, such as `useZIO`: the `Signature` attribute omits the function argument that the descriptor
+    * carries. Rendering the generic list verbatim recorded a one-parameter method that Java sees with two.
+    */
   private def paramList(generic: => Array[JType], erased: => Array[Class[?]]): String =
-    val ts = Try(generic.map(typeName).toVector).getOrElse(erased.map(typeName).toVector)
-    ts.mkString("(", ", ", ")")
+    val erasedNames = erased.map(typeName).toVector
+    Try(generic.map(typeName).toVector).toOption.filter(_.size == erasedNames.size) match
+      case Some(ts) => ts.mkString("(", ", ", ")")
+      case None => erasedNames.mkString("(", ", ", ")") + " /* erased */"
 
   private def memberMods(mods: Int): String =
     val b = StringBuilder()
@@ -376,6 +390,15 @@ class PublicApiTest extends munit.FunSuite:
     val dump = PublicApi.dump(Seq(classOf[ApiRendererFixture[?]]), "fixture")
     assert(dump.contains("A extends java.lang.Number"), dump)
     assert(dump.contains("final def value"), dump)
+
+  test("the renderer does not trust a truncated generic signature"):
+    // Scala 3 emits a generic signature for `useZIO` -- an extension method with its own type parameter --
+    // that lists one parameter where the erased descriptor has two. The golden must record what Java sees.
+    val holder = Class.forName("scalacv.zio.package$package$", false, classOf[Managed[?]].getClassLoader)
+    val dump = PublicApi.dump(Seq(holder), "fixture")
+    val line = dump.linesIterator.find(_.contains("def useZIO")).getOrElse(fail(s"no useZIO line in:\n$dump"))
+    assert(line.contains("scalacv.Managed"), line)
+    assert(line.contains("scala.Function1"), line)
 
   private val core = PublicApi.coreModule
   private lazy val coreDump: String = PublicApi.currentFor(core)

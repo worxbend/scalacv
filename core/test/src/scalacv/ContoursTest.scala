@@ -93,7 +93,7 @@ class ContoursTest extends munit.FunSuite:
   test("an empty Mat is a programmer error, not a native crash"):
     Using.resource(Managed(Mat())): m =>
       val e = intercept[IllegalArgumentException](m.get.findContours())
-      assert(e.getMessage.contains("non-empty"), e.getMessage)
+      assert(e.getMessage.contains("needs a non-empty"), e.getMessage)
       // The shared Preconditions check names the operation — pin that, since the message is the
       // only thing a caller has to grep for. (require prefixes it with "requirement failed: ".)
       assert(e.getMessage.contains("findContours"), e.getMessage)
