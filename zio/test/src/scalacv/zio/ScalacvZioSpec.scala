@@ -48,16 +48,20 @@ object ScalacvZioSpec extends ZIOSpecDefault:
     acquireRelease(VideoCapture(path)).flatMap: cap =>
       ZIO.fromEither(Either.cond(cap.isOpened, cap, RuntimeException(s"cannot open $path")))
 
-  /** The module source, located by walking up from the test's working directory. Mill forks tests from either
-    * the build root or the module directory, both ancestors of (or equal to) the tree that holds this file,
-    * so one of them resolves. `None` only if the layout moved — the scan test then guards rather than fails.
+  /** The module source. The build passes its path as `-Dscalacv.zio.source` (see `zio.test.forkArgs`);
+    * without the property, or if it points nowhere, the file is located by walking up from the test's working
+    * directory — Mill forks tests from either the build root or the module directory, both ancestors of (or
+    * equal to) the tree that holds this file. `None` only if neither resolves, and then the scan test fails
+    * rather than passing over a source it never read.
     */
   private def moduleSource: Option[String] =
     val rel = java.nio.file.Paths.get("zio", "src", "scalacv", "zio", "package.scala")
-    Iterator
+    val fromProperty = sys.props.get("scalacv.zio.source").map(java.nio.file.Paths.get(_))
+    val fromWalk = Iterator
       .iterate(java.nio.file.Paths.get("").toAbsolutePath)(p => p.getParent)
       .takeWhile(_ != null)
       .map(_.resolve(rel))
+    (fromProperty.iterator ++ fromWalk)
       .find(java.nio.file.Files.exists(_))
       .map(p => new String(java.nio.file.Files.readAllBytes(p), java.nio.charset.StandardCharsets.UTF_8))
 
@@ -264,8 +268,8 @@ object ScalacvZioSpec extends ZIOSpecDefault:
           val code = src.replaceAll("(?s)/\\*.*?\\*/", "")
           assertTrue(!code.contains("ZIO.attempt("))
         case None =>
-          // Source not locatable from the test's working directory: guard rather than fail.
-          assertCompletes
+          val cwd = java.nio.file.Paths.get("").toAbsolutePath
+          assertNever(s"zio/src/scalacv/zio/package.scala not found from $cwd")
     ,
 
     test(
