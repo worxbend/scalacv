@@ -40,3 +40,16 @@ private[scalacv] object Preconditions:
       s"$op needs a non-empty 8-bit single-channel image (typically the output of Canny), " +
         s"but got ${mat.rows()}x${mat.cols()} of type ${CvType.typeToString(mat.`type`())}"
     )
+
+  /** `op` needs `rect` to lie inside `mat`.
+    *
+    * The sums widen to `Long` before the comparison: a `Rect` admits `Int.MaxValue` extents, and `x + width`
+    * as an `Int` wraps negative, passes a naive `<= cols` check, and hands an out-of-range ROI to `submat`,
+    * where the only thing left to fail is the JVM itself (a `SIGSEGV` in `Mat.clone`).
+    */
+  def requireInside(op: String, rect: Rect, mat: Mat): Unit =
+    require(
+      rect.x >= 0 && rect.y >= 0 &&
+        rect.x.toLong + rect.width <= mat.cols && rect.y.toLong + rect.height <= mat.rows,
+      s"$op $rect does not fit inside ${mat.cols}x${mat.rows}"
+    )

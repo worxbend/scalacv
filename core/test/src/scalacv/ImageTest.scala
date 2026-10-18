@@ -95,6 +95,23 @@ class ImageTest extends munit.FunSuite:
     intercept[IllegalArgumentException](img.crop(Rect(0, 0, Width + 10, Height)))
     img.close()
 
+  // `x + width` and `y + height` are Int sums; a Rect admits Int.MaxValue extents, so the naive bounds check
+  // wraps negative, passes, and the ROI reaches `submat`/`clone` with the JVM as the only thing left to fail.
+  for (edge, rect) <- Seq(
+      "x" -> Rect(Int.MaxValue, 0, 1, 1),
+      "width" -> Rect(1, 0, Int.MaxValue, 1),
+      "y" -> Rect(0, Int.MaxValue, 1, 1),
+      "height" -> Rect(0, 1, 1, Int.MaxValue)
+    )
+  do
+    test(s"crop rejects a rectangle whose far edge overflows Int through its $edge, before native code"):
+      val img = sample()
+      try
+        val e = intercept[IllegalArgumentException](img.crop(rect))
+        assert(e.getMessage.contains("does not fit inside"), e.getMessage)
+        assertEquals(img.width, Width) // rejected up front, so the image is still usable
+      finally img.close()
+
   test("blank makes a canvas of the requested size and channel count"):
     val one = Image.blank(50, 40, channels = 1)
     assertEquals((one.width, one.height, one.channels), (50, 40, 1))
@@ -103,6 +120,30 @@ class ImageTest extends munit.FunSuite:
     assertEquals(four.channels, 4)
     four.close()
     intercept[IllegalArgumentException](Image.blank(10, 10, channels = 2))
+
+  test("an allocation OpenCV refuses is a named NativeCall, not a raw CvException"):
+    val e = intercept[CvError.NativeCall](Image.blank(Int.MaxValue, Int.MaxValue))
+    assert(e.getMessage.contains("Image.blank"), e.getMessage)
+
+  test("blur and medianBlur reject a radius whose kernel side overflows, naming the radius"):
+    val radius = 1 << 30 // radius * 2 + 1 wraps negative
+    val ops =
+      Seq[(String, Image => Image)]("blur" -> (_.blur(radius)), "medianBlur" -> (_.medianBlur(radius)))
+    for (name, op) <- ops do
+      val img = sample()
+      try
+        val e = intercept[IllegalArgumentException](op(img))
+        assert(e.getMessage.contains(s"$name radius $radius"), e.getMessage)
+        assertEquals(img.width, Width) // rejected up front, so the image is still usable
+      finally img.close()
+
+  test("scale rejects a non-finite factor up front"):
+    for factor <- Seq(Double.PositiveInfinity, Double.NaN) do
+      val img = sample()
+      try
+        intercept[IllegalArgumentException](img.scale(factor))
+        assertEquals(img.width, Width)
+      finally img.close()
 
   test("copy lets one image feed two independent chains"):
     val img = sample()

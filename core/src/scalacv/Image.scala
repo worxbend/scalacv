@@ -112,6 +112,7 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
     */
   def blur(radius: Int): Image =
     require(radius >= 0, s"blur radius cannot be negative, got $radius")
+    require(radius <= (Int.MaxValue - 1) / 2, s"blur radius $radius is too large") // the side must fit an Int
     // radius 0 is the identity, but it must still spend the receiver like every other branch: move the Mat
     // out of this handle into a fresh Image (no pixel copy) so the source is left spent, not aliased alive.
     if radius == 0 then Image(handle.move())
@@ -158,17 +159,14 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
 
   /** Scales by a single factor on both axes — `0.5` halves each side. */
   def scale(factor: Double, interpolation: Interpolation = Interpolation.Linear): Image =
-    require(factor > 0, s"scale factor must be positive, got $factor")
+    require(factor.isFinite && factor > 0, s"scale factor must be positive and finite, got $factor")
     transform(_.scaled(factor, factor, interpolation))
 
   /** Crops to `rect`, returning an independent copy (not an aliasing view). The rectangle must lie within the
     * image.
     */
   def crop(rect: Rect): Image =
-    require(
-      rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width && rect.y + rect.height <= height,
-      s"crop $rect does not fit inside ${width}x$height"
-    )
+    Preconditions.requireInside("crop", rect, handle.get)
     // submat is an aliasing view of the parent's data; clone makes it independent, and the view Mat is
     // released before the parent so no header is stranded. Going through `transform` is what releases the
     // parent even when submat or clone throws.
@@ -209,6 +207,7 @@ final class Image private (private val handle: Managed[Mat]) extends AutoCloseab
   /** Median blur (`radius` 1 = 3×3) — the standard cure for salt-and-pepper noise. */
   def medianBlur(radius: Int): Image =
     require(radius >= 1, s"medianBlur radius must be ≥ 1, got $radius")
+    require(radius <= (Int.MaxValue - 1) / 2, s"medianBlur radius $radius is too large")
     transform(_.medianBlur(radius * 2 + 1))
 
   /** Edge-preserving bilateral filter — smooths while keeping edges crisp (slower than a Gaussian). */
@@ -486,7 +485,7 @@ object Image:
       case 1 => CvType.CV_8UC1
       case 3 => CvType.CV_8UC3
       case _ => CvType.CV_8UC4
-    apply(Managed(Mat(height, width, cvType, color.toCv)))
+    apply(Managed(Cv.orThrow("Image.blank")(Mat(height, width, cvType, color.toCv))))
 
   /** Reads `path` and runs `use` on the resulting `Image`, closing it afterwards — even if `use` already
     * consumed it (close is idempotent) and even on an exception. The scoped, forget-nothing entry point.
