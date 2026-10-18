@@ -55,7 +55,7 @@ class ExamplesTest extends munit.FunSuite:
     // Windows ships no cascades; treat that as a skip rather than a failure.
     Fixtures.shapes().use { m =>
       FaceDetectHaar.run(m) match
-        case Right(faces) => assert(faces.size >= 0) // a blank scene: 0 is fine, the point is it ran
+        case Right(faces) => assert(faces.isEmpty, s"a blank scene produced $faces")
         case Left(err) =>
           assume(
             err.getMessage.toLowerCase.contains("windows"),
