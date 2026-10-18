@@ -29,7 +29,10 @@ class UndistorterTest extends FunSuite:
       val expected = src.undistorted(calibration).use(PixelHash.of)
       Using.resource(Undistorter.prepare(calibration, Size(161, 119))): prepared =>
         java.util.Arrays.fill(coefficients, 0.0)
-        assertNotEquals(src.undistorted(calibration).use(PixelHash.of), expected)
+        // Since 0.4.4 `Intrinsics(...)` copies its coefficients, so zeroing the backing array no longer
+        // reaches the stored calibration (IntrinsicsTest covers the copy); the one-shot path and the
+        // prepared maps must therefore both still produce the original image.
+        assertEquals(src.undistorted(calibration).use(PixelHash.of), expected)
         assertEquals(prepared(src).use(PixelHash.of), expected)
 
   private val coefficients = Vector(

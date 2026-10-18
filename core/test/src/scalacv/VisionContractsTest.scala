@@ -1,12 +1,11 @@
 package scalacv
 
-import scalacv.graphs.*
-import scalacv.vision.*
-
 import org.opencv.core as cv
 import org.opencv.core.{CvType, Mat}
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
+
+import scalacv.vision.*
 
 /** Model-free contracts and laws of the vision layer — embedding metrics, [[Gallery]] lookup, gesture rules,
   * pinhole projection, the pose decoders' guards and ArUco corner order. Everything runs on hand-built data:
@@ -173,7 +172,7 @@ class VisionContractsTest extends munit.ScalaCheckSuite:
       assert(e2.getMessage.contains("4-D"), e2.getMessage)
       assert(e2.getMessage.contains("2-D"), e2.getMessage)
       val e3 =
-        intercept[IllegalArgumentException](PoseEstimator.decode(five, Size(100, 80), KeypointLayout.Heatmap))
+        intercept[CvError.NativeCall](PoseEstimator.decode(five, Size(100, 80), KeypointLayout.Heatmap))
       assert(e3.getMessage.contains("5 keypoints"), e3.getMessage)
       assertEquals(five.total(), 100L)
     finally
