@@ -43,10 +43,30 @@ object LeakAssertions:
     * asserts RSS grew by less than `toleranceMB`. The tolerance is bounded-not-zero on purpose: RSS never
     * returns exactly to baseline (allocator arenas, code cache). A per-iteration native leak of even a modest
     * Mat clears this bound over a few hundred iterations, while a leak-free workload stays flat.
+    *
+    * `leakBytesPerIteration` is the size of the **smallest** native buffer the workload would leak per
+    * iteration if the path under test regressed — the figure the test's comment derives. It is required, not
+    * defaulted, because a gate is only a gate when `n × leak` clears the tolerance: the original
+    * blurBackground workload leaked 320×240×3 × 200 = 43.9 MiB against a 48 MiB tolerance and passed *while
+    * leaking*. The `require` refuses any configuration whose full-blown leak would not reach three times the
+    * tolerance, so a test cannot quietly be tuned into vacuity.
     */
-  def assertBounded(name: String, n: Int = 300, warmup: Int = 40, toleranceMB: Long = 48)(
-      workload: () => Unit
-  ): Unit =
+  def assertBounded(
+      name: String,
+      n: Int = 300,
+      warmup: Int = 40,
+      toleranceMB: Long = 48,
+      leakBytesPerIteration: Long
+  )(workload: () => Unit): Unit =
+    val leakBytes = n.toLong * leakBytesPerIteration
+    val floorBytes = 3L * toleranceMB * 1024L * 1024L
+    require(
+      leakBytes >= floorBytes,
+      s"$name: a full leak of $leakBytesPerIteration bytes × $n iterations is only " +
+        s"${leakBytes / (1024L * 1024L)} MiB, below 3 × the $toleranceMB MiB tolerance " +
+        s"(${floorBytes / (1024L * 1024L)} MiB) — this configuration could pass while leaking; raise n or " +
+        "the workload size"
+    )
     var i = 0
     while i < warmup do
       workload(); i += 1
