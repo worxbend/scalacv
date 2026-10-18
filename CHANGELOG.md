@@ -6,6 +6,9 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+### Build and CI
+- Binary-compatibility gate compares against the released `v0.4.4` (`32fd13a`) as well.
+
 ## [0.4.4] — 2026-10-18
 
 **Compatibility.** A `0.4.x` patch: binary-, source- and TASTy-compatible with 0.4.0, 0.4.1, 0.4.2 and

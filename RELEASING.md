@@ -68,6 +68,7 @@ It builds isolated local clones at these existing tags in `TMPDIR`, using each t
 | `v0.4.1` | `ce99927559701a72702cd887a90821fb847fdb73` |
 | `v0.4.2` | `6a6e3040a890f2724a539834ea51d8e3a2b23d5c` |
 | `v0.4.3` | `7f2d0e6c5130b9ab8e81984afaa937e6526259fe` |
+| `v0.4.4` | `32fd13a5c4aa8e1394703182cf0f163d40ac0d06` |
 
 Every baseline is compared to each corresponding current jar: core, vision, graphs and zio.
 Missing tags/dependencies, moved tags, build failures and binary incompatibilities fail the gate;
