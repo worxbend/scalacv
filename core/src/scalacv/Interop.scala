@@ -42,7 +42,7 @@ private[scalacv] object Interop:
   def toMat(image: BufferedImage): Mat =
     val w = image.getWidth
     val h = image.getHeight
-    val mat = Mat(h, w, CvType.CV_8UC3)
+    val mat = Cv.orThrow("Interop.toMat")(Mat(h, w, CvType.CV_8UC3))
     // Guard the fill: this is the one raw native allocation in the read path with no Managed wrapping it, so a
     // broken raster, an oversized `put`, or a failing `drawImage` between allocating the Mat and returning it
     // would otherwise strand a native buffer with no owner. Free it on any throw before it escapes.

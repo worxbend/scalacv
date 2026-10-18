@@ -1,5 +1,7 @@
 package scalacv
 
+import scala.collection.immutable.ArraySeq
+
 /** The pinhole model's value semantics: the native matrices `cameraMatrix`/`distCoeffs` hand out must carry
   * exactly the constructor's numbers — a regression net for the guarded allocate-then-fill both now use (a
   * throwing `put` must release the fresh Mat, which only a values test can keep honest on the happy path).
@@ -38,3 +40,9 @@ class IntrinsicsTest extends munit.FunSuite:
     assertEquals(a.distortion, Seq.empty)
     intercept[IllegalArgumentException](Intrinsics.approx(size, horizontalFovDegrees = 0))
     intercept[IllegalArgumentException](Intrinsics.approx(size, horizontalFovDegrees = 180))
+
+  test("construction copies a Seq over mutable storage, so a later edit cannot bypass validation"):
+    val backing = Array(0.1, -0.05, 0.001, 0.002, 0.01)
+    val intr = Intrinsics(600, 600, 320, 240, ArraySeq.unsafeWrapArray(backing))
+    backing(0) = Double.NaN
+    assertEquals(intr.distortion, Seq(0.1, -0.05, 0.001, 0.002, 0.01))

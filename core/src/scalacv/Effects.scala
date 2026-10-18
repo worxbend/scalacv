@@ -18,7 +18,12 @@ import org.opencv.photo.Photo
   * names, not positions, say which plate is which. Both Mats are owned by the receiver of the pair and must
   * be released independently.
   */
-final case class PencilSketchPair(colour: Managed[Mat], grey: Managed[Mat])
+final case class PencilSketchPair(colour: Managed[Mat], grey: Managed[Mat]):
+
+  /** The colour sketch under the preferred spelling; `colour` is kept for compatibility. The same handle, not
+    * a copy: releasing either releases both.
+    */
+  def color: Managed[Mat] = colour
 
 extension (self: Mat)
 

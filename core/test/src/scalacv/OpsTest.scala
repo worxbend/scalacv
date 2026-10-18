@@ -82,6 +82,14 @@ class OpsTest extends munit.FunSuite:
     withImages: (colour, _) =>
       val e = intercept[IllegalArgumentException](colour.gaussianBlur(Size(4, 4), 1.0))
       assert(e.getMessage.contains("odd"), e.getMessage)
+      // The shared `Mats.requireKernel` wording is what callers grep for; pin it.
+      assert(e.getMessage.contains("needs an odd, positive kernel"), e.getMessage)
+
+  test("gaussianBlur rejects a kernel that truncates to zero with sigma 0"):
+    withImages: (colour, _) =>
+      // Size(0.5, 0.5) passes a `> 0` check as a Double and reaches OpenCV as a 0x0 kernel with no sigma.
+      val e = intercept[IllegalArgumentException](colour.gaussianBlur(Size(0.5, 0.5)))
+      assert(e.getMessage.contains("gaussianBlur"), e.getMessage)
 
   test("every imgproc filter rejects the border mode OpenCV's filter engine aborts on"):
     withImages: (colour, grey) =>
@@ -277,6 +285,25 @@ class OpsTest extends munit.FunSuite:
         val tiny = use(colour.scaled(0.006, 0.006))
         assertEquals(tiny.get.cols(), 1)
         assertEquals(tiny.get.rows(), 1)
+
+  test("scaled rejects non-finite factors"):
+    withImages: (colour, _) =>
+      for bad <- Seq(Double.PositiveInfinity, Double.NaN) do
+        val e = intercept[IllegalArgumentException](colour.scaled(bad, 1.0))
+        assert(e.getMessage.contains("scaled"), e.getMessage)
+        intercept[IllegalArgumentException](colour.scaled(1.0, bad))
+
+  test("rotated rejects a non-finite scale"):
+    withImages: (colour, _) =>
+      for bad <- Seq(Double.PositiveInfinity, Double.NaN) do
+        val e = intercept[IllegalArgumentException](colour.rotated(0, scale = bad))
+        assert(e.getMessage.contains("rotated"), e.getMessage)
+
+  test("erode rejects a radius whose kernel side overflows, naming the radius"):
+    withImages: (_, grey) =>
+      val radius = 1 << 30
+      val e = intercept[IllegalArgumentException](grey.erode(radius))
+      assert(e.getMessage.contains(radius.toString), e.getMessage)
 
   test("convertScaleAbs turns a signed derivative back into 8-bit unsigned"):
     withImages: (_, grey) =>

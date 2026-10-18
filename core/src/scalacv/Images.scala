@@ -63,10 +63,11 @@ object Images:
     *   [[ImreadFlags]] value means exactly the same thing to `imdecode` as it does to `imread`.
     * @return
     *   `Left(CvError.DecodeFailed)` if the path cannot be represented on this filesystem, names nothing,
-    *   names a directory, names an empty file, cannot be read, or holds bytes no registered decoder
-    *   recognises. Which one it was is in the error's `details`: those causes used to be one message, because
-    *   one empty Mat was all `imread` gave us to tell them apart. For the last case OpenCV still prints its
-    *   own `findDecoder` warning to stderr and gives us no way to silence it.
+    *   names a directory, names an empty file, names a file above 2 GB (which no JVM array can hold), cannot
+    *   be read, or holds bytes no registered decoder recognises. Which one it was is in the error's
+    *   `details`: those causes used to be one message, because one empty Mat was all `imread` gave us to tell
+    *   them apart. For the last case OpenCV still prints its own `findDecoder` warning to stderr and gives us
+    *   no way to silence it.
     */
   def read(path: String, flags: ImreadFlags = ImreadFlags.Color): Either[CvError, Managed[Mat]] =
     def failed(details: String): Either[CvError, Managed[Mat]] = Left(CvError.DecodeFailed(path, details))
@@ -76,17 +77,24 @@ object Images:
         if !Files.exists(file) then failed("there is no file at this path")
         else if Files.isDirectory(file) then failed("this path is a directory, not a file")
         else
-          readAllBytes(file) match
+          sizeOf(file) match
             case Left(why) => failed(why)
-            // decode rejects an empty array too, but as "<bytes>" with no filename and no hint that the
-            // emptiness is the file's rather than the caller's.
-            case Right(bytes) if bytes.isEmpty => failed("the file is empty")
-            case Right(bytes) =>
-              decode(bytes, flags).left.map:
-                // decode never saw a filename, so it names its source "<N bytes>". Put the path back —
-                // an error that does not say which file failed is half an error.
-                case CvError.DecodeFailed(_, details) => CvError.DecodeFailed(path, details)
-                case other => other
+            // `Files.readAllBytes` refuses an array this long with an `OutOfMemoryError` — an `Error`, which
+            // must not escape a method whose contract is an `Either`. Its own limit is `Int.MaxValue - 8`.
+            case Right(size) if size > Int.MaxValue - 8 =>
+              failed(s"the file is $size bytes; an image above 2 GB cannot be read into a JVM array")
+            case Right(_) =>
+              readAllBytes(file) match
+                case Left(why) => failed(why)
+                // decode rejects an empty array too, but as "<bytes>" with no filename and no hint that the
+                // emptiness is the file's rather than the caller's.
+                case Right(bytes) if bytes.isEmpty => failed("the file is empty")
+                case Right(bytes) =>
+                  decode(bytes, flags).left.map:
+                    // decode never saw a filename, so it names its source "<N bytes>". Put the path back —
+                    // an error that does not say which file failed is half an error.
+                    case CvError.DecodeFailed(_, details) => CvError.DecodeFailed(path, details)
+                    case other => other
 
   /** Writes `mat` to `path`, choosing the encoder from the path's extension.
     *
@@ -98,9 +106,13 @@ object Images:
     *
     * Every failure surfaces as [[CvError.EncodeFailed]], so a caller matching that one case handles them all:
     * an extension with no registered encoder, which is caught by asking `haveImageWriter` first rather than
-    * letting `imencode` throw a `CvException`; a path this filesystem cannot represent; a missing parent
-    * directory; and a destination that is not writable. The last two used to share one message, because
-    * `imwrite` signalled both with a bare `false`.
+    * letting `imencode` throw a `CvException`; an empty or 2-channel image, which `imencode` would reject
+    * with a native assertion; a path this filesystem cannot represent; a missing parent directory; and a
+    * destination that is not writable. The last two used to share one message, because `imwrite` signalled
+    * both with a bare `false`.
+    *
+    * A depth other than 8- or 16-bit is **not** rejected: OpenCV converts it to 8-bit (saturating) and prints
+    * a warning. Convert explicitly first if that matters — see [[encode]].
     *
     * The receiver is not modified and not released.
     */
@@ -126,7 +138,12 @@ object Images:
     * `ext` selects the format the same way a filename extension would: `".png"`, `".jpg"`, `".webp"`. A
     * leading period is added if you omit one, because `imencode` silently fails without it and the mistake is
     * easy to make. An extension with no registered encoder yields a `Left` rather than the `CvException`
-    * OpenCV throws.
+    * OpenCV throws, and so do the two inputs `imencode` rejects with a native assertion: an empty Mat and a
+    * 2-channel (or more-than-4-channel) one. Every one of those is [[CvError.EncodeFailed]].
+    *
+    * A depth other than 8- or 16-bit is **not** rejected here: OpenCV converts the pixels to 8-bit
+    * (saturating) and prints a warning to stderr. If that silent conversion matters — a float disparity map,
+    * a `CV_32S` label image — convert explicitly (`normalize`, `convertScaleAbs`) before encoding.
     *
     * The returned array is a plain JVM copy — the staging `MatOfByte` is released before returning, so there
     * is no native memory left for the caller to think about.
@@ -134,8 +151,15 @@ object Images:
   def encode(mat: Mat, ext: String = ".png"): Either[CvError, Array[Byte]] =
     val dotted = if ext.startsWith(".") then ext else s".$ext"
     // haveImageWriter keys off the filename's extension, so hand it a name, not a bare ".png".
+    val channels = mat.channels()
     if !Imgcodecs.haveImageWriter(s"x$dotted") then
       Left(CvError.EncodeFailed(dotted, "no encoder is registered for this extension"))
+    else if mat.empty() then
+      Left(CvError.EncodeFailed(dotted, "the image is empty; there is nothing to encode"))
+    else if channels == 2 || channels > 4 then
+      Left(
+        CvError.EncodeFailed(dotted, s"$channels-channel images cannot be encoded; use 1, 3 or 4 channels")
+      )
     else
       Managed.use(MatOfByte()): buffer =>
         Cv.attempt(s"imencode('$dotted')")(Imgcodecs.imencode(dotted, mat, buffer)).flatMap {
@@ -180,6 +204,11 @@ object Images:
   private def resolve(path: String): Either[String, Path] =
     try Right(Path.of(path))
     catch case e: InvalidPathException => Left(s"this is not a usable filesystem path: ${e.getReason}")
+
+  /** A file's size, reporting an `IOException` as text rather than throwing it. */
+  private def sizeOf(file: Path): Either[String, Long] =
+    try Right(Files.size(file))
+    catch case e: IOException => Left(describe(e))
 
   /** Reads a whole file, reporting an `IOException` as text rather than throwing it. */
   private def readAllBytes(file: Path): Either[String, Array[Byte]] =

@@ -17,3 +17,8 @@ class CvTest extends munit.FunSuite:
 
   test("attempt lets Exception subclasses propagate as programmer errors"):
     intercept[IllegalArgumentException](Cv.attempt("op")(throw new IllegalArgumentException("x")))
+
+  test("NativeCall names the cause class when it carries no message"):
+    val e = CvError.NativeCall("op", new java.lang.Exception())
+    assert(e.getMessage.contains("java.lang.Exception"), e.getMessage)
+    assert(!e.getMessage.contains("null"), e.getMessage)

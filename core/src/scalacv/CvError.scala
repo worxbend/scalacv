@@ -54,7 +54,20 @@ object CvError:
       extends CvError(s"camera calibration failed: $details", null)
 
   /** A native call failed. Wraps `org.opencv.core.CvException`, whose message is the only information OpenCV
-    * gives us — deliberately not parsed for error codes.
+    * gives us — deliberately not parsed for error codes. A cause with no message is rendered by its class
+    * name rather than as "null".
+    *
+    * Also raised, with an `IllegalStateException` cause, when a model's output shape does not match the
+    * decoder (`FaceDetect`, `FaceRecognizer`, `PoseEstimator`) or an OpenCV factory returns `null` because
+    * this build lacks the algorithm (`Tracker.create`, `StereoDepth`). A future minor release will give those
+    * their own cases.
     */
   final case class NativeCall(operation: String, cause: Throwable)
-      extends CvError(s"OpenCV failed during $operation: ${cause.getMessage}", cause)
+      extends CvError(
+        // Spelled out inline rather than through `Option(...).filter(_.nonEmpty)`: Scala 3 hoists a
+        // super-constructor argument that contains a lambda into a public `$superArg$` method on the
+        // companion, which would be a new line in the API golden for a message-only change.
+        s"OpenCV failed during $operation: " +
+          (if cause.getMessage == null || cause.getMessage.isEmpty then cause.toString else cause.getMessage),
+        cause
+      )

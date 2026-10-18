@@ -3,7 +3,10 @@ package scalacv
 import scalacv.graphs.*
 import scalacv.vision.*
 
+import java.io.RandomAccessFile
 import java.nio.file.{Files, Path}
+
+import scala.util.Using
 
 import org.opencv.core.{CvType, Mat, Point as CvPoint, Scalar as CvScalar}
 import org.opencv.imgproc.Imgproc
@@ -178,6 +181,38 @@ class ImagesTest extends munit.FunSuite:
       Images.write(bad, src) match
         case Left(_: CvError.EncodeFailed) => ()
         case other => fail(s"expected EncodeFailed, got $other")
+
+  test("encode of an empty Mat is EncodeFailed, not NativeCall"):
+    Managed.use(Mat()): empty =>
+      Images.encode(empty, ".png") match
+        case Left(e: CvError.EncodeFailed) => assert(e.getMessage.contains("empty"), e.getMessage)
+        case other => fail(s"expected EncodeFailed, got $other")
+
+  test("encode of a 2-channel Mat is EncodeFailed"):
+    Managed.use(Mat.zeros(8, 8, CvType.CV_8UC2)): two =>
+      Images.encode(two, ".png") match
+        case Left(e: CvError.EncodeFailed) => assert(e.getMessage.contains("2-channel"), e.getMessage)
+        case other => fail(s"expected EncodeFailed, got $other")
+
+  test("write of an empty Mat is EncodeFailed naming the path"):
+    val file = tempDir().resolve("empty.png").toString
+    Managed.use(Mat()): empty =>
+      Images.write(file, empty) match
+        case Left(e: CvError.EncodeFailed) =>
+          assertEquals(e.path, file)
+          assert(!Files.exists(Path.of(file)), "a failed encode must not touch the destination")
+        case other => fail(s"expected EncodeFailed, got $other")
+
+  test("a file above 2 GB is a Left, not an OutOfMemoryError"):
+    val huge = tempDir().resolve("huge.png")
+    try
+      Using.resource(RandomAccessFile(huge.toFile, "rw"))(_.setLength(3L << 30))
+      assume(Files.size(huge) == (3L << 30), "this filesystem did not produce a 3 GB sparse file")
+      Images.read(huge.toString) match
+        case Left(e: CvError.DecodeFailed) => assert(e.getMessage.contains("2 GB"), e.getMessage)
+        case Left(other) => fail(s"expected DecodeFailed, got $other")
+        case Right(m) => m.release(); fail("a 3 GB file must not decode to a usable Mat")
+    finally Files.deleteIfExists(huge): Unit
 
   test("decode of garbage is a Left"):
     val garbage = Array.tabulate(64)(i => (i * 7).toByte)

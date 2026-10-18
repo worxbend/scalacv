@@ -108,7 +108,7 @@ object Mats:
     */
   private[scalacv] def column(values: Seq[Double]): Mat =
     require(values.nonEmpty, "a column Mat needs at least one value")
-    val m = Mat(values.size, 1, CvType.CV_64F)
+    val m = Cv.orThrow("Mats.column")(Mat(values.size, 1, CvType.CV_64F))
     try
       m.put(0, 0, values*): Unit
       m

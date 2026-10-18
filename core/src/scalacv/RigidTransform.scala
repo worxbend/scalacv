@@ -6,7 +6,9 @@ package scalacv
   * translation use the same caller-chosen units. There are no native resources to release. The rotation must
   * be finite, 3×3, orthonormal and have determinant +1 (absolute tolerance `1e-8`); translation must contain
   * three finite values. Invalid construction, including `copy`, throws `IllegalArgumentException`. Inputs are
-  * immutable Scala sequences, not native matrix handles.
+  * immutable Scala sequences, not native matrix handles. [[RigidTransform.apply]] copies both arguments into
+  * `Vector`s, so a `Seq` over mutable storage cannot be edited after validation; `copy` stores its arguments
+  * by reference.
   */
 final case class RigidTransform(rotation: Seq[Seq[Double]], translation: Seq[Double]):
   RigidTransform.validate(rotation, translation)
@@ -98,6 +100,13 @@ final case class RigidTransform(rotation: Seq[Seq[Double]], translation: Seq[Dou
 object RigidTransform:
 
   private val RotationTolerance = 1e-8
+
+  /** Builds and validates a transform, copying both sequences so later edits to the caller's storage cannot
+    * bypass the construction-time checks. `Vector.toVector` is the identity, so the common path allocates
+    * nothing.
+    */
+  def apply(rotation: Seq[Seq[Double]], translation: Seq[Double]): RigidTransform =
+    new RigidTransform(rotation.map(_.toVector).toVector, translation.toVector)
 
   /** Gram–Schmidt on computed near-rotation rows, followed by a right-handed cross product. Inputs come only
     * from accepted rotations or their products, so the rows are finite and far from degenerate. Never use

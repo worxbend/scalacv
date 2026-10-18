@@ -14,6 +14,9 @@ import org.opencv.core.{Mat, MatOfDouble}
   *
   * This is the core camera model the vision layer builds on: `scalacv.vision.Ar`, `HeadPose` and `Localizer`
   * all take an `Intrinsics`, `scalacv.vision.Calibration` produces one, and `Image.undistort` consumes one.
+  *
+  * [[Intrinsics.apply]] copies `distortion` into a `Vector`, so a `Seq` over mutable storage (an
+  * `ArraySeq.unsafeWrapArray`) cannot be edited after validation. `copy` stores its argument by reference.
   */
 final case class Intrinsics(
     fx: Double,
@@ -39,7 +42,7 @@ final case class Intrinsics(
     * ever saw.
     */
   private[scalacv] def cameraMatrix: Mat =
-    val m = Mat.zeros(3, 3, org.opencv.core.CvType.CV_64F)
+    val m = Cv.orThrow("Intrinsics.cameraMatrix")(Mat.zeros(3, 3, org.opencv.core.CvType.CV_64F))
     try
       m.put(0, 0, fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0): Unit
       m
@@ -54,9 +57,9 @@ final case class Intrinsics(
     * can still throw while copying the coefficients in.
     */
   private[scalacv] def distCoeffs: MatOfDouble =
-    if distortion.isEmpty then MatOfDouble()
+    if distortion.isEmpty then Cv.orThrow("Intrinsics.distCoeffs")(MatOfDouble())
     else
-      val m = MatOfDouble()
+      val m = Cv.orThrow("Intrinsics.distCoeffs")(MatOfDouble())
       try
         m.fromArray(distortion*)
         m
@@ -66,6 +69,13 @@ final case class Intrinsics(
           throw e
 
 object Intrinsics:
+
+  /** Builds and validates an `Intrinsics`, copying `distortion` so later edits to the caller's storage cannot
+    * bypass the construction-time checks. `Vector.toVector` is the identity, so the common path allocates
+    * nothing.
+    */
+  def apply(fx: Double, fy: Double, cx: Double, cy: Double, distortion: Seq[Double] = Seq.empty): Intrinsics =
+    new Intrinsics(fx, fy, cx, cy, distortion.toVector)
 
   /** The coefficient counts OpenCV's `undistort`, `solvePnP` and `projectPoints` accept: the four
     * radial/tangential terms `k1, k2, p1, p2`, optionally extended with `k3`, then the rational model's

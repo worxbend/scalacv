@@ -1,5 +1,7 @@
 package scalacv
 
+import scala.collection.immutable.ArraySeq
+
 /** Pure geometry laws: no OpenCV loader or native resources are needed. */
 class RigidTransformTest extends munit.FunSuite:
 
@@ -187,3 +189,15 @@ class RigidTransformTest extends munit.FunSuite:
 
   test("copy revalidates the rigid-transform contract"):
     intercept[IllegalArgumentException](RigidTransform.identity.copy(translation = Seq(Double.NaN, 0.0, 0.0)))
+
+  test("construction copies sequences over mutable storage, so a later edit cannot bypass validation"):
+    val rows = Array(Array(1.0, 0.0, 0.0), Array(0.0, 1.0, 0.0), Array(0.0, 0.0, 1.0))
+    val shift = Array(1.0, 2.0, 3.0)
+    val t = RigidTransform(
+      ArraySeq.unsafeWrapArray(rows.map(row => ArraySeq.unsafeWrapArray(row))),
+      ArraySeq.unsafeWrapArray(shift)
+    )
+    rows(0)(0) = 5.0
+    shift(0) = Double.NaN
+    assertEquals(t.rotation, RigidTransform.identity.rotation)
+    assertEquals(t.translation, Seq(1.0, 2.0, 3.0))

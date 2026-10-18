@@ -87,7 +87,11 @@ extension (self: Mat)
       border: BorderType = BorderType.Reflect101
   ): Managed[Mat] =
     Mats.requireKernel("gaussianBlur", kernel, allowZero = true)
-    require(sigmaX > 0 || kernel.width > 0, "gaussianBlur needs either a positive sigmaX or a real kernel")
+    // `.toInt`, as `requireKernel` truncates: `Size(0.5, 0.5)` is positive as a Double and a 0x0 kernel natively.
+    require(
+      sigmaX > 0 || kernel.width.toInt > 0,
+      s"gaussianBlur needs either a positive sigmaX or a real kernel; got sigmaX=$sigmaX and $kernel"
+    )
     BorderType.requireFilterSupport("gaussianBlur", border)
     Mats.produce("gaussianBlur"):
       Imgproc.GaussianBlur(self, _, kernel.toCv, sigmaX, sigmaY, border.cvValue)
@@ -232,7 +236,10 @@ extension (self: Mat)
     * rule would be wrong for one of them.
     */
   def scaled(fx: Double, fy: Double, interpolation: Interpolation = Interpolation.Linear): Managed[Mat] =
-    require(fx > 0 && fy > 0, s"scaled needs positive factors, got fx=$fx fy=$fy")
+    require(
+      fx.isFinite && fy.isFinite && fx > 0 && fy > 0,
+      s"scaled needs finite, positive factors, got fx=$fx fy=$fy"
+    )
     val w = math.rint(self.cols * fx).toInt
     val h = math.rint(self.rows * fy).toInt
     require(
@@ -327,7 +334,7 @@ extension (self: Mat)
       border: BorderType = BorderType.Constant,
       color: Scalar = Scalar.Black
   ): Managed[Mat] =
-    require(scale > 0, s"rotated scale must be positive, got $scale")
+    require(scale.isFinite && scale > 0, s"rotated scale must be finite and positive, got $scale")
     warpAboutCenter(self, degrees, scale, expandCanvas = true, interpolation, border, color, "warpAffine")
 
   /** Removes lens distortion using calibrated camera [[Intrinsics]] — the barrel/pincushion bend a real lens
@@ -474,6 +481,9 @@ extension (self: Mat)
   ): Managed[Mat] =
     require(radius >= 1, s"$op radius must be ≥ 1, got $radius")
     require(iterations >= 1, s"$op iterations must be ≥ 1, got $iterations")
+    // `radius * 2 + 1` wraps negative past this bound and would be rejected as "a Size cannot be negative",
+    // a message that names neither the radius nor the operation.
+    require(radius <= (Int.MaxValue - 1) / 2, s"$op radius $radius is too large")
     val side = radius * 2 + 1
     Managed.use(Imgproc.getStructuringElement(shape.cvValue, Size(side.toDouble, side.toDouble).toCv)):
       kernel => f(kernel, iterations)

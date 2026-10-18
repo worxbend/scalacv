@@ -97,6 +97,7 @@ class FiltersTest extends munit.FunSuite:
       assertEquals(pair.colour.get.size(), img.mat.size())
       assertEquals(pair.grey.get.size(), img.mat.size())
       assertNotEquals(pair.colour.get.dataAddr(), pair.grey.get.dataAddr(), "two independent outputs")
+      assert(pair.color eq pair.colour, "`color` is the preferred spelling of the same handle, not a copy")
     finally
       pair.colour.release()
       pair.grey.release()
