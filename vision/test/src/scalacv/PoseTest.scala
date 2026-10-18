@@ -58,6 +58,17 @@ class PoseTest extends munit.FunSuite:
       flat.release()
       tensor.release()
 
+  test("heatmap decode reports a keypoint-count mismatch as a NativeCall, like its dims check"):
+    // A model output with one plane too many for the topology is a malformed model output, the same class of
+    // failure the dims check three lines earlier already reports as NativeCall — not a programmer error.
+    val k = PoseTopology.CocoBody17.size
+    val tensor = Mat(Array(1, k + 1, 4, 5), CvType.CV_32F, cv.Scalar.all(0))
+    try
+      val e =
+        intercept[CvError.NativeCall](PoseEstimator.decode(tensor, Size(100, 80), KeypointLayout.Heatmap))
+      assert(e.getMessage.contains(s"${k + 1} keypoints"), e.getMessage)
+    finally tensor.release()
+
   test("Pose helpers: lookup, confidence filter, and bone filtering"):
     val topo = PoseTopology(Seq("a", "b", "c"), Seq((0, 1), (1, 2)))
     val pose = Pose(

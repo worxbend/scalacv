@@ -28,6 +28,9 @@ final case class OcrResult(text: String, words: Seq[OcrWord] = Seq.empty):
   * val engine: OcrEngine = myTesseractEngine
   * val text = Image.read("scan.jpg").map(img => try Ocr.read(img, engine).text finally img.close())
   * }}}
+  *
+  * This trait is meant to be implemented by consumers; within a minor release line, any member added to it
+  * carries a default implementation, so an existing engine keeps compiling.
   */
 trait OcrEngine:
 

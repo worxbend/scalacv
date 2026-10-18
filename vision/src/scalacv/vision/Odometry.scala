@@ -26,10 +26,23 @@ final class Odometry private (intrinsics: Intrinsics) extends AutoCloseable:
   private var previousPoints: Seq[Point] = Seq.empty
   private var frames = 0
 
+  // Without this flag a closed pipeline re-armed on the next frame: `previous` was null again, so `update`
+  // copied the frame as a new reference — a full-frame Image retained until GC, the leak `close` exists to
+  // prevent.
+  private var closed = false
+
   /** Feeds the next frame and returns the camera's motion since the previous one. `None` on the very first
     * frame (it becomes the reference) and whenever too few points survive to estimate a motion.
+    *
+    * @throws IllegalStateException
+    *   after [[close]] — a closed pipeline must not quietly start retaining frames again.
     */
   def update(frame: Image): Option[CameraMotion] =
+    if closed then
+      throw IllegalStateException(
+        "this Odometry has been closed — updating now would retain a frame no one releases. " +
+          "Create a fresh pipeline."
+      )
     val step =
       previous match
         case null =>
@@ -74,8 +87,11 @@ final class Odometry private (intrinsics: Intrinsics) extends AutoCloseable:
   /** How many frames have been successfully processed so far — an update that throws is not counted. */
   def framesProcessed: Int = frames
 
-  /** Releases the retained frame. Idempotent. */
+  /** Releases the retained frame. Idempotent. After `close`, [[update]] throws `IllegalStateException`
+    * instead of installing a new reference frame that nothing would release.
+    */
   def close(): Unit =
+    closed = true
     val p = previous
     previous = null
     previousPoints = Seq.empty

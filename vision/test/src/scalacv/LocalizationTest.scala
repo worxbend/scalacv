@@ -279,21 +279,18 @@ class LocalizationTest extends munit.FunSuite:
         flat0.close(); flat1.close(); textured.close()
     finally odometry.close()
 
-  test("the odometry pipeline re-baselines after close rather than touching the released frame"):
-    // The current contract: close releases the retained frame and the next update starts over as a fresh
-    // reference, while the frame count keeps running. If a closed pipeline should throw instead, this is the
-    // test to change.
+  test("the odometry pipeline refuses to update after close instead of retaining a frame"):
+    // A closed pipeline used to re-arm silently on the next update, retaining a full frame that nothing would
+    // release until GC. Like ObjectTracker, it now throws; the refused update is not counted.
     val odometry = Odometry.monocular(Intrinsics(fx = 500, fy = 500, cx = 100, cy = 80))
     val frame0 = scene(0, 0)
     val frame1 = scene(4, 3)
-    val frame2 = scene(8, 6)
     try
       odometry.update(frame0)
       odometry.close()
-      assertEquals(odometry.update(frame1), None)
-      assertEquals(odometry.framesProcessed, 2)
-      odometry.update(frame2)
-      assertEquals(odometry.framesProcessed, 3)
+      val e = intercept[IllegalStateException](odometry.update(frame1))
+      assert(e.getMessage.contains("closed"), e.getMessage)
+      assertEquals(odometry.framesProcessed, 1)
+      odometry.close() // idempotent
     finally
-      odometry.close()
-      frame0.close(); frame1.close(); frame2.close()
+      frame0.close(); frame1.close()

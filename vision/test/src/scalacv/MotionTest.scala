@@ -92,6 +92,17 @@ class MotionTest extends munit.FunSuite:
       assert(moved.moving, s"after the mismatch the detector still works, ratio=${moved.ratio}")
     finally d.close()
 
+  test("frame differencing refuses to detect after close instead of silently re-arming"):
+    // A closed detector that accepted the next frame would retain it as a new baseline that nothing releases
+    // — a full-frame native leak until GC. ObjectTracker already throws for exactly this reason.
+    val d = MotionDetector.frameDifference(minArea = 50)
+    assert(!motionOf(d, 20).moving, "the first frame is the baseline")
+    d.close()
+    val e = intercept[IllegalStateException](motionOf(d, 20))
+    assert(e.getMessage.contains("closed"), e.getMessage)
+    d.reset() // reset stays legal after close
+    d.close() // and close stays idempotent
+
   test("frameDifference rejects a blur radius whose kernel side would overflow Int"):
     // `radius * 2 + 1` wraps negative past (Int.MaxValue - 1) / 2; without the guard the factory accepts the
     // radius and the first `detect` fails with a misleading "a Size cannot be negative".

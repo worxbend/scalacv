@@ -145,38 +145,67 @@ object Calibration:
 
   /** Runs `calibrateCamera` over the collected correspondences and reads the result back into a
     * [[Calibration]].
+    *
+    * A solver that throws is `CalibrationFailed`, not `NativeCall`: the scaladoc of [[fromChessboard]]
+    * promises that case when "the solver itself fails", and a `calibrateCamera` assertion on degenerate views
+    * is exactly that, not a programming error at a call site.
     */
   private def calibrate(
       imagePoints: Seq[MatOfPoint2f],
       pattern: ChessboardPattern,
       imageSize: Size
   ): Either[CvError, Calibration] =
-    // Every view sees the same rigid board, so one object-point Mat is shared across all views (OpenCV
-    // accepts the same Mat repeated) — and freed exactly once in the `finally`.
-    val obj = pattern.objectPoints
-    val objectPoints = Seq.fill(imagePoints.size)(obj)
-    val cameraMatrix = Mat()
-    val distCoeffs = Mat()
+    // OpenCV allocates the per-view rotation/translation Mats it puts in these lists, so they are the one
+    // thing the scope below cannot own; they are freed in the `finally` whatever happens inside.
     val rvecs = java.util.ArrayList[Mat]()
     val tvecs = java.util.ArrayList[Mat]()
     try
-      Cv.attempt("calibrateCamera"):
-        val rms = Calib3d.calibrateCamera(
-          objectPoints.map(m => m: Mat).asJava,
-          imagePoints.map(m => m: Mat).asJava,
-          imageSize.toCv,
-          cameraMatrix,
-          distCoeffs,
-          rvecs,
-          tvecs
-        )
-        Calibration(readIntrinsics(cameraMatrix, distCoeffs), imageSize, rms)
+      Managed.scope: own =>
+        // Every view sees the same rigid board, so one object-point Mat is shared across all views (OpenCV
+        // accepts the same Mat repeated) — owned once by the scope, so it is freed exactly once.
+        val obj = own(pattern.objectPoints)
+        val objectPoints = Seq.fill(imagePoints.size)(obj)
+        val cameraMatrix = own(Mat())
+        val distCoeffs = own(Mat())
+        val solved = Cv.attempt("calibrateCamera"):
+          Calib3d.calibrateCamera(
+            objectPoints.map(m => m: Mat).asJava,
+            imagePoints.map(m => m: Mat).asJava,
+            imageSize.toCv,
+            cameraMatrix,
+            distCoeffs,
+            rvecs,
+            tvecs
+          )
+        solved match
+          case Right(rms) => toCalibration(rms, cameraMatrix, distCoeffs, imageSize)
+          case Left(CvError.NativeCall(_, cause)) =>
+            Left(CvError.CalibrationFailed(s"calibrateCamera failed: ${cause.getMessage}"))
+          case Left(other) => Left(other)
     finally
-      obj.release() // the single shared object-point Mat, freed once regardless of view count
-      cameraMatrix.release()
-      distCoeffs.release()
       rvecs.asScala.foreach(_.release())
       tvecs.asScala.foreach(_.release())
+
+  /** Turns the solver's raw output into a [[Calibration]], or `Left(CalibrationFailed)` where the numbers are
+    * unusable: a non-finite or negative RMS, or a camera matrix the [[Intrinsics]] constructor refuses (a
+    * non-positive focal length, a non-finite entry). Those are solver outcomes on degenerate input, and this
+    * is reached from an `Either` method, so they must not surface as the constructors'
+    * `IllegalArgumentException`. Package-visible so the degenerate cases, which no synthetic view set reaches
+    * deterministically, can be tested directly.
+    */
+  private[scalacv] def toCalibration(
+      rms: Double,
+      camera: Mat,
+      dist: Mat,
+      imageSize: Size
+  ): Either[CvError, Calibration] =
+    if !(rms.isFinite && rms >= 0) then
+      Left(CvError.CalibrationFailed(s"the solver returned a non-finite reprojection error ($rms)"))
+    else
+      try Right(Calibration(readIntrinsics(camera, dist), imageSize, rms))
+      catch
+        case e: IllegalArgumentException =>
+          Left(CvError.CalibrationFailed(s"the solver produced an unusable camera model: ${e.getMessage}"))
 
   /** Reads the 3×3 camera matrix and the `CV_64F` distortion row into an [[Intrinsics]]. */
   private def readIntrinsics(camera: Mat, dist: Mat): Intrinsics =

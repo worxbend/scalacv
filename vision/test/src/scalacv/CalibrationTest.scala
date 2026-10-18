@@ -179,6 +179,32 @@ class CalibrationTest extends munit.FunSuite:
       flat.close()
       blank.close()
 
+  test("a non-finite reprojection error is CalibrationFailed, not a throw"):
+    // `calibrateCamera` on degenerate views can hand back a NaN RMS; `Calibration` would reject it with an
+    // IllegalArgumentException, which must not escape an `Either` method.
+    val camera = kMatrix
+    val dist = Mat()
+    try
+      Calibration.toCalibration(Double.NaN, camera, dist, Size(imgW.toDouble, imgH.toDouble)) match
+        case Left(e: CvError.CalibrationFailed) => assert(e.getMessage.contains("NaN"), e.getMessage)
+        case other => fail(s"expected CalibrationFailed, got $other")
+    finally
+      camera.release()
+      dist.release()
+
+  test("a non-positive focal length from the solver is CalibrationFailed"):
+    val camera = kMatrix
+    camera.put(0, 0, 0.0) // fx = 0: `Intrinsics` refuses it, and that refusal must become a Left
+    val dist = Mat()
+    try
+      Calibration.toCalibration(0.3, camera, dist, Size(imgW.toDouble, imgH.toDouble)) match
+        case Left(e: CvError.CalibrationFailed) =>
+          assert(e.getMessage.contains("unusable camera model"), e.getMessage)
+        case other => fail(s"expected CalibrationFailed, got $other")
+    finally
+      camera.release()
+      dist.release()
+
   test("undistort of a distortion-free calibration is a size-preserving pass-through"):
     val calib = Calibration(Intrinsics(fx, fy, cx, cy), Size(imgW.toDouble, imgH.toDouble), 0.2)
     val src = Image.blank(imgW, imgH, Scalar(30, 60, 90))

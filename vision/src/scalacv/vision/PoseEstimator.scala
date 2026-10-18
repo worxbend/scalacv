@@ -105,7 +105,16 @@ object PoseEstimator:
     val k = output.size(1)
     val h = output.size(2)
     val w = output.size(3)
-    require(k == topology.size, s"the model has $k keypoints but ${topology.names.size} were named")
+    // A plane count that disagrees with the topology is a malformed model output, the same failure class as
+    // the dims check above — so it is the same NativeCall, not a programmer-error IllegalArgumentException.
+    if k != topology.size then
+      throw CvError.NativeCall(
+        "decoding the pose heatmap output",
+        IllegalStateException(
+          s"the model has $k keypoints but ${topology.names.size} were named. " +
+            "This is not the heatmap pose model this topology decodes."
+        )
+      )
     Managed.use(output.reshape(1, k)): flat => // k rows x (h*w) cols
       val plane = Array.ofDim[Float](h * w)
       val kps = (0 until k).map: c =>

@@ -63,6 +63,10 @@ object Motion:
   *
   * A detector holds native memory (a retained frame, or the background model), so it is `AutoCloseable`:
   * [[close]] it when done.
+  *
+  * This trait may be implemented by consumers (a detector over some other change model); within a minor
+  * release line, any member added to it carries a default implementation, so such implementations keep
+  * compiling.
   */
 trait MotionDetector extends AutoCloseable:
 
@@ -82,7 +86,10 @@ trait MotionDetector extends AutoCloseable:
   /** Forgets accumulated state, so the next frame is treated as a fresh baseline. */
   def reset(): Unit
 
-  /** Releases native memory. Idempotent. */
+  /** Releases native memory. Idempotent. After `close`, [[detect]] throws `IllegalStateException` rather than
+    * quietly re-arming on a frame that nothing would ever release ([[MotionDetector.backgroundSubtraction]]'s
+    * detector already did so, through its `Managed` model); [[reset]] stays legal.
+    */
   def close(): Unit = ()
 
 object MotionDetector:
@@ -176,7 +183,17 @@ object MotionDetector:
     // The previous frame, grayscale and blurred. Retained between calls; one Mat, replaced each frame.
     private var previous: Managed[Mat] | Null = null
 
+    // Without this flag a closed detector re-armed on the next frame: `previous` was null again, so `detect`
+    // installed the frame as a new baseline — a full-frame Mat retained until GC, exactly the leak `close`
+    // exists to prevent.
+    private var closed = false
+
     def detect(image: Image): Motion =
+      if closed then
+        throw IllegalStateException(
+          "this MotionDetector has been closed — detecting now would retain a frame no one releases. " +
+            "Create a fresh detector."
+        )
       val current = prepare(image.mat, blurRadius)
       try
         previous match
@@ -209,7 +226,9 @@ object MotionDetector:
       previous = null
       if p != null then p.release()
 
-    override def close(): Unit = reset()
+    override def close(): Unit =
+      closed = true
+      reset()
 
   private final class BgSubtract(
       initial: Managed[BackgroundSubtractorMOG2],
