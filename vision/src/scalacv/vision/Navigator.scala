@@ -17,7 +17,12 @@ final case class Guidance(
     leftNearness: Double,
     centreNearness: Double,
     rightNearness: Double
-)
+):
+
+  /** The centre third's near-ness — the preferred spelling of [[centreNearness]], which is kept as the field
+    * (and pattern-match position) for compatibility.
+    */
+  def centerNearness: Double = centreNearness
 
 /** Reactive obstacle avoidance — turning a depth reading into a steering suggestion.
   *

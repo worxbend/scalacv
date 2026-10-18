@@ -141,4 +141,6 @@ class NavigationTest extends munit.FunSuite:
       val g = Navigator.steer(clear)
       assertEquals(g.steering, Steering.Straight)
       assertEqualsDouble(g.centreNearness, 0.0, 0.001)
+      // `centerNearness` is the preferred spelling; `centreNearness` stays as the field for compatibility.
+      assertEquals(g.centerNearness, g.centreNearness)
     finally clear.close()
