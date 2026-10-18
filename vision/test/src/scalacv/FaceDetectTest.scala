@@ -42,12 +42,14 @@ class FaceDetectTest extends munit.FunSuite:
 
   private lazy val model: Either[CvError, Path] = FaceDetect.downloadModel(modelDir)
 
-  /** The model path, or a skip carrying the reason the download failed. */
+  /** The model path, or a skip carrying the reason the download failed. CI sets `SCALACV_REQUIRE_MODELS=1`,
+    * and there an unobtainable model is a failure, not a skip: a silently skipped detector suite would turn a
+    * broken mirror into a green build.
+    */
   private def modelPath: String =
-    assume(
-      model.isRight,
-      s"skipped: the YuNet model could not be obtained (no network?): ${model.left.toOption.orNull}"
-    )
+    val reason = s"the YuNet model could not be obtained (no network?): ${model.left.toOption.orNull}"
+    if sys.env.get("SCALACV_REQUIRE_MODELS").contains("1") then assert(model.isRight, reason)
+    else assume(model.isRight, s"skipped: $reason")
     model.toOption.get.toString
 
   /** Draws a frontal face big enough for YuNet to find, and reports where every feature went.
