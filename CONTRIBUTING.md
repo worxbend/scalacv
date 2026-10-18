@@ -28,12 +28,15 @@ CI runs the check forms of those (each module’s `fix --check`, `checkFormatAll
 on drift, so running them locally is cheaper than a red build.
 
 Run `python3 ci/binary-compatibility.py` for historical JVM linkage checks (all four artifacts,
-both pinned 0.4.x release tags). It builds isolated temporary baselines and never resolves guessed
+every pinned 0.4.x release tag). It builds isolated temporary baselines and never resolves guessed
 ScalaCV release coordinates from Central. `--self-test` runs only the checker controls, without Mill.
 See [RELEASING.md](RELEASING.md) for early-semver baseline maintenance. API goldens are reviewed
 separately; regeneration is not an ABI waiver. CI also compiles and runs the packaged Java and
 Scala 3.3.8 consumers on JDK 17 from a fresh resolver cache. The GUI examples are deliberately
 excluded from these headless commands.
+
+`FaceRecognizerTest` needs `SCALACV_SFACE_MODEL` pointing at a local SFace ONNX and is release-gated
+manually: it skips without the variable, so run it yourself before a release.
 
 ## The rules that are not negotiable
 
@@ -59,6 +62,14 @@ keeps image licensing out of the project entirely, which is why `Lena.png` is go
 **Nothing GUI in `core`.** No `highgui`, no JavaFX, no AWT. `examples-gui` is the one place
 a toolkit may appear, and it is never built in CI or published.
 
+**Renaming a public parameter or changing a default value is a source/behaviour change.** It goes
+in the CHANGELOG under `Changed`, never in a patch — neither gate sees parameter names or default
+values: japicmp compares JVM signatures and the API goldens record erased types, so both stay green
+while every named-argument caller breaks or a default silently changes behaviour.
+
+**Factory naming.** `create` for a typed wrapper around a fresh native object, `load`/`loadFrom`/`fromX`
+when the argument is a file, `open` for sources and sinks, `apply` for pure data.
+
 ## Benchmarking
 
 Performance work lives in the unpublished `benchmarks` module and follows one rule: **no
@@ -71,7 +82,7 @@ did not change.**
 
 `Bench` warms the JIT, measures many iterations, and reports a mean with a 95% CI (it is a
 plain-JVM harness, not JMH — the annotation processor is awkward under Mill 1.1.7 + the
-natives, and the wins here are large next to timer noise). `BenchImages.hash` is the
+natives, and the wins here are large next to timer noise). `PixelHash.of` is the
 pixel-exact regression key: an optimized path must hash identically to the baseline unless a
 deviation is intentional and documented. Absolute `µs` are machine-specific — quote the
 delta, and put it in the commit message. The standing record of every measured win, every

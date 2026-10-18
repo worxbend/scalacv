@@ -67,6 +67,7 @@ It builds isolated local clones at these existing tags in `TMPDIR`, using each t
 | `v0.4.0` | `3714fc10c1272fa29c23de22b35f2cf004c64d10` |
 | `v0.4.1` | `ce99927559701a72702cd887a90821fb847fdb73` |
 | `v0.4.2` | `6a6e3040a890f2724a539834ea51d8e3a2b23d5c` |
+| `v0.4.3` | `7f2d0e6c5130b9ab8e81984afaa937e6526259fe` |
 
 Every baseline is compared to each corresponding current jar: core, vision, graphs and zio.
 Missing tags/dependencies, moved tags, build failures and binary incompatibilities fail the gate;
@@ -92,6 +93,10 @@ API goldens are a separate review aid, now recording finality and generic bounds
 replace the historical checker or guarantee Scala source/TASTy compatibility. When a facade or
 extension moves source files, preserve its JVM holder and exercise an unchanged compiled client.
 Regenerate goldens only after reviewing source changes, and rerun without regeneration enabled.
+
+Open traits (`Renderer`, `TextMeasurer`, `OcrEngine`, `MotionDetector`) may be implemented by consumers;
+within a minor line a new member on them always carries a default implementation, so an existing
+implementation keeps compiling and linking.
 
 ## Preparing a tag
 

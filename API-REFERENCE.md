@@ -40,8 +40,8 @@ of three.
 router, so: (1) links into it use the `pathname://` protocol and are validated by a **separate**
 check in `assemble-docs.sh`, not by `onBrokenLinks`; (2) it renders with Scaladoc's own chrome, not
 the Docusaurus header — a visible seam when crossing from a guide into `/api/`. Closing that seam
-(shared header via post-build DOM injection, unified search via Pagefind) is follow-up, tracked in
-`DOCS-PLAN.md`. Bidirectional guide↔API linking (every guide links forward on first mention; every
+(shared header via post-build DOM injection, unified search via Pagefind) is follow-up work, tracked as
+follow-up issues. Bidirectional guide↔API linking (every guide links forward on first mention; every
 documented type links back) is likewise a follow-up.
 
 ## Verified Scaladoc flags (Scala 3.3.8, the version in use)
