@@ -79,6 +79,11 @@ final class Camera private (private val handle: Managed[VideoCapture], sourceLab
     Video.frames(handle.get, attemptsPerFrame): frames =>
       frames.foreach(frame => Image.scoped(Image.wrap(Managed(frame.clone())))(f))
 
+  /** [[foreach]] with the three-attempts default; `foreach(attempts)(f)` to change it. Also enables
+    * `for frame <- cam do …`.
+    */
+  def foreach(f: Image => Unit): Unit = foreach()(f)
+
   /** The next `count` frames as owned [[Image]]s — **each is yours to close** (or take them into a
     * `Using.Manager`). Frames beyond the end of the stream are simply absent, so the result may be shorter.
     *

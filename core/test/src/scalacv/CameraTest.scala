@@ -67,6 +67,19 @@ class CameraTest extends munit.FunSuite:
       .fold(e => fail(e.getMessage), identity)
     assertEquals(count, FrameCount)
 
+  test("foreach accepts a bare frame callback and the for-comprehension form"):
+    val file = recordFixture()
+    var n = 0
+    Camera
+      .usingFile(file.toString)(cam => cam.foreach(_ => n += 1))
+      .fold(e => fail(e.getMessage), identity)
+    assertEquals(n, FrameCount)
+    var m = 0
+    Camera
+      .usingFile(file.toString)(cam => for frame <- cam do m += 1)
+      .fold(e => fail(e.getMessage), identity)
+    assertEquals(m, FrameCount)
+
   test("snapshot grabs a single owned frame"):
     val file = recordFixture()
     Camera
