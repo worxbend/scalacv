@@ -30,20 +30,20 @@
 
 ## 🚀 Quick start
 
-The coordinates below target **0.4.3**. Release tags run CI-gated publishing to Maven Central
+The coordinates below target **0.4.4**. Release tags run CI-gated publishing to Maven Central
 and GitHub Packages; the release workflow verifies remote artifacts before creating a public
 GitHub release. See [RELEASING.md](RELEASING.md) for publication status and repository access.
-To build locally, use a clean `v0.4.3` checkout and run `./mill __.publishLocal` (local Ivy) or
+To build locally, use a clean `v0.4.4` checkout and run `./mill __.publishLocal` (local Ivy) or
 `./mill __.publishM2Local` (local Maven). Unreleased changes use the version reported by
 `./mill show core.publishVersion`. All four module versions must match.
 
 ```scala
 // build.mill  (or the equivalent for your build tool)
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.3",         // the OpenCV wrapping: Image, Managed, filters, contours…
+  mvn"com.worxbend::scalacv:0.4.4",         // the OpenCV wrapping: Image, Managed, filters, contours…
   // Optional layers, each depending only on the core — add the ones you use:
-  //   mvn"com.worxbend::scalacv-vision:0.4.3"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
-  //   mvn"com.worxbend::scalacv-graphs:0.4.3"  // the Picture scene graph, charts, GIF animation
+  //   mvn"com.worxbend::scalacv-vision:0.4.4"  // detectors, DNN, pose/tracking, OCR, calibration, SLAM
+  //   mvn"com.worxbend::scalacv-graphs:0.4.4"  // the Picture scene graph, charts, GIF animation
 
   // Natives for YOUR platform. This project keeps classifiers out of its platform-neutral
   // published POM, so this line is yours to pick — see "Why two lines?" below.

@@ -6,6 +6,8 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-10-18
+
 **Compatibility.** A `0.4.x` patch: binary-, source- and TASTy-compatible with 0.4.0, 0.4.1, 0.4.2 and
 0.4.3 (japicmp against all four release baselines; the API goldens changed by additions only). No
 public member was removed, renamed, re-typed or re-defaulted. The only observable differences are
