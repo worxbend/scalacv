@@ -418,6 +418,7 @@ export default function VisionPipeline(): React.ReactElement {
     let visible = true;
     let startedAt = 0;
     let lastDraw = 0;
+    let renderedElapsed = 0;
 
     const observer =
       typeof IntersectionObserver === 'function'
@@ -591,24 +592,21 @@ export default function VisionPipeline(): React.ReactElement {
       const cssH = cssW * (H / W);
       canvas.style.height = `${cssH}px`;
       // Assigning width/height RESETS the canvas — it clears the bitmap and the context state.
-      // Harmless while the animation loop is running, because the next frame repaints in ~33ms.
-      // Under reduced motion there is no next frame, so the static picture has to be redrawn here
-      // or the panel is left blank: `ro.observe` fires once on registration, immediately after the
-      // initial draw, which is exactly the case that broke.
+      // Paused and reduced-motion views have no next painted frame, so restore their frozen
+      // composition here instead of waiting for the animation clock to advance.
       canvas.width = Math.round(cssW * dpr);
       canvas.height = Math.round(cssH * dpr);
       ctx.imageSmoothingEnabled = true;
       if (reduced) {
         drawStatic();
+      } else if (pausedRef.current) {
+        drawFrame(renderedElapsed);
       }
     };
 
-    resize();
-    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
-    ro?.observe(wrap);
-
     /** Draws a single composed frame for the given elapsed time. */
     const drawFrame = (elapsed: number) => {
+      renderedElapsed = elapsed;
       const t = elapsed / 1000;
       const cycle = Math.floor(elapsed / CYCLE_MS);
       const withinCycle = elapsed % CYCLE_MS;
@@ -647,6 +645,10 @@ export default function VisionPipeline(): React.ReactElement {
       const shown = morphing && withinCycle - HOLD_MS > MORPH_MS / 2 ? next : current;
       setStageIndex((prev) => (prev === shown ? prev : shown));
     };
+
+    resize();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+    ro?.observe(wrap);
 
     if (reduced) {
       // One frame, held. The draw itself already happened inside `resize()` above, and will happen

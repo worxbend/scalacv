@@ -41,12 +41,14 @@ for (const reason of ['paused', 'hidden', 'offscreen']) {
   });
 }
 
-test('paused resize currently clears the frozen frame until resume', t => {
+test('paused resize redraws the frozen composition without advancing time', t => {
   const p = mount(); t.after(() => p.close());
-  p.tick(100); p.tick(2600); p.drain();
-  p.pause(true); p.resize();
-  assert.equal(p.screen.blank, true);
-  assert.equal(p.drain(), '[]');
+  p.tick(100); p.tick(2600); const frozen = p.drain();
+  p.pause(true); p.tick(10000); p.resize();
+  assert.equal(p.screen.blank, false);
+  assert.equal(p.drain(), frozen);
+  assert.equal(p.states[0], 0);
+  p.tick(10100); assert.equal(p.drain(), '[]');
 });
 
 test('reduced motion redraws the same final composition on resize without a loop', t => {
