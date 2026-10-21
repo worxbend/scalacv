@@ -67,7 +67,6 @@ def verify_files(files, repository, headers, *, open_url, clock, sleep) -> None:
         print(f"Verified {relative}", flush=True)
 
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository")
