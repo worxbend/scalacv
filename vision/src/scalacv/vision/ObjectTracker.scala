@@ -76,14 +76,7 @@ final class ObjectTracker private (
 
     correctMatches(matched, detections)
 
-    // 4. Spawn a track for every detection that matched nothing.
-    detections.indices
-      .filterNot(matchedDets)
-      .foreach: di =>
-        val det = detections(di)
-        tracks += Trk(nextId, Kalman.point(ObjectTracker.center(det)), (det.width, det.height), det, 1, 0, 0)
-        nextId += 1
-        total += 1
+    spawnUnmatched(detections, matchedDets)
 
     // 5. Retire tracks unseen for too long, freeing their filters.
     val dead = tracks.filter(_.timeSinceUpdate > maxAge)
@@ -111,6 +104,15 @@ final class ObjectTracker private (
       tracks(ti).box = det
       tracks(ti).hits += 1
       tracks(ti).timeSinceUpdate = 0
+
+  private def spawnUnmatched(detections: Seq[Rect], matchedDets: Set[Int]): Unit =
+    detections.indices
+      .filterNot(matchedDets)
+      .foreach: di =>
+        val det = detections(di)
+        tracks += Trk(nextId, Kalman.point(ObjectTracker.center(det)), (det.width, det.height), det, 1, 0, 0)
+        nextId += 1
+        total += 1
 
   /** Greedy IoU association: track index → detection index, each used at most once. */
   private def greedyMatch(detections: Seq[Rect]): Map[Int, Int] =
