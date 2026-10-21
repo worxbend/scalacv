@@ -70,7 +70,6 @@ final class ObjectTracker private (
       )
     predictTracks()
 
-    // 2. Greedily associate detections to tracks by IoU, best overlap first.
     val matched = greedyMatch(detections)
     val matchedDets = matched.values.toSet
 
@@ -80,11 +79,7 @@ final class ObjectTracker private (
 
     retireStaleTracks()
 
-    // 6. Report the confirmed, freshly-seen tracks.
-    tracks.iterator
-      .filter(t => t.hits >= minHits && t.timeSinceUpdate == 0)
-      .map(t => ObjectTrack(t.id, t.box, t.hits, t.age))
-      .toSeq
+    confirmedTracks
 
   private def predictTracks(): Unit =
     tracks.foreach: t =>
@@ -115,6 +110,12 @@ final class ObjectTracker private (
     val dead = tracks.filter(_.timeSinceUpdate > maxAge)
     dead.foreach(_.kalman.close())
     tracks --= dead
+
+  private def confirmedTracks: Seq[ObjectTrack] =
+    tracks.iterator
+      .filter(t => t.hits >= minHits && t.timeSinceUpdate == 0)
+      .map(t => ObjectTrack(t.id, t.box, t.hits, t.age))
+      .toSeq
 
   /** Greedy IoU association: track index → detection index, each used at most once. */
   private def greedyMatch(detections: Seq[Rect]): Map[Int, Int] =
