@@ -30,12 +30,11 @@ WCAG AA (4.5:1) with margin in both themes, not sit on the threshold.
 Docusaurus 3.10 renders code through `prism-react-renderer`, loading grammars from the bundled
 `prismjs`. The standing worry with Docusaurus is that Prism's Scala grammar predates Scala 3.
 
-**Verified against this library's own code, not assumed:** the `prismjs` Scala grammar shipped with
-3.10 lists `given`, `extension`, `enum`, `inline`, `opaque`, `infix`, `open` in its keyword
-alternation, and the built HTML wraps `given` in `<span class="token keyword">` (checked in
-`cookbook.html`, `low-level.html`). So Scala 3 keywords highlight correctly and **no
-`prism-include-languages` swizzle or Shiki swap is needed** — a swizzle would be pure upgrade
-liability here.
+The bundled Scala grammar recognizes most Scala 3 keywords, including `given`, `extension`,
+`enum`, `inline`, `opaque`, `infix`, and `open`. The local
+`website/src/theme/prism-include-languages.js` swizzle adds the missing `then`, `end`, and
+`export` keywords and the type operators `?=>`, `=>>`, `<:`, and `>:`. The patch extends the
+upstream grammar instead of replacing its vocabulary, so upstream additions remain available.
 
 `additionalLanguages: ['java', 'scala', 'bash', 'toml', 'diff']` in `docusaurus.config.ts`. `java`
 is listed **before** `scala` because the Prism component load fails (`Cannot set properties of
@@ -75,7 +74,10 @@ re-solving a solved problem.
 
 ## Swizzle list
 
-None yet. Every swizzle is an upgrade liability and gets justified here before it lands.
+- **`prism-include-languages`** · done — loads the configured upstream grammars, then applies
+  the Scala 3 additions described above. **Why:** conditionals, export clauses, and type signatures
+  in the guides need highlighting that the bundled grammar does not provide. Review this patch
+  when upgrading Prism; remove additions when upstream supplies equivalent coverage.
 
 - **`Admonition` (`--wrap`)** · planned — add a `memory` variant for lifetime / use-after-free
   callouts on the Memory & resources page, and verify `danger` reads as genuinely alarming since it
@@ -84,8 +86,22 @@ None yet. Every swizzle is an upgrade liability and gets justified here before i
 
 ## Component inventory
 
-Built with plain Markdown/Infima so far — no custom React components (the rule is: don't build a
-component used twice). Candidates, to add only when a page actually needs them more than once:
+Guide content uses Markdown and Infima. The landing page has six React components under
+`website/src/components/`:
+
+| Component | Responsibility and reason |
+| --- | --- |
+| `Hero` | Installation copy and primary entry points; shares release metadata with site configuration. |
+| `VisionPipeline` | Canvas demonstration and its caption/control lifecycle; scene, raster, renderer, and timing helpers isolate computation from React ownership. |
+| `MorphText` | Decorative rotating headline words with a stable accessible label and reduced-motion fallback. |
+| `Section` | Shared headings, spacing, and width for landing sections. |
+| `Capabilities` | Feature groups linking to existing guides. |
+| `Paths` | Documentation routes organized by the reader's starting knowledge. |
+
+**Why:** the landing page needs interactive demonstrations and reusable section structure; guide
+prose remains in Markdown. Add components when their behavior or reuse justifies them.
+
+Future candidates:
 
 - Platform support matrix (install page) — **planned**, likely a plain Markdown table first.
 - "Wrong vs right" paired code blocks (Memory page) — **planned**; try Markdown + a CSS class
