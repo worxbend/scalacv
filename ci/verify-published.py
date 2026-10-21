@@ -56,6 +56,18 @@ def fetch_bytes(request, deadline, *, open_url, clock, sleep) -> bytes:
             sleep(5)
 
 
+def verify_files(files, repository, headers, *, open_url, clock, sleep) -> None:
+    # One shared propagation deadline, not fifteen minutes per missing file.
+    deadline = clock() + (900 if repository == CENTRAL else 120)
+    for local, relative in files:
+        request = urllib.request.Request(f"{repository}/{relative}", headers=headers)
+        downloaded = fetch_bytes(request, deadline, open_url=open_url, clock=clock, sleep=sleep)
+        if hashlib.sha256(downloaded).digest() != hashlib.sha256(local.read_bytes()).digest():
+            raise ValueError(f"remote release file differs from the built artifact: {relative}")
+        print(f"Verified {relative}", flush=True)
+
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository")
@@ -71,15 +83,8 @@ def main() -> None:
         output = subprocess.check_output([str(ROOT / "mill"), "show", f"{module}.publishArtifacts"],
                                          cwd=ROOT, text=True, timeout=900)
         files.extend(artifact_files(json.loads(output), artifact, version))
-    # One shared propagation deadline, not fifteen minutes per missing file.
-    deadline = time.monotonic() + (900 if repository == CENTRAL else 120)
-    for local, relative in files:
-        request = urllib.request.Request(f"{repository}/{relative}", headers=headers)
-        downloaded = fetch_bytes(request, deadline, open_url=urllib.request.urlopen,
-                                 clock=time.monotonic, sleep=time.sleep)
-        if hashlib.sha256(downloaded).digest() != hashlib.sha256(local.read_bytes()).digest():
-            raise ValueError(f"remote release file differs from the built artifact: {relative}")
-        print(f"Verified {relative}", flush=True)
+    verify_files(files, repository, headers, open_url=urllib.request.urlopen,
+                 clock=time.monotonic, sleep=time.sleep)
 
 
 if __name__ == "__main__":
