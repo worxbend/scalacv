@@ -8,7 +8,7 @@ Reviewed 2026-10-22 at `e39da7e8c915aee48e65a09f01a6f8975e248c9c` on `master`.
 - The SFace integration test can skip even after a model is supplied, and its self-similarity assertion cannot establish repeatability or discrimination (F02).
 - The website loses its canvas image when resized while paused and advertises installation version 0.4.3 while the README targets 0.4.4 (F03–F04).
 - Builds, 959 tests, native smoke, formatter/import checks, and the documentation site pass; four additional tests skip. The main refactoring opportunities are private geometry/tracking phases and the large website animation component (F05–F08).
-- **Stop condition applied: Phases 0–1 only.** The worktree was already dirty. No application, test, configuration, dependency, or CI source was changed; no commits were made. All findings remain open.
+- **Initial audit stopped at Phases 0–1** because the worktree was already dirty. Subsequent explicit authorization covers implementing all findings; the plan below records that scope. The original cache files remain untouched.
 
 ## Scope and stop condition
 
@@ -20,9 +20,9 @@ Reviewed 2026-10-22 at `e39da7e8c915aee48e65a09f01a6f8975e248c9c` on `master`.
 ?? ci/tests/__pycache__/test_release.cpython-314.pyc
 ```
 
-These pre-existing generated files were left untouched. They trigger the requested dirty-worktree stop regardless of their origin. Only this review is added to the working tree; Phases 2–4 and their commits are not applicable to this run.
+These pre-existing generated files were left untouched. They trigger the requested dirty-worktree stop regardless of their origin. The initial audit added only this review and deferred Phases 2–4 until explicit authorization to proceed.
 
-State revalidation on 2026-10-22 confirmed the same `master` HEAD, no tracked or staged differences (`git diff --exit-code HEAD` and `git diff --cached --exit-code` both exit 0), and only this review plus the three original bytecode files untracked. Retained baseline logs and full-suite XML reports were checked against the results below. Build and test commands were not repeated during this state check because the reviewed source is unchanged. The latest instructions retain the dirty-worktree stop and prohibit pushing; no commit or push was performed.
+State revalidation on 2026-10-22 confirmed the same `master` HEAD, no tracked or staged differences (`git diff --exit-code HEAD` and `git diff --cached --exit-code` both exit 0), and only this review plus the three original bytecode files untracked. Retained baseline logs and full-suite XML reports were checked against the results below. Build and test commands were not repeated during this state check because the reviewed source is unchanged. At that point the dirty-worktree stop applied, and no commit or push had been performed.
 
 The audit covered tracked Scala library/test/example/benchmark sources, the Mill build, Python and shell tooling, website TypeScript/JavaScript/CSS/configuration, CI definitions, and supporting documentation. Detailed inspection concentrated on ownership, native boundaries, streaming, downloads, numerical geometry, release verification, and churn hotspots. Supporting prose was sampled; the entire book was not independently validated. No applicable `AGENTS.md` was found in the repository or its ancestors.
 
@@ -123,7 +123,7 @@ Churn command: `git log --since=12.months --format= --name-only | sort | uniq -c
 
 ## Findings
 
-Risk describes the proposed change. Coverage means relevant existing automated coverage, not coverage of every reported edge case. All findings are open under the stop condition; bug fixes and altered observable diagnostics are proposals, not behavior-preserving refactors.
+Risk describes the proposed change. Coverage means relevant existing automated coverage, not coverage of every reported edge case. This table records the initial findings. Bug fixes and altered observable diagnostics are distinct from behavior-preserving refactors; execution status is recorded below.
 
 | ID | Severity | Category | Location | Evidence | Principle | Proposed refactoring | Risk | Effort (S/M/L) | Test coverage (yes/partial/no) | Source (tool/manual) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -172,4 +172,34 @@ Risk describes the proposed change. Coverage means relevant existing automated c
 5. What ownership/latency budgets should long-running applications choose for `LoopDetector.maxKeyframes`, GIF size, and blocking capture calls? Existing defaults and backend timeout limitations remain unchanged.
 6. Packaged consumer tests need a `cs` executable; the book needs `typst`; camera/model/platform/runtime checks need their stated environments. No coverage percentage, clean rebuild guarantee, full browser validation, or remote release verification is claimed.
 
-No safely addressable finding was executed because the initial stop condition applies to the whole run. There is no refactoring commit range, before/after code metric comparison, or session commit message to audit: **0 commits**, original `HEAD` retained. This file is intentionally uncommitted.
+The initial audit made no code changes. Implementation proceeds under the explicit follow-up authorization below.
+
+
+## Refactoring plan
+
+The instruction to implement all proposed findings authorizes F01–F11, including their listed behavior, documentation, test, and release-tooling changes, and proceeding despite the three pre-existing bytecode files. Those files stay untouched. Work stays on `master`; no push, public API change, runtime dependency, lockfile edit, or workflow change is planned. The audit was committed separately as `b44a34b` after a fresh build and full module/Python test run.
+
+Each row is one theme and at most five files per step. Named extractions are separate from behavior fixes. Existing meaningful tests are retained; additional characterization precedes untested structural changes. Any mechanical move above 200 changed lines contains only the move and necessary import/export wiring.
+
+| Batch | Goal / findings | Safety net first | Refactorings / planned commits | Verification |
+| --- | --- | --- | --- | --- |
+| 1 | Preserve native loader diagnostics (F01) | Isolated subprocess pins missing-native guidance and initial/retry failure causes | `test(core): characterize missing native loading`; separate `fix(core): preserve native loading causes` | Scala build + full module tests, formatter/import checks |
+| 2 | Meaningful opt-in inference (F02) | Explicit generated face/landmarks, independent repeat embeddings, distinct-image output; run supplied pinned SFace model | `test(vision): strengthen SFace inference coverage` | Scala build + full module tests; model-enabled test |
+| 3 | Consistent installation copy (F04) | Node consistency test against README/build; confirm Maven Central publication | Shared website release metadata in a dedicated fix commit | Website typecheck, Node tests, production build |
+| 4 | Separate dash clipping (F05) | Existing pixel, phase, extreme-coordinate and subprocess regression tests | Extract Function for private clipping, preserving arithmetic and validation order | Scala build + full module tests, formatter/import checks |
+| 5 | Separate clipped rays from updates (F06) | Add reversed, degenerate and missed-ray characterization alongside exact-numerical tests | `test(vision)` then `refactor(vision): extract clipped occupancy rays` | Scala build + full module tests, formatter/import checks |
+| 6 | Name tracker lifecycle phases (F07) | Pin equal-IoU ordering and partial-failure state | `test(vision)` then private Extract Function steps, one per commit | Scala build + full module tests, formatter/import checks |
+| 7 | Test and simplify animation (F03/F08) | Node built-in runner with controlled canvas/clock/observer boundaries; pixels, captions, pause, visibility, resize, cleanup | Characterization commit; separate paused-resize fix; mechanical scene/raster moves and clock/render extractions | Website typecheck, Node tests, production build after each step |
+| 8 | Test release verification (F09) | Fake transport/clock tests exercise current CLI orchestration, retry, mismatch, permanent errors and shared deadline | `test(ci)` then Extract Function for fetching/verification with injectable transport/clock | Python syntax compilation + full release-tooling tests |
+| 9 | Accurate architecture inventory (F10) | Inspect actual components and grammar patch | `docs(website): update component and swizzle inventory` | Website typecheck, Node tests, production build |
+| 10 | Resolve throws documentation (F11) | Existing closed-odometry tests | `docs(vision): qualify odometry exception reference` | Scala build + full module tests; fresh Scaladoc |
+
+### Proposals requiring approval — now authorized
+
+The follow-up instruction approves all listed proposals. F01 changes the exception cause: a subprocess asserting the original `UnsatisfiedLinkError`/retry `NoClassDefFoundError` is retained fails before the fix. F03 changes paused resize: a lifecycle assertion that a frozen frame remains visible fails before the fix. F04 changes installation copy: comparing website metadata with README/build fails before synchronization. Maven Central returned HTTP 200 for the 0.4.4 core POM during implementation reconnaissance.
+
+F02 makes an opted-in inference test fail on invalid input instead of skipping, removes its unrelated detector download, and requires independent embeddings; a constant-output substitution must fail the test. F09 authorizes the proposed release-tooling refactor and tests, preserving retries/deadlines and requiring no workflow or credential change. No additional runtime/test dependency is planned: Node's built-in test runner uses the website's existing Babel toolchain.
+
+### Verification policy
+
+Every Scala or repository documentation commit runs `./mill core.compile vision.compile graphs.compile zio.compile examples.compile`, `./mill core.test + vision.test + graphs.test + zio.test + examples.test`, and `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ci/tests -v`. Website commits run `npm --prefix website run typecheck`, `npm --prefix website test`, and `npm --prefix website run build`. Release-script commits compile Python sources with the built-in `compile` function (no bytecode files written) and run the full Python suite. Full cross-project baseline checks run again at completion. Exact per-commit command results are retained in `/tmp/scalacv-implementation.taPSyd/checks.jsonl` and accompanying logs.
