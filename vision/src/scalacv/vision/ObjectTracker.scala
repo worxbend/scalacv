@@ -78,10 +78,7 @@ final class ObjectTracker private (
 
     spawnUnmatched(detections, matchedDets)
 
-    // 5. Retire tracks unseen for too long, freeing their filters.
-    val dead = tracks.filter(_.timeSinceUpdate > maxAge)
-    dead.foreach(_.kalman.close())
-    tracks --= dead
+    retireStaleTracks()
 
     // 6. Report the confirmed, freshly-seen tracks.
     tracks.iterator
@@ -113,6 +110,11 @@ final class ObjectTracker private (
         tracks += Trk(nextId, Kalman.point(ObjectTracker.center(det)), (det.width, det.height), det, 1, 0, 0)
         nextId += 1
         total += 1
+
+  private def retireStaleTracks(): Unit =
+    val dead = tracks.filter(_.timeSinceUpdate > maxAge)
+    dead.foreach(_.kalman.close())
+    tracks --= dead
 
   /** Greedy IoU association: track index → detection index, each used at most once. */
   private def greedyMatch(detections: Seq[Rect]): Map[Int, Int] =
