@@ -109,32 +109,37 @@ class FaceRecognizerTest extends munit.FunSuite:
       Files.deleteIfExists(empty)
       Files.deleteIfExists(text)
 
-  test("end to end: the same face embeds consistently (needs SCALACV_SFACE_MODEL + network)"):
+  test("end to end: repeatable embeddings respond to image content (needs SCALACV_SFACE_MODEL)"):
     val model = sys.env.get("SCALACV_SFACE_MODEL")
     assume(model.isDefined, "set SCALACV_SFACE_MODEL to the SFace ONNX to run this test")
-    val detectorModel = FaceDetect.downloadModel(Files.createTempDirectory("scalacv-sface-yunet"))
-    assume(detectorModel.isRight, "the YuNet model download is needed and failed")
-
+    val face = Face(
+      Rect(90, 90, 140, 140),
+      Seq(Point(135, 140), Point(185, 140), Point(160, 165), Point(140, 190), Point(180, 190)),
+      1.0f
+    )
     FaceRecognizer.load(model.get) match
       case Left(e) => fail(s"could not load the supplied SFace model: $e")
       case Right(recognizer) =>
         try
-          FaceDetect.create(detectorModel.toOption.get.toString, Size(320, 320)) match
-            case Left(e) => fail(s"could not build the detector: $e")
-            case Right(detector) =>
-              try
-                val scene = drawFaceScene()
-                try
-                  val faces = scene.faces(detector.get)
-                  assume(faces.nonEmpty, "the synthetic face was not detected")
-                  val e1 = recognizer.embed(scene, faces.head)
-                  assertEquals(e1.values.size, 128)
-                  assertEqualsDouble(e1.cosineSimilarity(e1), 1.0, 1e-6)
-                finally scene.close()
-              finally detector.release()
+          val scene = drawFaceScene()
+          val repeat = drawFaceScene()
+          val blank = Image.blank(320, 320, Scalar.Black)
+          try
+            val first = recognizer.embed(scene, face)
+            val second = recognizer.embed(repeat, face)
+            val different = recognizer.embed(blank, face)
+            assertEquals(first.values.size, FaceRecognizer.EmbeddingSize)
+            assert(first.values.forall(_.isFinite), "the embedding must contain finite values")
+            assertEqualsDouble(first.cosineSimilarity(second), 1.0, 1e-6)
+            assert(first.l2Distance(different) > 1e-3, "embedding output must depend on image content")
+            assertEqualsDouble(first.cosineSimilarity(recognizer.embed(scene, face)), 1.0, 1e-6)
+          finally
+            scene.close()
+            repeat.close()
+            blank.close()
         finally recognizer.close()
 
-  /** A crude frontal face YuNet will accept — the same construction FaceDetectTest uses. */
+  /** Explicit landmarks keep inference independent of detector availability and synthetic-face recall. */
   private def drawFaceScene(): Image =
     val img = Image.blank(320, 320, Scalar(200, 200, 200))
     img.mat.drawCircle(Point(160, 160), 70, Scalar(180, 160, 150), Thickness.Filled)
