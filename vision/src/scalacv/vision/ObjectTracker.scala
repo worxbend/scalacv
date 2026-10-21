@@ -68,12 +68,7 @@ final class ObjectTracker private (
         "this ObjectTracker has already been closed — updating it now would spawn tracks and allocate " +
           "native KalmanFilters on a dead object (a native leak). Create a fresh tracker instead."
       )
-    // 1. Predict every existing track forward one step.
-    tracks.foreach: t =>
-      val c = t.kalman.predict()
-      t.box = ObjectTracker.centeredRect(c, t.size)
-      t.age += 1
-      t.timeSinceUpdate += 1
+    predictTracks()
 
     // 2. Greedily associate detections to tracks by IoU, best overlap first.
     val matched = greedyMatch(detections)
@@ -107,6 +102,13 @@ final class ObjectTracker private (
       .filter(t => t.hits >= minHits && t.timeSinceUpdate == 0)
       .map(t => ObjectTrack(t.id, t.box, t.hits, t.age))
       .toSeq
+
+  private def predictTracks(): Unit =
+    tracks.foreach: t =>
+      val c = t.kalman.predict()
+      t.box = ObjectTracker.centeredRect(c, t.size)
+      t.age += 1
+      t.timeSinceUpdate += 1
 
   /** Greedy IoU association: track index → detection index, each used at most once. */
   private def greedyMatch(detections: Seq[Rect]): Map[Int, Int] =
