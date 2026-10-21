@@ -25,6 +25,7 @@ import styles from './styles.module.css';
 import {W, H} from './scene';
 import {createStageRenderer} from './renderer';
 import type {StageId} from './renderer';
+import {HOLD_MS, MORPH_MS, frameAt} from './timing';
 
 /* -------------------------------------------------------------------------- */
 /* Stage definitions                                                          */
@@ -86,19 +87,6 @@ const STAGES: Stage[] = [
     hint: 'Boxes, labels and confidences — plain immutable Scala data, no Mats left open.',
   },
 ];
-
-/** How long each stage holds, and how long the morph between two stages takes (milliseconds). */
-const HOLD_MS = 2100;
-const MORPH_MS = 900;
-const CYCLE_MS = HOLD_MS + MORPH_MS;
-
-/* -------------------------------------------------------------------------- */
-/* The synthetic scene                                                        */
-/* -------------------------------------------------------------------------- */
-
-/* -------------------------------------------------------------------------- */
-/* Pixel operations — the actual image processing                             */
-/* -------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
@@ -212,12 +200,7 @@ export default function VisionPipeline(): React.ReactElement {
     /** Draws a single composed frame for the given elapsed time. */
     const drawFrame = (elapsed: number) => {
       renderedElapsed = elapsed;
-      const t = elapsed / 1000;
-      const cycle = Math.floor(elapsed / CYCLE_MS);
-      const withinCycle = elapsed % CYCLE_MS;
-      const current = cycle % STAGES.length;
-      const next = (current + 1) % STAGES.length;
-      const morphing = withinCycle > HOLD_MS;
+      const {t, current, next, withinCycle, morphing, shown} = frameAt(elapsed, STAGES.length);
 
       if (!morphing) {
         renderStage(STAGES[current].id, t, withinCycle / HOLD_MS);
@@ -247,7 +230,6 @@ export default function VisionPipeline(): React.ReactElement {
         ctx.fillRect(0, y - 1, canvas.width, 2);
       }
 
-      const shown = morphing && withinCycle - HOLD_MS > MORPH_MS / 2 ? next : current;
       setStageIndex((prev) => (prev === shown ? prev : shown));
     };
 
