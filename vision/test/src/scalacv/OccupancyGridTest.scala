@@ -68,6 +68,29 @@ class OccupancyGridTest extends munit.FunSuite:
     assert(saturated > 0.9, s"it should approach occupied, got $saturated")
     assert(saturated < 1.0, s"log-odds clamping must keep it short of certainty, got $saturated")
 
+  test("reversing a clipped outside-to-outside ray preserves the free cells"):
+    val forward = OccupancyGrid(5, 5, resolution = 1.0)
+    val reverse = OccupancyGrid(5, 5, resolution = 1.0)
+    forward.observe(-1e100, 0, 1e100, 0)
+    reverse.observe(1e100, 0, -1e100, 0)
+    for x <- -2 to 2; y <- -2 to 2 do
+      assertEquals(forward.probability(x, y), reverse.probability(x, y))
+      assertEquals(forward.probability(x, y) < 0.5, y == 0)
+      assert(forward.probability(x, y) <= 0.5, "an outside endpoint must not invent a hit")
+
+  test("a degenerate in-grid ray records one hit and no misses"):
+    val observed = OccupancyGrid(5, 5, resolution = 1.0)
+    val expected = OccupancyGrid(5, 5, resolution = 1.0)
+    observed.observe(0, 0, 0, 0)
+    expected.hit(0, 0)
+    for x <- -2 to 2; y <- -2 to 2 do assertEquals(observed.probability(x, y), expected.probability(x, y))
+
+  test("an entirely outside ray leaves the grid unchanged"):
+    val grid = OccupancyGrid(5, 5, resolution = 1.0)
+    grid.observe(-1e100, 3, 1e100, 3)
+    grid.observe(3, 3, 3, 3)
+    for x <- -2 to 2; y <- -2 to 2 do assertEquals(grid.probability(x, y), 0.5)
+
   test("toImage renders a cols x rows single-channel map, bright where occupied"):
     val g = OccupancyGrid(9, 7, resolution = 1.0)
     for _ <- 0 until 20 do g.hit(0.0, 0.0) // saturate the centre cell
