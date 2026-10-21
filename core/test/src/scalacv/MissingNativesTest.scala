@@ -31,7 +31,10 @@ class MissingNativesTest extends munit.FunSuite:
       assert(process.waitFor(20, TimeUnit.SECONDS), "native loading timed out")
       val log = Files.readString(output)
       assertEquals(process.exitValue(), 0, log)
-      assertEquals(log.linesIterator.filter(_.startsWith("cause=")).toList, List("cause=null", "cause=null"))
+      assertEquals(
+        log.linesIterator.filter(_.startsWith("cause=")).toList,
+        List("cause=UnsatisfiedLinkError", "cause=NoClassDefFoundError")
+      )
     finally
       if process.isAlive then
         process.destroyForcibly()

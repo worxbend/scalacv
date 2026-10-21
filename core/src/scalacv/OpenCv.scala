@@ -60,9 +60,9 @@ object OpenCv:
     catch
       case e: CvError => throw e
       case e: UnsatisfiedLinkError =>
-        throw CvError.NativesMissing(nativesMissingHelp(e.getMessage))
+        throw CvError.NativesMissing(nativesMissingHelp(e.getMessage), e)
       case e: NoClassDefFoundError =>
-        throw CvError.NativesMissing(nativesMissingHelp(e.getMessage))
+        throw CvError.NativesMissing(nativesMissingHelp(e.getMessage), e)
 
   /** Loads `target`, resolving its dependencies **on demand** from the extracted payload.
     *
