@@ -74,14 +74,7 @@ final class ObjectTracker private (
     val matched = greedyMatch(detections)
     val matchedDets = matched.values.toSet
 
-    // 3. Correct matched tracks toward their detection.
-    matched.foreach: (ti, di) =>
-      val det = detections(di)
-      tracks(ti).kalman.correct(ObjectTracker.center(det)): Unit
-      tracks(ti).size = (det.width, det.height)
-      tracks(ti).box = det
-      tracks(ti).hits += 1
-      tracks(ti).timeSinceUpdate = 0
+    correctMatches(matched, detections)
 
     // 4. Spawn a track for every detection that matched nothing.
     detections.indices
@@ -109,6 +102,15 @@ final class ObjectTracker private (
       t.box = ObjectTracker.centeredRect(c, t.size)
       t.age += 1
       t.timeSinceUpdate += 1
+
+  private def correctMatches(matched: Map[Int, Int], detections: Seq[Rect]): Unit =
+    matched.foreach: (ti, di) =>
+      val det = detections(di)
+      tracks(ti).kalman.correct(ObjectTracker.center(det)): Unit
+      tracks(ti).size = (det.width, det.height)
+      tracks(ti).box = det
+      tracks(ti).hits += 1
+      tracks(ti).timeSinceUpdate = 0
 
   /** Greedy IoU association: track index → detection index, each used at most once. */
   private def greedyMatch(detections: Seq[Rect]): Map[Int, Int] =
