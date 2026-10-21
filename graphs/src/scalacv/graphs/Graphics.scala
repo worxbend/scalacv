@@ -175,18 +175,7 @@ private[scalacv] object Graphics:
       val ux = dx / length
       val uy = dy / length
       val margin = style.strokeWidth.toDouble + 3
-      var start = 0.0
-      var end = length
-      def clip(origin: Double, direction: Double, low: Double, high: Double): Unit =
-        if direction == 0 then
-          if origin < low || origin > high then end = -1
-        else
-          val a = (low - origin) / direction
-          val b = (high - origin) / direction
-          start = math.max(start, math.min(a, b))
-          end = math.min(end, math.max(a, b))
-      clip(from.x, ux, -margin, mat.cols.toDouble + margin)
-      clip(from.y, uy, -margin, mat.rows.toDouble + margin)
+      val (start, end) = clipDashInterval(from, Point(ux, uy), length, mat, margin)
       // Check even a collapsed interval: at astronomical distances both clip boundaries can round
       // to the same Double, silently hiding an intersecting edge. Require quarter-pixel distance
       // resolution for potentially visible edges, in either direction; proven offscreen edges still
@@ -219,6 +208,27 @@ private[scalacv] object Graphics:
           pos = next
           localPhase = if on then dash.on.toDouble else 0.0
     (phase + length % period) % period
+
+  private def clipDashInterval(
+      from: Point,
+      direction: Point,
+      length: Double,
+      mat: Mat,
+      margin: Double
+  ): (Double, Double) =
+    var start = 0.0
+    var end = length
+    def clip(origin: Double, direction: Double, low: Double, high: Double): Unit =
+      if direction == 0 then
+        if origin < low || origin > high then end = -1
+      else
+        val a = (low - origin) / direction
+        val b = (high - origin) / direction
+        start = math.max(start, math.min(a, b))
+        end = math.min(end, math.max(a, b))
+    clip(from.x, direction.x, -margin, mat.cols.toDouble + margin)
+    clip(from.y, direction.y, -margin, mat.rows.toDouble + margin)
+    (start, end)
 
   private def circlePolygon(center: Point, radius: Int): Seq[Point] =
     (0 until 48).map { i =>
