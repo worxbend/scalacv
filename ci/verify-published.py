@@ -40,6 +40,22 @@ def artifact_files(data: dict, artifact: str, version: str) -> list[tuple[Path, 
             for ref, name in payload]
 
 
+def fetch_bytes(request, deadline, *, open_url, clock, sleep) -> bytes:
+    while True:
+        try:
+            with open_url(request, timeout=30) as response:
+                downloaded = response.read()
+            return downloaded
+        except urllib.error.HTTPError as error:
+            if error.code not in (404, 429, 500, 502, 503, 504) or clock() >= deadline:
+                raise
+            sleep(5)
+        except urllib.error.URLError:
+            if clock() >= deadline:
+                raise
+            sleep(5)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository")
@@ -59,19 +75,8 @@ def main() -> None:
     deadline = time.monotonic() + (900 if repository == CENTRAL else 120)
     for local, relative in files:
         request = urllib.request.Request(f"{repository}/{relative}", headers=headers)
-        while True:
-            try:
-                with urllib.request.urlopen(request, timeout=30) as response:
-                    downloaded = response.read()
-                break
-            except urllib.error.HTTPError as error:
-                if error.code not in (404, 429, 500, 502, 503, 504) or time.monotonic() >= deadline:
-                    raise
-                time.sleep(5)
-            except urllib.error.URLError:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(5)
+        downloaded = fetch_bytes(request, deadline, open_url=urllib.request.urlopen,
+                                 clock=time.monotonic, sleep=time.sleep)
         if hashlib.sha256(downloaded).digest() != hashlib.sha256(local.read_bytes()).digest():
             raise ValueError(f"remote release file differs from the built artifact: {relative}")
         print(f"Verified {relative}", flush=True)
