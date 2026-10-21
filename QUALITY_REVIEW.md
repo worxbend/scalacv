@@ -1,0 +1,175 @@
+# Quality review
+
+Reviewed 2026-10-22 at `e39da7e8c915aee48e65a09f01a6f8975e248c9c` on `master`.
+
+## Executive summary
+
+- Native loading discards the original failure cause; a subprocess without native classifier jars reproduced `NativesMissing` with `getCause == null` (F01). No new native memory-safety defect or exploitable security defect was confirmed.
+- The SFace integration test can skip even after a model is supplied, and its self-similarity assertion cannot establish repeatability or discrimination (F02).
+- The website loses its canvas image when resized while paused and advertises installation version 0.4.3 while the README targets 0.4.4 (F03–F04).
+- Builds, 959 tests, native smoke, formatter/import checks, and the documentation site pass; four additional tests skip. The main refactoring opportunities are private geometry/tracking phases and the large website animation component (F05–F08).
+- **Stop condition applied: Phases 0–1 only.** The worktree was already dirty. No application, test, configuration, dependency, or CI source was changed; no commits were made. All findings remain open.
+
+## Scope and stop condition
+
+`main` does not exist. `git symbolic-ref refs/remotes/origin/HEAD` returned `refs/remotes/origin/master`, and `master` was already checked out. No branch switch was necessary. Initial `git status --porcelain=v1 --untracked-files=all` reported:
+
+```text
+?? ci/__pycache__/validate-release.cpython-314.pyc
+?? ci/__pycache__/verify-published.cpython-314.pyc
+?? ci/tests/__pycache__/test_release.cpython-314.pyc
+```
+
+These pre-existing generated files were left untouched. They trigger the requested dirty-worktree stop regardless of their origin. Only this review is added to the working tree; Phases 2–4 and their commits are not applicable to this run.
+
+State revalidation on 2026-10-22 confirmed the same `master` HEAD, no tracked or staged differences (`git diff --exit-code HEAD` and `git diff --cached --exit-code` both exit 0), and only this review plus the three original bytecode files untracked. Retained baseline logs and full-suite XML reports were checked against the results below. Build and test commands were not repeated during this state check because the reviewed source is unchanged. The latest instructions retain the dirty-worktree stop and prohibit pushing; no commit or push was performed.
+
+The audit covered tracked Scala library/test/example/benchmark sources, the Mill build, Python and shell tooling, website TypeScript/JavaScript/CSS/configuration, CI definitions, and supporting documentation. Detailed inspection concentrated on ownership, native boundaries, streaming, downloads, numerical geometry, release verification, and churn hotspots. Supporting prose was sampled; the entire book was not independently validated. No applicable `AGENTS.md` was found in the repository or its ancestors.
+
+Excluded from source refactoring: `out/`, `target/`, `.mill-daemon/`, IDE caches, Python bytecode, website `node_modules/`, `build/`, `.docusaurus/`, generated `docs/` and `static/api/`, generated `BuildValues.scala`, `website/package-lock.json`, binary assets/book PDF, and the upstream Mill bootstrap. Exclusions follow `.gitignore`, `website/.gitignore`, build source generation, and conventional generated/vendor paths. No database migrations or database modules were found. Running builds regenerated ignored outputs; none were edited by hand.
+
+## Baseline
+
+Toolchain: Scala 3.3.8, Mill 1.1.9, module JDK selection `zulu:25`, Java 17 bytecode target, OpenCV 4.14.0-1.5.14, MUnit 1.3.6, MUnit ScalaCheck 1.3.1, and ZIO/ZIO Test 2.1.26. Host commands report Temurin 25.0.4.1, Python 3.14.8, Node 24.22.0, and npm 12.2.0. Website: Docusaurus 3.10.2, React 19, TypeScript 7. No website unit/browser test framework is configured.
+
+Commands were derived from `build.mill`, `CONTRIBUTING.md`, `RELEASING.md`, `website/package.json`, and `.github/workflows/ci.yml`. Unless stated otherwise they ran from the repository root. Mill checks used the existing build cache; this was not a clean rebuild. Raw logs and temporary diagnostic probes are retained at `/tmp/scalacv-quality-review.gzV06e/` for this workspace session.
+
+| Check | Exact command | Actual result |
+| --- | --- | --- |
+| Headless build | `./mill core.compile vision.compile graphs.compile zio.compile examples.compile` | Exit 0; all five modules pass; no compiler warnings emitted in this invocation. |
+| Full module tests | `./mill core.test + vision.test + graphs.test + zio.test + examples.test` | Exit 0; 948 discovered, 944 passed, 4 skipped, 0 failures. |
+| Native leak tests | `./mill leaks.test` | Exit 0; 9 passed, 0 failures/skips. |
+| Format | `./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll` | Exit 0; checked 188 Scala sources, no reported violations. |
+| Production static analysis | `./mill core.fix --check + vision.fix --check + graphs.fix --check + zio.fix --check + examples.fix --check` | Exit 0; OrganizeImports check, 99 sources, no reported violations. |
+| Test static analysis | `./mill core.test.fix --check + vision.test.fix --check + graphs.test.fix --check + zio.test.fix --check + examples.test.fix --check + leaks.test.fix --check` | Exit 0; OrganizeImports check, 75 source inputs, no reported violations. Shared fixture inputs can occur in multiple modules. |
+| Release tooling tests | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ci/tests -v` | Exit 0; 6 passed. |
+| Shell syntax | `bash -n <file>` for each tracked `.sh` file | All 6 pass: `ci/consumer-smoke/run.sh`, `create-issues.sh`, `docs/book/build.sh`, `docs/book/check-chapter.sh`, `scripts/assemble-docs.sh`, `scripts/create-docs-issues.sh`. Scripts that create remote issues were not executed. |
+| TypeScript | `npm run typecheck` in `website/` | Exit 0; no diagnostics emitted. |
+| Documentation snippets | `./mill docs.mdocCheck` | Exit 0; cached task result. |
+| Native loading smoke | `./mill examples.runMain scalacv.smoke` | Exit 0 and `OK` success marker. |
+| Documentation assembly | `./scripts/assemble-docs.sh` | Exit 0; mdoc runs, Scaladoc builds, all checked API file links resolve. |
+| Website production build | `npm --prefix website run build` | Exit 0; static files generated, no broken-link/anchor error reported. Existing installed dependencies used; no dependency installation or lockfile change. |
+| Optional source builds | `./mill benchmarks.compile examples-gui.compile` | Exit 0; cached compilation. GUI/hardware applications and benchmarks were not executed. |
+| ABI checker controls | `PYTHONDONTWRITEBYTECODE=1 python3 ci/binary-compatibility.py --self-test` | Exit 0; positive comparison, removed-method/finality negative controls, and old-client finality check pass. |
+| Historical ABI comparisons | `PYTHONDONTWRITEBYTECODE=1 python3 ci/binary-compatibility.py` | Exit 0; all 20 comparisons pass: core, vision, graphs, and zio against each of v0.4.0–v0.4.4. Checker controls also pass. Evidence: `/tmp/scalacv-abi-q3wygm3m/`. Temporary baseline clones/builds did not change the working branch or history. |
+
+Test counts are taken from the newly produced `testForked.dest/test-report.xml` files, not source-level counts of `test(...)` declarations:
+
+| Suite | Discovered | Passed | Skipped | Failed |
+| --- | ---: | ---: | ---: | ---: |
+| core | 536 | 535 | 1 | 0 |
+| vision | 239 | 236 | 3 | 0 |
+| graphs | 133 | 133 | 0 | 0 |
+| zio | 34 | 34 | 0 | 0 |
+| examples | 6 | 6 | 0 | 0 |
+| leaks | 9 | 9 | 0 | 0 |
+| Python release tooling | 6 | 6 | 0 | 0 |
+| **Total** | **963** | **959** | **4** | **0** |
+
+Exact skipped set:
+
+- `scalacv.VideoTest.a real camera delivers frames of the size it reports` — opt-in `SCALACV_CAMERA` hardware test.
+- `scalacv.CascadesTest.resolve on Windows explains that the jar ships none` — platform-specific assumption.
+- `scalacv.CascadesTest.load on a name the platform jar does not ship is a Left, never a silent empty classifier` — platform-specific assumption.
+- `scalacv.FaceRecognizerTest.end to end: the same face embeds consistently (needs SCALACV_SFACE_MODEL + network)` — `SCALACV_SFACE_MODEL` is unset.
+
+**Baseline failing set: empty.** The native library deliberately logs errors for invalid-input tests; these are not test failures. Counts of native `[ WARN:` records were 77 in the full module test log, 141 in the leak test log, and 6 during documentation assembly. Fresh mdoc assembly reports **0 errors, 1,143 warnings**, all 1,143 matching `Unknown link` diagnostics for website-style routes. Scaladoc emits one unresolved-member warning at `vision/src/scalacv/vision/Odometry.scala:40` (F11). Docusaurus and the assembly script subsequently validate site anchors and API file links successfully. Warning counts describe this run, not a zero-warning claim for a clean build or other JDKs.
+
+Historical ABI builds additionally emit 44 `WARNING:`-prefixed JVM diagnostic lines about Unsafe/native access; these are repeated diagnostic lines, not 44 distinct compiler findings. All 20 ABI comparisons succeed.
+
+No coverage instrumentation/report task is configured; statement/branch coverage percentages and formal cognitive-complexity/duplication metrics are **not available**. Scalafix is configured only for OrganizeImports; compiler flags add unused/value-discard/non-unit checks with `-Werror` in production. Those gates do not constitute a security analyzer. Sonar scanner, Ruff, and ShellCheck are not installed; Sonar server/token configuration is absent. Manual review supplemented the configured Scala tools; no analyzer was installed or rule suppressed.
+
+Not verified: packaged resolver consumers (`cs` is absent), Typst book compilation (`typst` is absent), real camera input, SFace model inference, JDK 17/21 runtime matrix, macOS/Windows native execution, live GUI interaction, and remote publication/signing. Release jobs requiring tags and credentials were inspected, not invoked. The separate Java stress program embedded in CI was not run; the configured nine-test RSS suite was run. No external dependency-vulnerability database scan was performed.
+
+## Architecture sketch
+
+Arrows below mean source/build dependency, not data flow:
+
+```mermaid
+flowchart TD
+  examples[Headless examples] --> vision
+  examples --> graphs
+  examples --> zio
+  examples --> core
+  vision[Vision: detectors, DNN, tracking, navigation] --> core
+  graphs[Graphs: Picture, layout, OpenCV renderer] --> core
+  zio[ZIO: scope and stream adapters] --> core
+  core[Core: Image, Managed, native boundaries, I/O] --> opencv[OpenCV Java bindings / JNI]
+  zio --> effects[ZIO / ZStream]
+  website[Docusaurus / React] --> docs[Generated mdoc and Scaladoc]
+```
+
+The four published modules form a shallow dependency star (`build.mill:286`, `:353`, `:367`, `:384`). `core.test` deliberately adds integration-only dependencies on the other modules (`build.mill:330`); that is not a production dependency cycle. No source import from `core/src` back into vision/graphs/zio was found. Vision domain extensions keep `Image` independent of optional layers. `Renderer` and `TextMeasurer` provide existing backend seams; `OcrEngine` is an existing I/O boundary. The native wrapper's dependency on OpenCV is its purpose, not by itself a Clean Architecture violation. Geometry conversion helpers are deliberate adapters on immutable values.
+
+Library entry points include `OpenCv.load`, `Image.read/reading/scoped`, `Video.open/frames`, `Camera`, `Recorder`, `Models.fetch/fetchCached`, and the ZIO scope/stream functions. Examples provide runnable smoke/demo entry points. Unpublished modules comprise headless examples, GUI examples, benchmarks, leak tests, unified API docs, and mdoc. CI covers JDK 17/21/25 on Linux, Apple Silicon natives, style, RSS tests, docs, publication shape, ABI comparisons, packaged consumers, and release tooling. Release workflows consume a validated commit before publishing. No server/database/controller layer exists to assess for SQL injection, N+1 queries, or schema migrations.
+
+## Hotspots and maintainability evidence
+
+Churn command: `git log --since=12.months --format= --name-only | sort | uniq -c | sort -rn | head -30`. The raw result includes historical deleted files and excluded lockfiles; those are not refactoring targets. To cross churn with complexity, the following screen counts `if`, `while`, `for`, and `catch` tokens after removing comments and string literals from Scala/TypeScript sources. It excludes `case` so exhaustive ADT matches are not penalized. The product is a coarse prioritization heuristic, **not** Sonar cognitive complexity, a defect count, or a performance measurement.
+
+| File | Changes in window | Physical lines | Branch tokens | Churn × tokens | Assessment |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `core/src/scalacv/Video.scala` | 9 | 531 | 17 | 153 | Substantial documentation; existing shared FrameSource and lifetime tests justify keeping structure. |
+| `core/src/scalacv/OpenCv.scala` | 8 | 288 | 16 | 128 | Platform-sensitive loader; F01 diagnostic loss confirmed. |
+| `core/src/scalacv/Models.scala` | 9 | 367 | 12 | 108 | Existing download/verify/cache seams and extensive error/concurrency tests. |
+| `graphs/src/scalacv/graphs/Graphics.scala` | 5 | 239 | 17 | 85 | F05: private dashed-line geometry and raster work are intertwined. |
+| `website/src/components/VisionPipeline/index.tsx` | 2 | 759 | 41 | 82 | F03/F08: large untested lifecycle/rendering unit. |
+| `core/src/scalacv/Image.scala` | 25 | 512 | 3 | 75 | High churn, mostly thin delegation and ownership documentation; size alone is not a smell. |
+| `vision/src/scalacv/vision/OccupancyGrid.scala` | 4 | 187 | 18 | 72 | F06: exact clipping and occupancy updates share one method. |
+| `core/src/scalacv/Ops.scala` | 24 | 556 | 1 | 24 | High churn, low control-flow complexity; public extension-holder compatibility makes file moves risky. |
+| `vision/src/scalacv/vision/ObjectTracker.scala` | 3 | 188 | 5 | 15 | F07: multiple mutation phases in one update. |
+
+`build.mill` changed 35 times; ZIO bindings changed 13 times. Build/CI changes and public API reorganizations are excluded from autonomous remediation. Function spans verified from source: `Graphics.dashSegment` 62 physical lines, `OccupancyGrid.observe` 48, `ObjectTracker.update` 45, and the main `VisionPipeline` effect 298. Existing formatter/linter configuration sets no cognitive-complexity threshold; the requested ~30-line heuristic motivated inspection, not automatic findings. No broad formatting or speculative abstraction is recommended.
+
+## Findings
+
+Risk describes the proposed change. Coverage means relevant existing automated coverage, not coverage of every reported edge case. All findings are open under the stop condition; bug fixes and altered observable diagnostics are proposals, not behavior-preserving refactors.
+
+| ID | Severity | Category | Location | Evidence | Principle | Proposed refactoring | Risk | Effort (S/M/L) | Test coverage (yes/partial/no) | Source (tool/manual) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| F01 | Medium | Reliability / diagnostics | `core/src/scalacv/OpenCv.scala:62`; `core/src/scalacv/CvError.scala:19` | Both loader catch branches pass only the message into `NativesMissing`, leaving its existing cause parameter null. An isolated JVM without classifier jars reproduced this. The original loader stack and nested cause are lost when diagnosing deployment failures. | Martin: preserve error context | **Behavior-change proposal:** retain the original throwable using the existing cause parameter. Do not mix it with loader restructuring. | Low implementation risk; observable exception cause changes | S | partial | manual; tool:javac/java probe |
+| F02 | Medium | Tests / false assurance | `vision/test/src/scalacv/FaceRecognizerTest.scala:112` | After model opt-in, download failure and empty detection still use `assume` at lines 116/129. Only one embedding is produced; comparing it with itself at line 132 passes for any nonzero constant 128-vector. Inference repeatability/discrimination can regress without this smoke test failing. | Feathers: meaningful safety net; Meszaros: conditional tests | Separate infrastructure availability from test assertions; exercise independently obtained embeddings and a deterministic detection/landmark fixture. Keep generated-fixture conventions. | Medium: model/fixture portability; release-gating policy needs a decision | M | partial | manual |
+| F03 | Medium | Reliability / UI | `website/src/components/VisionPipeline/index.tsx:587`; `:663` | Resize assigns canvas width/height, clearing its bitmap. It repaints only for reduced motion; the paused animation loop returns without drawing. A probe executing the extracted callbacks with a canvas lifecycle stub observed zero redraws after resize while paused, then one on resume. | Separate rendering from animation scheduling | **Bug-fix proposal:** repaint the current frozen composition on resize without advancing time. This is not a structural-only change. | Low; verify paused timestamp and reduced-motion behavior | S | no | manual; tool:node lifecycle probe |
+| F04 | Medium | Reliability / installation docs | `website/src/components/Hero/index.tsx:19`; `:104`; `website/docusaurus.config.ts:16`; `README.md:33` | Hero copy/install text says 0.4.3; README targets 0.4.4. Site metadata says OpenCV 4.13 while `build.mill:14` pins 4.14. Users following two entry points install different advertised versions. The native-coordinate scan in `core/test/src/scalacv/BuildVersionsTest.scala:56` does not cover these website strings. | Beck: eliminate duplicated knowledge | **Content/behavior proposal:** agree the intended released version, synchronize copy, then extract a shared website release constant and add a consistency check. Do not substitute an unreleased VCS version automatically. | Low; release availability must be confirmed before changing recommendations | S | partial | manual |
+| F05 | Medium | Maintainability / long function | `graphs/src/scalacv/graphs/Graphics.scala:160` | The 62-line, seven-parameter `dashSegment` combines clipping, floating-point resolution checks, dash phase progression, and JNI painting. Changing viewport clipping requires reasoning about both invisible-path phase and visible pixel output in one block. | Fowler: Extract Function; separate levels of abstraction | Extract the private clipping calculation while preserving evaluation order, failure messages, phase, and pixel arithmetic. Keep the renderer API unchanged. | Medium: floating-point rounding and phase are observable | M | yes | manual |
+| F06 | Medium | Maintainability / mixed geometry and mutation | `vision/src/scalacv/vision/OccupancyGrid.scala:50` | `observe` spans 48 lines and combines coordinate conversion, mutable exact-fraction clipping state, endpoint rounding, and log-odds writes. Numerical changes cannot be reviewed independently of map mutation. | Fowler: Extract Function / Split Phase | Extract a private clipped-ray calculation; retain exact fractions and update order. Avoid changing the public coordinate API or using approximate Double clipping. | Medium: extreme-coordinate and boundary behavior | M | yes | manual |
+| F07 | Medium | Maintainability / long function | `vision/src/scalacv/vision/ObjectTracker.scala:65` | The 45-line `update` predicts/mutates tracks, associates detections, corrects matches, creates native filters, retires tracks, and constructs output. Adding one lifecycle rule requires tracking six phases and index relationships through the same method. | Fowler: Extract Function; Martin: one abstraction level | Extract private named prediction, correction, creation, retirement, and result-query steps, one extraction at a time. Preserve mutation/exception order and greedy tie behavior. | Medium: identities, counters, resource lifetimes | M | partial | manual |
+| F08 | Medium | Maintainability / testability | `website/src/components/VisionPipeline/index.tsx:124`; `:392`; `:458` | The file has 759 lines; a 298-line effect owns image processing, drawing, clocks, observers, resizing, and cleanup. `renderStage` alone spans 108 lines. Only type/build checks exist, so lifecycle coupling such as F03 has no regression safety net. | Feathers: seams; Fowler: Extract Function / Move Function | Characterize animation/resize behavior first, then extract private raster operations and clock calculations while keeping React lifecycle ownership explicit. Do not introduce a framework or change visuals as part of extraction. | Medium; requires deterministic pixel/clock and lifecycle tests | M | no | manual |
+| F09 | Medium | Tests / release verification seam | `ci/verify-published.py:43`; `ci/tests/test_release.py:48` | `main` combines artifact discovery, HTTP retry/deadline handling, body reads, and hash comparison. Tests exercise headers/payload shape, but never remote mismatch, retry exhaustion, or transport failure. These are the conditions that must prevent announcing a bad release. | Feathers: introduce a seam; Fowler: Extract Function | Propose a separately approved tooling change: extract fetch/verify functions with injectable transport and clock; characterize current retry/deadline semantics before changing policy. | Medium; CI/release tooling changes require approval | M | partial | manual |
+| F10 | Low | Documentation / stale architecture record | `DESIGN.md:36`; `:78`; `:87` | The design record says no Prism swizzle and no custom React components, but `website/src/theme/prism-include-languages.js:38` and six component entry points exist. Upgrade reviewers are directed to a false inventory. | Martin: comments/docs explain current intent | Update the inventory and record the existing swizzle's rationale, without removing working components. | Low | S | no | manual |
+| F11 | Low | Documentation / unresolved API link | `vision/src/scalacv/vision/Odometry.scala:37` | Scaladoc reports an unresolved `IllegalStateException` member link at the `update` declaration, leaving the throws documentation without a resolved target. | Maintain documentation contracts | Qualify the exception reference in the existing throws documentation; rebuild Scaladoc to verify. | Low | S | partial | tool:Scaladoc |
+
+### Evidence and tests needed before changes
+
+- **F01:** `/tmp/scalacv-quality-review.gzV06e/MissingNativesProbe.java` was compiled against the built runtime classpath. It ran in a fresh JVM with the two `linux-x86_64` classifier jars removed and a fresh JavaCPP cache. Exit 0; output `type=NativesMissing`, `cause=null`, with the expected missing-native guidance. A proposed fix should make a subprocess assertion for a non-null original `UnsatisfiedLinkError` cause pass while preserving the guidance. Current null-cause behavior must remain characterized until that fix is separately approved.
+- **F02:** supply the documented SFace model and require the intended inference case to execute. The desired test must fail when embedding output is replaced with a constant, and must not turn an unexpected empty detector result into a successful skip. No model was downloaded for SFace in this review.
+- **F03:** `node /tmp/scalacv-quality-review.gzV06e/paused-resize-probe.cjs` executes source-extracted resize/loop callbacks, stripping the TypeScript parameter annotation. Result: paused/cleared/0 redraws; resumed/not-cleared/1 redraw. This is a focused lifecycle probe, not a real-browser screenshot test. A future browser regression test should pause, resize, assert a nonblank unchanged composition, and verify no time advance.
+- **F04:** a consistency assertion comparing Hero's displayed/copied coordinate with the agreed README release and metadata with `Build.openCvVersion` would currently fail. Verify publication before choosing the intended value.
+- **F05:** existing `GraphicsReviewRasterTest` tests at `graphs/test/src/scalacv/GraphicsReviewRegressionTest.scala:83` cover phase under tessellation, clipping, distant coordinates, and bounded execution. Preserve these plus alpha ROI pixel hashes. Add a focused failure-order case only if the extraction crosses validation boundaries.
+- **F06:** existing `OccupancyGridTest` and `VisionNumericalRegressionTest` cover ray updates, huge coordinates including ±1e100, out-of-grid obstacles, and tie rounding. Add reversed/clipped/degenerate-ray characterization if not already pinned by the exact helper boundary selected.
+- **F07:** `core/test/src/scalacv/TrackingTest.scala:72` onward covers stable identity, retirement, minHits, counts, and closed-state rejection. Pin ambiguous equal-IoU ordering and partial-failure state before moving those phases.
+- **F08:** characterize fixed-time stage pixels, stage captions, pause/resume, hidden/offscreen timing, resize, reduced motion, and observer/animation-frame cleanup before moving code. F03's changed expectation belongs in its bug-fix change, separate from these structural steps.
+- **F09:** use local/fake HTTP responses and an injected clock to test mismatch rejection, transient-then-success, permanent error, and shared-deadline exhaustion. No real registry credentials are needed. No runtime dependency, API/schema migration, or new CI gate is proposed by this review.
+
+## Leave as-is
+
+- **Native ownership rather than generic resource abstraction.** `Managed` atomic release, `NativeScope`, borrowed frame invalidation, cleanup suppression, and explicit transfers encode real native lifetime constraints. Raw-handle escape hatches and serialized JNI access are documented limitations, not promises of linear types or cross-thread locks. Existing ownership/concurrency/RSS tests substantiate these boundaries.
+- **Large Image/Ops files and public extension locations.** Their length is predominantly documentation and small delegates. Moving Scala top-level extensions changes JVM holder ownership and can break old binaries even if Scala imports still compile. Do not split merely to satisfy a line threshold.
+- **Immutable records and exhaustive ADT matching.** Geometry/Pose/Picture values and enum matches are idiomatic Scala. They do not justify Data Class or Repeated Switches findings.
+- **Loops in pixel, tracking, clipping, and dash paths.** Replacing them with allocation-heavy pipelines provides no demonstrated benefit. Keep exact-fraction clipping for distant occupancy rays and preserve benchmark-backed arithmetic/ordering.
+- **Model download trust boundaries.** Names are checked before path resolution, verified specs pin SHA-256, downloads publish atomically, and cache coordination uses bounded stripes. Explicit `unverified` mode and caller-controlled URLs/cache roots are documented choices. Pattern scans and manual inspection found no hardcoded credential or concrete injection exploit; this is not an exhaustive vulnerability certification.
+- **Recorder channel behavior on this backend.** A six-case native probe exercised 1/3/4 channels with color on/off. Supported combinations wrote one decodable frame; mismatches returned `Left(NativeCall)` with zero decoded frames. The suspected silent-success defect was not reproduced. Other backends remain unverified; imposing a three-channel restriction would reject the currently supported four-channel case.
+- **Documented native allocation constraints.** Polygon converters leave a small upstream GC-reclaimed index Mat (`core/src/scalacv/Draw.scala:280`); GIF encoding retains all frames (`graphs/src/scalacv/graphs/Animation.scala:149`); loop detection defaults to unbounded retention for compatibility (`vision/src/scalacv/vision/LoopDetector.scala:22`). Do not silently alter APIs, defaults, or output to address these known tradeoffs.
+- **mdoc route warnings versus site validation.** The 1,143 unknown-link warnings come from website-style routes; the actual site/API-link checks pass. Do not suppress arbitrary diagnostics or rewrite all links solely to silence a tool that lacks the site's routing context.
+- **Test isolation and test-only dependencies.** One fork per suite protects unrelated results from native crashes. Core integration tests referencing optional modules are deliberate; the public dependency graph remains acyclic.
+
+## Open questions and residual limits
+
+1. Should model-enabled/release runs require the SFace smoke to execute, and which generated fixture or explicit landmark input should be authoritative? Currently even opt-in can skip.
+2. Is 0.4.4 the intended website installation recommendation, or does the older Hero version reflect an intentional publication policy? README consistency is established; external artifact availability was not checked.
+3. Should paused resize redraw the exact frozen composition? The current blank-until-resume behavior is established by callback execution; the desired behavior is a product decision before a bug fix.
+4. Should loader exceptions preserve their underlying cause? The type already supports it, but changing `getCause` is observable and belongs in a separately approved fix.
+5. What ownership/latency budgets should long-running applications choose for `LoopDetector.maxKeyframes`, GIF size, and blocking capture calls? Existing defaults and backend timeout limitations remain unchanged.
+6. Packaged consumer tests need a `cs` executable; the book needs `typst`; camera/model/platform/runtime checks need their stated environments. No coverage percentage, clean rebuild guarantee, full browser validation, or remote release verification is claimed.
+
+No safely addressable finding was executed because the initial stop condition applies to the whole run. There is no refactoring commit range, before/after code metric comparison, or session commit message to audit: **0 commits**, original `HEAD` retained. This file is intentionally uncommitted.
