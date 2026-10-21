@@ -97,6 +97,34 @@ class TrackingTest extends munit.ScalaCheckSuite:
       assertEquals(t.count, 3)
     finally t.close()
 
+  test("ObjectTracker breaks equal-IoU ties by track then detection order"):
+    val tracker = ObjectTracker.create()
+    try
+      val seed = Rect(10, 10, 20, 20)
+      tracker.update(Seq(seed, seed)): Unit
+      val left = Rect(8, 10, 20, 20)
+      val right = Rect(12, 10, 20, 20)
+      assertEquals(
+        tracker.update(Seq(left, right)),
+        Seq(ObjectTrack(0, left, 2, 1), ObjectTrack(1, right, 2, 1))
+      )
+      assertEquals(tracker.count, 2)
+    finally tracker.close()
+
+  test("ObjectTracker retains prediction progress when detection access fails"):
+    val tracker = ObjectTracker.create()
+    try
+      val seed = Rect(10, 10, 20, 20)
+      tracker.update(Seq(seed)): Unit
+      val failure = RuntimeException("detection unavailable")
+      val broken = new IndexedSeq[Rect]:
+        def length: Int = 1
+        def apply(index: Int): Rect = throw failure
+      assert(intercept[RuntimeException](tracker.update(broken)) eq failure)
+      assertEquals(tracker.count, 1)
+      assertEquals(tracker.update(Seq(seed)), Seq(ObjectTrack(0, seed, 2, 2)))
+    finally tracker.close()
+
   test("drawTracks annotates without changing the frame size"):
     val annotated = frame(50).drawTracks(Seq(ObjectTrack(3, Rect(35, 85, 30, 30), hits = 5, age = 5)))
     try assertEquals((annotated.width, annotated.height), (200, 200))
