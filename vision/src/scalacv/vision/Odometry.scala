@@ -34,8 +34,9 @@ final class Odometry private (intrinsics: Intrinsics) extends AutoCloseable:
   /** Feeds the next frame and returns the camera's motion since the previous one. `None` on the very first
     * frame (it becomes the reference) and whenever too few points survive to estimate a motion.
     *
-    * @throws java.lang.IllegalStateException
-    *   after [[close]] — a closed pipeline must not quietly start retaining frames again.
+    * Throws
+    * [[https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/IllegalStateException.html IllegalStateException]]
+    * after [[close]] — a closed pipeline must not quietly start retaining frames again.
     */
   def update(frame: Image): Option[CameraMotion] =
     if closed then
