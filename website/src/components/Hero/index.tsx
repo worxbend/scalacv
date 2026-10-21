@@ -11,12 +11,13 @@ import Link from '@docusaurus/Link';
 import VisionPipeline from '../VisionPipeline';
 import MorphText from '../MorphText';
 import styles from './styles.module.css';
+import release from '../../release.json';
 
 /** The rotating object of the headline: things the library can actually find in a frame. Every one
  *  of these maps to a documented page, which is the point — it is a promise, not a mood board. */
 const TARGETS = ['edges', 'contours', 'faces', 'motion', 'markers', 'gestures', 'depth'];
 
-const INSTALL = 'mvn"com.worxbend::scalacv:0.4.3"';
+const INSTALL = `mvn"com.worxbend::scalacv:${release.scalacv}"`;
 
 function CopyButton({text}: {text: string}): React.ReactElement {
   const [copied, setCopied] = useState(false);
@@ -65,7 +66,7 @@ export default function Hero(): React.ReactElement {
       <div className={styles.inner}>
         <div className={styles.pitch}>
           <p className={styles.eyebrow}>
-            <span className={styles.chip}>OpenCV 4.14</span>
+            <span className={styles.chip}>OpenCV {release.opencv}</span>
             <span className={styles.chip}>Scala 3.3 LTS</span>
             <span className={styles.chip}>JDK 17+</span>
             <span className={styles.chip}>headless</span>
@@ -101,7 +102,7 @@ export default function Hero(): React.ReactElement {
             <CopyButton text={INSTALL} />
           </div>
           <p className={styles.installNote}>
-            Version 0.4.3 · Maven Central and GitHub Packages. Add two native artifacts —{' '}
+            Version {release.scalacv} · Maven Central and GitHub Packages. Add two native artifacts —{' '}
             <Link to="/getting-started">the install page explains why</Link>.
           </p>
         </div>

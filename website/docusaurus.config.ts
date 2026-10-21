@@ -1,6 +1,7 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import release from './src/release.json';
 
 // This runs in Node.js — no browser APIs or JSX here.
 //
@@ -13,7 +14,7 @@ const GITHUB = 'https://github.com/w0rxbend/scalacv';
 
 const config: Config = {
   title: 'scalacv',
-  tagline: 'A Scala 3 wrapper for the OpenCV 4.13 Java API',
+  tagline: `A Scala 3 wrapper for the OpenCV ${release.opencv} Java API`,
   favicon: 'img/favicon.ico',
 
   future: {
