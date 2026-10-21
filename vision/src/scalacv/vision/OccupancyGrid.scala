@@ -48,6 +48,16 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
     * clipped boundary into a hit. Nonfinite inputs or division overflow are rejected.
     */
   def observe(fromX: Double, fromY: Double, obstacleX: Double, obstacleY: Double): Unit =
+    clippedRay(fromX, fromY, obstacleX, obstacleY).foreach: (ax, ay, bx, by, hitInside) =>
+      bresenham(ax, ay, bx, by): (cx, cy) =>
+        bump(cx, cy, if hitInside && cx == bx && cy == by then LogHit else -LogMiss)
+
+  private def clippedRay(
+      fromX: Double,
+      fromY: Double,
+      obstacleX: Double,
+      obstacleY: Double
+  ): Option[(Int, Int, Int, Int, Boolean)] =
     require(Seq(fromX, fromY, obstacleX, obstacleY).forall(_.isFinite), "ray coordinates must be finite")
     import java.math.{BigDecimal as Decimal, MathContext}
     def coordinate(value: Double, offset: Int): Decimal =
@@ -93,8 +103,8 @@ final class OccupancyGrid private (val cols: Int, val rows: Int, val resolution:
       val by = endpoint(y0, dy, leave, rows - 1)
       val hitInside =
         x1.signum() >= 0 && x1.compareTo(maxX) <= 0 && y1.signum() >= 0 && y1.compareTo(maxY) <= 0
-      bresenham(ax, ay, bx, by): (cx, cy) =>
-        bump(cx, cy, if hitInside && cx == bx && cy == by then LogHit else -LogMiss)
+      Some((ax, ay, bx, by, hitInside))
+    else None
 
   /** Occupancy probability in `[0, 1]` at world `(x, y)` — `0.5` for an unobserved or out-of-bounds cell. */
   def probability(x: Double, y: Double): Double =
