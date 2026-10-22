@@ -16,9 +16,9 @@ that every version equals the tag without its `v`, and that the changelog has th
 Full Git history is fetched for VCS-derived versions. Cached build outputs cannot freeze the version
 because `publishVersion` tracks Git as an input.
 
-The current release is `v0.4.4`. Registry availability is established by its successful publishing
+The current release is `v0.4.5`. Registry availability is established by its successful publishing
 runs, not by the tag alone; this release does not retroactively publish older source tags.
-Installation examples target `0.4.4`. A local install uses a clean tagged checkout with
+Installation examples target `0.4.5`. A local install uses a clean tagged checkout with
 `./mill __.publishLocal` and local Ivy resolution (`ivy2Local` in Coursier; sbt enables it by
 default), or `./mill __.publishM2Local` for Maven. Unreleased changes use the version reported
 by `./mill show core.publishVersion`; all four artifact versions must match.

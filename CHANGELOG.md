@@ -6,8 +6,39 @@ All notable changes to scalacv are recorded here. The format follows
 
 ## [Unreleased]
 
-### Build and CI
-- Binary-compatibility gate compares against the released `v0.4.4` (`32fd13a`) as well.
+## [0.4.5] — 2026-10-22
+
+**Compatibility.** A `0.4.x` patch with unchanged public library signatures and runtime
+dependencies. Historical bytecode checks pass for all four libraries against every release from
+`0.4.0` through `0.4.4`. Native-load exceptions now retain their underlying cause; error types,
+messages and successful loading behavior remain unchanged.
+
+### Fixed
+- `OpenCv.load()` preserves the original `UnsatisfiedLinkError` or `NoClassDefFoundError` as the
+  cause of `CvError.NativesMissing`, so missing-native failures retain their diagnostic stack trace.
+- The website's paused pipeline animation repaints the last rendered frame after a resize without
+  advancing its clock.
+- Website installation snippets and the displayed release version share one metadata source.
+
+### Changed
+- Extract private helpers for dashed-line clipping, occupancy-ray clipping and object-tracker
+  prediction, correction, creation, retirement and result selection. Existing numeric results,
+  ordering and partial-failure behavior are preserved by characterization tests.
+- Separate website scene drawing, pixel operations, stage rendering and animation timing.
+- Separate release-file verification from download retries while preserving the shared deadline,
+  retry policy, hash checks and response cleanup.
+
+### Tests and tooling
+- Add coverage for missing-native loading, tracker tie ordering and partial failures, clipped rays,
+  website rendering and lifecycle, and release-artifact verification failures and retries.
+- The opt-in SFace test now compares independently computed embeddings and a different input,
+  without depending on a separate face-detector download.
+- Binary-compatibility checks also compare against `v0.4.4` (`32fd13a`).
+
+### Documentation
+- Align installation guides and website metadata with `0.4.5`.
+- Correct the website component inventory and the odometry exception link.
+- Record the quality review, verification evidence and remaining limitations in `QUALITY_REVIEW.md`.
 
 ## [0.4.4] — 2026-10-18
 
