@@ -71,10 +71,10 @@ Add the line for the module you need (delete the ones you do not). In Mill:
 
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.4",         // core
-  mvn"com.worxbend::scalacv-vision:0.4.4",  // detectors, DNN, tracking, OCR, calibration, SLAM
-  mvn"com.worxbend::scalacv-graphs:0.4.4",  // the Picture scene graph, charts, GIFs
-  mvn"com.worxbend::scalacv-zio:0.4.4"      // only if you use ZIO
+  mvn"com.worxbend::scalacv:0.4.5",         // core
+  mvn"com.worxbend::scalacv-vision:0.4.5",  // detectors, DNN, tracking, OCR, calibration, SLAM
+  mvn"com.worxbend::scalacv-graphs:0.4.5",  // the Picture scene graph, charts, GIFs
+  mvn"com.worxbend::scalacv-zio:0.4.5"      // only if you use ZIO
 )
 ```
 
@@ -82,10 +82,10 @@ In sbt:
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.worxbend" %% "scalacv"        % "0.4.4",
-  "com.worxbend" %% "scalacv-vision" % "0.4.4",
-  "com.worxbend" %% "scalacv-graphs" % "0.4.4",
-  "com.worxbend" %% "scalacv-zio"    % "0.4.4"
+  "com.worxbend" %% "scalacv"        % "0.4.5",
+  "com.worxbend" %% "scalacv-vision" % "0.4.5",
+  "com.worxbend" %% "scalacv-graphs" % "0.4.5",
+  "com.worxbend" %% "scalacv-zio"    % "0.4.5"
 )
 ```
 

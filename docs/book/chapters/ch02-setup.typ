@@ -27,12 +27,12 @@ actually on, with the exact two lines to paste. Better still not to arrive there
 #sect("The four artifacts")
 
 #warning[
-  The installation coordinates in this book name source tag `v0.4.2`, not a verified Maven Central
-  deployment. Central upload and attestation are disabled; tag workflows create draft releases.
-  Build a clean checkout of that tag with `./mill __.publishLocal` and enable local Ivy resolution
-  (`ivy2Local` in Coursier; sbt includes it by default). Unreleased fixes described in this book
-  need the current checkout's actual `./mill show core.publishVersion` instead. Keep all four
-  artifact versions aligned. Website deployment is not registry publication.
+  The installation coordinates in this book target `0.4.5`. Release tags run CI-gated publishing
+  to Maven Central and GitHub Packages; successful publishing runs establish registry availability.
+  For a local install, build a clean `v0.4.5` checkout with `./mill __.publishLocal` and enable local
+  Ivy resolution (`ivy2Local` in Coursier; sbt includes it by default). Unreleased changes need the
+  current checkout's actual `./mill show core.publishVersion` instead. Keep all four artifact
+  versions aligned. Website deployment is not registry publication.
 ]
 
 
@@ -117,8 +117,8 @@ write first:
 #example("Wrong: one native line. `OpenCv.load()` will not get through this.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.2",
-  mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64"
+  mvn"com.worxbend::scalacv:0.4.5",
+  mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64"
 )
 ```
 ]
@@ -131,9 +131,9 @@ absent. Both lines, always, and both with the same classifier:
 #example("Right: the API arrives through scalacv, the natives through two classifier jars.")[
 ```scala
 def mvnDeps = Seq(
-  mvn"com.worxbend::scalacv:0.4.2",
-  mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
-  mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
+  mvn"com.worxbend::scalacv:0.4.5",
+  mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
+  mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
 )
 ```
 ]
@@ -151,7 +151,7 @@ If you would rather not choose --- a workshop, a demo repository, a laptop that 
 is one coordinate that works everywhere:
 
 ```scala
-mvn"org.bytedeco:opencv-platform:4.13.0-1.5.13"
+mvn"org.bytedeco:opencv-platform:4.14.0-1.5.14"
 ```
 
 It bundles every platform's natives, including openblas, so it replaces both classifier lines --- at
@@ -176,13 +176,13 @@ object app extends ScalaModule {
   def scalaVersion = "3.3.8"
 
   def mvnDeps = Seq(
-    mvn"com.worxbend::scalacv:0.4.2",         // core: images, video, contours, drawing, filters
-    mvn"com.worxbend::scalacv-vision:0.4.2",  // detectors, DNN, pose, tracking, OCR, calibration
-    mvn"com.worxbend::scalacv-graphs:0.4.2",  // the Picture scene graph, charts, animated GIFs
-    mvn"com.worxbend::scalacv-zio:0.4.2",     // only if you use ZIO
+    mvn"com.worxbend::scalacv:0.4.5",         // core: images, video, contours, drawing, filters
+    mvn"com.worxbend::scalacv-vision:0.4.5",  // detectors, DNN, pose, tracking, OCR, calibration
+    mvn"com.worxbend::scalacv-graphs:0.4.5",  // the Picture scene graph, charts, animated GIFs
+    mvn"com.worxbend::scalacv-zio:0.4.5",     // only if you use ZIO
 
-    mvn"org.bytedeco:opencv:4.13.0-1.5.13;classifier=linux-x86_64",
-    mvn"org.bytedeco:openblas:0.3.31-1.5.13;classifier=linux-x86_64"
+    mvn"org.bytedeco:opencv:4.14.0-1.5.14;classifier=linux-x86_64",
+    mvn"org.bytedeco:openblas:0.3.34-1.5.14;classifier=linux-x86_64"
   )
 
   def forkArgs = Seq("-Djava.awt.headless=true")
@@ -197,12 +197,12 @@ Scala suffix:
 #example("The sbt equivalent.")[
 ```scala
 libraryDependencies ++= Seq(
-  "com.worxbend" %% "scalacv"        % "0.4.2",
-  "com.worxbend" %% "scalacv-vision" % "0.4.2",
-  "com.worxbend" %% "scalacv-graphs" % "0.4.2",
-  "com.worxbend" %% "scalacv-zio"    % "0.4.2",
-  "org.bytedeco" %  "opencv"         % "4.13.0-1.5.13" classifier "linux-x86_64",
-  "org.bytedeco" %  "openblas"       % "0.3.31-1.5.13" classifier "linux-x86_64"
+  "com.worxbend" %% "scalacv"        % "0.4.5",
+  "com.worxbend" %% "scalacv-vision" % "0.4.5",
+  "com.worxbend" %% "scalacv-graphs" % "0.4.5",
+  "com.worxbend" %% "scalacv-zio"    % "0.4.5",
+  "org.bytedeco" %  "opencv"         % "4.14.0-1.5.14" classifier "linux-x86_64",
+  "org.bytedeco" %  "openblas"       % "0.3.34-1.5.14" classifier "linux-x86_64"
 )
 ```
 ]
@@ -214,9 +214,9 @@ a comma-separated attribute:
 #example("A self-contained scala-cli header.")[
 ```scala
 //> using scala 3.3.8
-//> using dep com.worxbend::scalacv:0.4.2
-//> using dep org.bytedeco:opencv:4.13.0-1.5.13,classifier=linux-x86_64
-//> using dep org.bytedeco:openblas:0.3.31-1.5.13,classifier=linux-x86_64
+//> using dep com.worxbend::scalacv:0.4.5
+//> using dep org.bytedeco:opencv:4.14.0-1.5.14,classifier=linux-x86_64
+//> using dep org.bytedeco:openblas:0.3.34-1.5.14,classifier=linux-x86_64
 //> using javaOpt -Djava.awt.headless=true
 ```
 ]
@@ -267,7 +267,7 @@ not `libopencv_core.so.413`. Speculatively `dlopen`-ing every module library wit
 makes the dynamic linker search the system path for those names, and on a machine that happens to
 have a distribution OpenCV installed it does not fail. It succeeds, mapping six
 `libopencv_*.so.5.0.0` system libraries into the global namespace, where they interpose on the
-4.13.0 symbols the rest of the process is using.
+4.14.0 symbols the rest of the process is using.
 
 #memory[
 Two OpenCV ABIs in one address space is not a link error --- it is a `Mat` allocated by one version
@@ -429,7 +429,7 @@ change anything.
 
 `Core.VERSION` is the first thing everyone prints, and it proves nothing. It is a plain static
 `String` resolved from constants at class-initialisation time: a program with *zero* natives on the
-classpath prints `4.13.0` and exits successfully, having crossed no JNI boundary at all. scalacv's
+classpath prints `4.14.0` and exits successfully, having crossed no JNI boundary at all. scalacv's
 own smoke-test example allocates a `Mat` instead, precisely because allocation is the thing under
 test.
 
@@ -443,15 +443,15 @@ whole point of a number you are going to quote in a bug report.
   columns: (auto, 1fr),
   [*Value*], [*What it reports*],
   [`Build.scalaVersion`], [The Scala version scalacv was compiled with],
-  [`Build.openCvVersion`], [The OpenCV release, in OpenCV's own numbering: `4.13.0`],
-  [`Build.openCvArtifactVersion`], [The `org.bytedeco:opencv` coordinate version, OpenCV paired with javacpp: `4.13.0-1.5.13`. This is the string that goes in a build file],
+  [`Build.openCvVersion`], [The OpenCV release, in OpenCV's own numbering: `4.14.0`],
+  [`Build.openCvArtifactVersion`], [The `org.bytedeco:opencv` coordinate version, OpenCV paired with javacpp: `4.14.0-1.5.14`. This is the string that goes in a build file],
   [`Build.openBlasArtifactVersion`], [The `org.bytedeco:openblas` version the natives need],
 )
 ]
 
 The distinction between the last two is the one that costs people an afternoon. The natives for your
 platform must resolve at *exactly* the artifact version, because the Java API and the JNI shim it
-calls have to come from the same javacpp build; `4.13.0` on its own is not a coordinate. Extend the
+calls have to come from the same javacpp build; `4.14.0` on its own is not a coordinate. Extend the
 hello program to print all of it, and you have a report worth pasting into an issue:
 
 #example("A version report you can paste into a bug report.")[
@@ -487,11 +487,11 @@ OpenCV natives are not on the classpath (<the underlying message>).
 scalacv depends on the classifier-less OpenCV Java API only, because a build tool cannot
 express a per-platform classifier in a published POM. Add the natives for your platform:
 
-  "org.bytedeco" % "opencv"   % "4.13.0-1.5.13" classifier "linux-x86_64"
-  "org.bytedeco" % "openblas" % "0.3.31-1.5.13" classifier "linux-x86_64"
+  "org.bytedeco" % "opencv"   % "4.14.0-1.5.14" classifier "linux-x86_64"
+  "org.bytedeco" % "openblas" % "0.3.34-1.5.14" classifier "linux-x86_64"
 
 Both lines are needed: libopencv_core links libopenblas. If you would rather not pick a
-platform, "org.bytedeco" % "opencv-platform" % "4.13.0-1.5.13" bundles every
+platform, "org.bytedeco" % "opencv-platform" % "4.14.0-1.5.14" bundles every
 one, at a cost of about 408 MB.
 ```
 
