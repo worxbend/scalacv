@@ -1,14 +1,14 @@
 # Quality review
 
-Reviewed 2026-10-22 at `e39da7e8c915aee48e65a09f01a6f8975e248c9c` on `master`.
+Initial audit reviewed 2026-10-22 at `e39da7e8c915aee48e65a09f01a6f8975e248c9c` on `master`.
 
 ## Executive summary
 
-- Native loading discards the original failure cause; a subprocess without native classifier jars reproduced `NativesMissing` with `getCause == null` (F01). No new native memory-safety defect or exploitable security defect was confirmed.
-- The SFace integration test can skip even after a model is supplied, and its self-similarity assertion cannot establish repeatability or discrimination (F02).
-- The website loses its canvas image when resized while paused and advertises installation version 0.4.3 while the README targets 0.4.4 (F03–F04).
-- Builds, 959 tests, native smoke, formatter/import checks, and the documentation site pass; four additional tests skip. The main refactoring opportunities are private geometry/tracking phases and the large website animation component (F05–F08).
-- **Initial audit stopped at Phases 0–1** because the worktree was already dirty. Subsequent explicit authorization covers implementing all findings; the plan below records that scope. The original cache files remain untouched.
+- All F01–F11 findings are implemented: native-loading causes are preserved, paused resize retains the frozen composition, and website release copy matches the README/build.
+- The normal suites now pass 988 tests with four expected skips; the separate model-enabled SFace suite passes all 12 tests. Builds, configured static checks, documentation/site builds, native leak tests, and all 20 historical ABI comparisons pass.
+- Private clipping and tracking phases are separated; the animation component is reduced from 759 to 348 lines under rendering/lifecycle characterization tests. Release verification now has deterministic retry, mismatch, deadline, and transport coverage.
+- Public library signatures, numerical behavior, runtime dependencies, lockfiles, and workflows are unchanged. Work was committed directly on `master`; the original untracked cache files remain untouched and nothing was pushed.
+- Residual limits include documented native-shutdown exit variability, controlled-canvas rather than real-browser tests, the new website test command not yet wired into CI, and unavailable hardware/platform/consumer/book checks. Details and exact verification evidence follow.
 
 ## Scope and stop condition
 
@@ -163,7 +163,7 @@ Risk describes the proposed change. Coverage means relevant existing automated c
 - **mdoc route warnings versus site validation.** The 1,143 unknown-link warnings come from website-style routes; the actual site/API-link checks pass. Do not suppress arbitrary diagnostics or rewrite all links solely to silence a tool that lacks the site's routing context.
 - **Test isolation and test-only dependencies.** One fork per suite protects unrelated results from native crashes. Core integration tests referencing optional modules are deliberate; the public dependency graph remains acyclic.
 
-## Open questions and residual limits
+## Initial open questions and residual limits
 
 1. Should model-enabled/release runs require the SFace smoke to execute, and which generated fixture or explicit landmark input should be authoritative? Currently even opt-in can skip.
 2. Is 0.4.4 the intended website installation recommendation, or does the older Hero version reflect an intentional publication policy? README consistency is established; external artifact availability was not checked.
@@ -179,7 +179,7 @@ The initial audit made no code changes. Implementation proceeds under the explic
 
 The instruction to implement all proposed findings authorizes F01–F11, including their listed behavior, documentation, test, and release-tooling changes, and proceeding despite the three pre-existing bytecode files. Those files stay untouched. Work stays on `master`; no push, public API change, runtime dependency, lockfile edit, or workflow change is planned. The audit was committed separately as `b44a34b` after a fresh build and full module/Python test run.
 
-Each row is one theme and at most five files per step. Named extractions are separate from behavior fixes. Existing meaningful tests are retained; additional characterization precedes untested structural changes. Any mechanical move above 200 changed lines contains only the move and necessary import/export wiring.
+Rows group related steps; each step is an execution batch with one theme and at most five files. Named extractions are separate from behavior fixes. Existing meaningful tests are retained; additional characterization precedes untested structural changes. Any mechanical move above 200 changed lines contains only the move and necessary import/export wiring.
 
 | Batch | Goal / findings | Safety net first | Refactorings / planned commits | Verification |
 | --- | --- | --- | --- | --- |
@@ -203,3 +203,90 @@ F02 makes an opted-in inference test fail on invalid input instead of skipping, 
 ### Verification policy
 
 Every Scala or repository documentation commit runs `./mill core.compile vision.compile graphs.compile zio.compile examples.compile`, `./mill core.test + vision.test + graphs.test + zio.test + examples.test`, and `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ci/tests -v`. Website commits run `npm --prefix website run typecheck`, `npm --prefix website test`, and `npm --prefix website run build`. Release-script commits compile Python sources with the built-in `compile` function (no bytecode files written) and run the full Python suite. Full cross-project baseline checks run again at completion. Exact per-commit command results are retained in `/tmp/scalacv-implementation.taPSyd/checks.jsonl` and accompanying logs.
+
+## Refactoring results
+
+F01–F11 are implemented. The behavior changes are limited to the approved native exception causes, paused resize, installation copy, and strengthened opt-in test expectations. Public library signatures, numerical algorithms, tracker ordering, release retry policy, dependencies, lockfiles, and workflow definitions remain unchanged. The original three bytecode files remain untracked and untouched. Nothing was pushed.
+
+### Final verification
+
+The full baseline command set above was rerun on the completed source. Final logs are `/tmp/scalacv-implementation.taPSyd/final-*.log`; per-step command/exit records are in `checks.jsonl` in that directory. `npm --prefix website test` is the additional website test command. All final gates pass; the native smoke gate follows the existing `OK`-marker contract described below.
+
+| Check | Before | After |
+| --- | --- | --- |
+| Five headless module builds | Pass | Pass |
+| Full module tests | 948 discovered; 944 pass; 4 skip; 0 fail | 954 discovered; 950 pass; 4 skip; 0 fail |
+| Native leak tests | 9 pass | 9 pass |
+| Python release tests | 6 pass | 14 pass |
+| Website tests | None configured | 15 pass; 0 skip/fail |
+| Normal suite total | 963 discovered; 959 pass; 4 skip | 992 discovered; 988 pass; 4 skip |
+| Model-enabled SFace suite | Not run | 12 pass; 0 skip/fail, using the checksum-verified pinned model |
+| Scalafmt | 188 sources; pass | 189 sources; pass |
+| Scalafix production/test inputs | 99 / 75; pass | 99 / 76; pass |
+| TypeScript, website build, six shell syntax checks | Pass | Pass |
+| mdoc check / documentation assembly / API file links | Pass | Pass |
+| Optional benchmark and GUI compilation | Pass | Pass; applications not launched |
+| ABI controls and historical comparisons | Controls and 20 comparisons pass | Controls and all 20 comparisons pass |
+| Source coverage percentages / formal cognitive complexity | Not measured | Not measured; no instrumentation added |
+| Exact repeated normalized 10-line windows in reviewed production files | 0 | 0 |
+| Native warning records: module tests / leak tests | 77 / 141 | 77 / 141 |
+| JVM `WARNING:` lines: module tests / leak tests | 8 / 0 | 8 / 0 |
+| JVM `WARNING:` lines: ABI comparisons | 44 | 44 |
+| Native warning records: documentation assembly | 6 | 6 |
+| Compiler warnings emitted by headless build | 0 | 0 (incremental build) |
+| mdoc route warnings / Scaladoc unresolved-reference warnings | 1,143 / 1 | 1,143 / 0 |
+
+The final failing test set is empty. The four normal-run skips retain the same reasons: camera opt-in, two platform assumptions, and SFace model opt-in. The SFace test is now named `end to end: repeatable embeddings respond to image content (needs SCALACV_SFACE_MODEL)`. Running `SCALACV_SFACE_MODEL=/tmp/scalacv-implementation.taPSyd/sface.onnx ./mill vision.test.testOnly scalacv.FaceRecognizerTest` separately executes it successfully. Its generated fixtures establish repeatability and sensitivity to input, not biometric accuracy.
+
+The initial final-verification smoke invocation printed `OK` but returned exit 1; the immediate rerun returned exit 0 with `OK`. This is the existing teardown-sensitive behavior documented in `examples/src/scalacv/Smoke.scala:12` and `.github/workflows/ci.yml:85`, whose gate is the stdout marker. No smoke test or runtime shutdown code was changed. The completed baseline rerun records the raw exit separately from that existing gate.
+
+### Delivered batches
+
+Each listed step is a separate commit and execution batch, with at most five files. C denotes the exact Scala build/full module tests/Python tests command set in **Verification policy**; W denotes website typecheck/Node tests/production build; P denotes Python syntax compilation and the full Python test suite. All listed steps passed their command set before committing. Scala batches additionally passed the configured formatter/import checks; the final run repeated those checks across all modules.
+
+| Findings / steps | Commits | Change and actual verification |
+| --- | --- | --- |
+| Review and plan | `b44a34b`, `0b391cd` | Review and authorization/plan recorded independently; C passes before both commits. |
+| F01 characterization / fix | `b5f037d`, `65959a6` | A fresh process pins guidance and retry behavior; both loader catch branches now preserve their original causes. C passes; the new cause assertion was observed failing before the fix. |
+| F02 inference test | `218bb70` | Explicit generated landmarks remove detector/network dependence. Independent repeated inference and a different input reject constant embeddings. C passes with the pinned model enabled; final model-only rerun also passes. |
+| F04 release metadata | `a162b58` | Shared website release metadata uses published 0.4.4 and build-matching OpenCV 4.14.0; consistency checks compare README/build inputs. W passes. No dependency added. |
+| F05 Extract Function | `c9238e4` | Private dash clipping interval isolated; existing raster, phase, extreme-coordinate and timeout regressions pass under C. |
+| F06 characterization / Extract Function | `16bcbf5`, `1a4afe0` | Reversed, degenerate and outside rays pinned; exact-fraction clipping separated from log-odds mutation. C passes at both steps. |
+| F07 characterization | `ae66716` | Equal-IoU tie ordering and prediction state retained after a failing detection read pinned. C passes. |
+| F07 prediction / correction | `5828b9a`, `ac566ca` | Private prediction and matched-correction functions extracted separately. C passes after each extraction. |
+| F07 creation / retirement / query | `c7b5ccf`, `a336056`, `11470db` | Unmatched creation, stale-track retirement, and confirmed-result query extracted in separate steps without reordering mutation. C passes after each. |
+| F03/F08 characterization | `c3f6296` | Controlled canvas/clock/observer tests pin all six rendered stages, captions, pause/hidden/offscreen timing, reduced motion, resize, throttling, and cleanup. W passes before structural edits. |
+| F03 resize fix | `5847e3f` | Paused resize repaints the last rendered elapsed time. The frozen-composition assertion fails before the fix and passes afterward; W passes. |
+| F08 scene / pixel operations | `02e772b`, `a2a6147` | Mechanical moves into internal scene and raster files; all frame snapshots and W remain green after each move. |
+| F08 renderer / timing | `8338721`, `f843461` | Stage rendering and frame-time calculations extracted from React lifecycle ownership; W passes after each step. |
+| F09 characterization | `1fea562` | Byte mismatch, all retryable statuses, permanent failures, transport errors, response closure, and shared deadlines tested without live registries or credentials. P passes. |
+| F09 fetch / verification / spacing | `27c50f8`, `938245b`, `71941d5` | Download retry and file-verification functions receive transport/clock/sleep dependencies; retry/deadline behavior preserved. Separate spacing cleanup matches adjacent functions. P passes after each step. |
+| F10 inventory | `809d10e` | Design record now lists the six real components and explains the existing Scala grammar patch. W passes. |
+| F11 exception reference | `8ebf2f6`, `df09c6e` | Qualification removed the warning but artifact inspection still found an unresolved external label. An explicit JDK 17 link fixes navigation without enabling the deliberately deferred external mappings. C and fresh `./mill apidocs.docJar` pass; generated HTML contains the expected `href`. |
+
+The scene move changes 397 lines and renderer extraction 300 lines because moved lines count twice. These are the only commits above approximately 200 changed lines; both contain only moved code and necessary import/export/factory wiring. All other steps are below that size.
+
+### Measured structure
+
+Physical spans include function signatures and internal blank lines, excluding leading documentation/trailing blank lines. Branch-token counts use the same `if`/`while`/`for`/`catch` screen as the audit, not Sonar cognitive complexity. Algorithms and their total branching were moved, not eliminated.
+
+| Unit | Before | After |
+| --- | --- | --- |
+| `Graphics.dashSegment` | 62 lines; 9 branch tokens | 51 lines; 7 branch tokens; clipping isolated |
+| `OccupancyGrid.observe` | 48 lines; 8 branch tokens | 4 lines; 1 branch token; exact geometry in a private helper |
+| `ObjectTracker.update` | 45 lines; 1 branch token | 18 lines; 1 branch token; named lifecycle phases |
+| `VisionPipeline/index.tsx` | 759 lines | 348 lines |
+| Main animation effect | 298 lines | 154 lines |
+| Release verifier `main` | 35 lines | 17 lines |
+
+The duplicate-window screen compares the changed production files plus the four new pipeline helpers, strips indentation and blank/comment-only lines, and counts exact repeated 10-line windows. It reports 0 before and after; this is not semantic clone detection. Counts and source measurements are retained in `metrics.json`; TypeScript effect spans were measured with the existing Babel parser, and Python spans with `ast`.
+
+### Residual risks and verification limits
+
+- No F01–F11 finding is deferred. The explicit follow-up instruction resolved the earlier approval questions for exception causes, paused repaint, installation copy, test expectations, and release-tooling structure.
+- Website tests use controlled canvas contexts and hook boundaries. Real browser rasterization, font/layout behavior, and interactive cross-browser checks remain unverified. The new `npm test` command is available locally; workflow definitions were intentionally left unchanged, so they do not yet invoke it.
+- The documented native-shutdown exit variability remains. Camera hardware, macOS/Windows execution, JDK 17/21 runtime checks, packaged consumer resolution (`cs` absent), Typst book compilation (`typst` absent), live GUI interaction, remote publication/signing, and the separate CI Java stress program remain outside this environment's verification. The nine configured leak tests do pass.
+- Coverage percentages, a dependency vulnerability database scan, and Sonar cognitive complexity are still unavailable. Existing loop-retention/GIF/backend timeout defaults and deferred general JDK/Bytedeco documentation mappings were not changed.
+- Setup/verification exceptions were recorded rather than hidden: an unsupported module formatter command was replaced with the configured global formatter; a Mill connection reset and a later Zinc-worker connection refusal recovered on retry; a trailing blank line stopped a staged whitespace check and was corrected before the scene commit. The intentional F01/F03 red regression checks preceded their fixes. No failing test was removed, skipped, weakened, or suppressed to obtain a green commit.
+
+Commit messages were supplied explicitly and checked after every commit. `git log --format=%B b44a34b^..HEAD` was audited for unexpected attribution/trailers. The changed-path audit confirms no generated/vendor/build output, lockfile, migration, or workflow edit. Final results are committed separately as `docs: add refactoring results`.
