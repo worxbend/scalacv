@@ -63,7 +63,7 @@ jobs:
             echo "::error::Missing publishing credentials:$missing (see RELEASING.md)"
             exit 1
           fi
-      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - uses: coursier/cache-action@057d08c2f9a2c4e7a4d33df3aae657b7db88b8cc # v8
       - name: Tag, changelog and all four publish versions agree
         run: python3 ci/validate-release.py
       - name: Publish signed libraries to Maven Central
