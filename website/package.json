@@ -22,15 +22,15 @@
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "prism-react-renderer": "^2.3.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
     "@types/react": "^19.0.0",
-    "docusaurus-plugin-pagefind": "^0.2.2",
+    "docusaurus-plugin-pagefind": "^0.3.0",
     "typescript": "~7.0.0"
   },
   "comment:overrides": "Force patched versions of build-time-only transitive deps that Docusaurus 3.10.2 pins to vulnerable ranges. None ship in the built site or the published Scala library; all run only during `docusaurus build` on this repo's own trusted content. Remove an entry once Docusaurus's own pins move past it.",
