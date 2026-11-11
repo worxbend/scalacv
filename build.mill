@@ -475,9 +475,9 @@ object benchmarks extends ScalacvModule {
 object `examples-gui` extends ScalacvModule {
   def moduleDeps = Seq(core, vision)
   def mvnDeps = Deps.opencvNatives ++ Seq(
-    mvn"org.openjfx:javafx-base:27",
-    mvn"org.openjfx:javafx-graphics:27",
-    mvn"org.openjfx:javafx-controls:27"
+    mvn"org.openjfx:javafx-base:27.0.1",
+    mvn"org.openjfx:javafx-graphics:27.0.1",
+    mvn"org.openjfx:javafx-controls:27.0.1"
   )
   def forkArgs = Task(Deps.runtimeJvmArgs(jvmMajor()))
 }
