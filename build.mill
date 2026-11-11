@@ -384,7 +384,7 @@ object graphs extends ScalacvPublishModule {
 object zio extends ScalacvPublishModule {
   def artifactName = "scalacv-zio"
   def moduleDeps = Seq(core)
-  def mvnDeps = Seq(mvn"dev.zio::zio:2.1.26", mvn"dev.zio::zio-streams:2.1.26")
+  def mvnDeps = Seq(mvn"dev.zio::zio:2.1.27", mvn"dev.zio::zio-streams:2.1.26")
 
   /* zio-test rather than munit here (D6): the module under test is ZIO, so its own effects are
    * the natural thing to write assertions in. Natives are still needed at run time. Same one-JVM-
@@ -393,8 +393,8 @@ object zio extends ScalacvPublishModule {
     def scalacOptions = Task(Deps.looseTestScalacOptions)
     def testFramework = "zio.test.sbt.ZTestFramework"
     def mvnDeps = Seq(
-      mvn"dev.zio::zio-test:2.1.26",
-      mvn"dev.zio::zio-test-sbt:2.1.26"
+      mvn"dev.zio::zio-test:2.1.27",
+      mvn"dev.zio::zio-test-sbt:2.1.27"
     ) ++ Deps.opencvNatives
 
     /* ScalacvZioSpec scans zio/src/scalacv/zio/package.scala for `ZIO.attempt` on the compute executor.
