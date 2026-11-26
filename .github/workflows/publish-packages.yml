@@ -49,7 +49,7 @@ jobs:
           test -n "$VALIDATED_SHA"
           test "$actual" = "$VALIDATED_SHA"
           test "$actual" = "$GITHUB_SHA"
-      - uses: coursier/cache-action@95e5b1029b6b86e7bac033ee44a0697d8a527d2d # v8
+      - uses: coursier/cache-action@ee0650f98295f27a505e4bfd284c9bfaa913a465 # v8
       - name: Tag, changelog and all four publish versions agree
         run: python3 ci/validate-release.py
       - name: Publish all four libraries to GitHub Packages
