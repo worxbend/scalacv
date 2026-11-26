@@ -108,7 +108,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: coursier/cache-action@ee0650f98295f27a505e4bfd284c9bfaa913a465 # v8
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         # Unlike the build matrix (where setup-java is deliberately absent because it cannot steer
         # Mill's module JVM), this leg needs a plain java/javac on PATH for the stress driver below.
         # Mill still selects its own JVM via the build header; this only provides the JDK that runs
@@ -303,7 +303,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@ee0650f98295f27a505e4bfd284c9bfaa913a465 # v8
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
           java-version: "17"
