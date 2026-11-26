@@ -37,7 +37,7 @@ class PublishedPomTest extends munit.FunSuite:
     val id = pom.artifactId
 
     test(s"$id: exact dependencies, versions and scopes"):
-      val scala = ("org.scala-lang", "scala3-library_3", "3.3.8", "compile", "false", "jar")
+      val scala = ("org.scala-lang", "scala3-library_3", "3.3.9", "compile", "false", "jar")
       val opencv = ("org.bytedeco", "opencv", Build.openCvArtifactVersion, "compile", "false", "jar")
       val core = ("com.worxbend", "scalacv_3", pom.version, "compile", "false", "jar")
       val expected = id match

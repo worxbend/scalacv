@@ -89,7 +89,7 @@ object Deps {
     * everything runs on 25.
     *
     *   - `--enable-native-access` silences the JEP 472 warning `System.load` emits (JDK 24+).
-    *   - `--sun-misc-unsafe-memory-access=allow` silences four lines that scala3-library 3.3.8's `LazyVals$`
+    *   - `--sun-misc-unsafe-memory-access=allow` silences four lines that scala3-library 3.3.9's `LazyVals$`
     *     provokes — a direct consequence of pairing D2 (publish on the LTS) with D10 (build on 25), and
     *     cosmetic, but otherwise a preface to every example run.
     */
